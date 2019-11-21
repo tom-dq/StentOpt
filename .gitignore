@@ -1,0 +1,4 @@
+abaqus*.rec
+abaqus.rpy*
+abaqus_pde.deps
+.idea
