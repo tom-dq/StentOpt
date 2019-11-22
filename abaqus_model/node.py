@@ -41,3 +41,6 @@ class NodeSet(typing.NamedTuple):
         """The name from the point of view of the assembly, e.g., "Part-1.Set_dksfjbh" """
         return f"{self.part.name}.{self.name_part}"
 
+    def generate_inp_lines(self) -> typing.Iterable[str]:
+        # TODO - yield *Nset
+        pass
