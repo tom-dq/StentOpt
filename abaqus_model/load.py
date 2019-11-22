@@ -31,14 +31,62 @@ class LoadBase:
 @dataclasses.dataclass(frozen=True)
 class ConcentratedLoad(LoadBase):
     name: str
-    node_set_name: str
+    set_name: str
     axis: int
     value: float
 
     def produce_inp_lines(self, action: Action) -> typing.Iterable[str]:
-        yield f"** Name: {self.name}  Type: Concentrated force"
+        yield f"** Name: {self.name}   Type: Concentrated force"
         yield f"*Cload{action.load_new_text()}"
 
         if action != Action.remove:
-            yield f"{self.node_set_name}, {self.axis}, {base.abaqus_float(self.value)}"
+            yield f"{self.set_name}, {self.axis}, {base.abaqus_float(self.value)}"
+
+
+@dataclasses.dataclass(frozen=True)
+class PressureLoad(LoadBase):
+    name: str
+    set_name: str
+    value: float
+
+    def produce_inp_lines(self, action: Action) -> typing.Iterable[str]:
+        yield f"** Name: {self.name}   Type: Pressure"
+        yield f"*Dsload{action.load_new_text()}"
+
+        if action != Action.remove:
+            yield f"{self.set_name}, P, {base.abaqus_float(self.value)}"
+
+
+def make_test_load_point(set_name) -> ConcentratedLoad:
+    cload = ConcentratedLoad(
+        name="Test Point Load",
+        set_name=set_name,
+        axis=1,
+        value=123.456,
+    )
+
+    return cload
+
+
+def make_test_pressure(set_name) -> PressureLoad:
+    pload = PressureLoad(
+        name="Test Pressure Load",
+        set_name=set_name,
+        value=345.678,
+    )
+    return pload
+
+if __name__ == "__main__":
+    cload = make_test_load_point("Set123")
+    pload = make_test_load_point("Set123")
+    for action in Action:
+        for l in cload.produce_inp_lines(action):
+            print(l)
+
+        print()
+        for l in pload.produce_inp_lines(action):
+            print(l)
+
+        print()
+
 

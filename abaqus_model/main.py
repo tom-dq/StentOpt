@@ -4,25 +4,42 @@ import typing
 from abaqus_model import part
 from abaqus_model import base
 from abaqus_model import step
+from abaqus_model import load
 
 
 class AbaqusModel:
     name: str
     parts: typing.Dict[str, part.Part]
     steps: typing.List[step.StepBase]
-    # TODO - loads in steps
-
+    step_loads: typing.Set[typing.Tuple[step.StepBase, load.LoadBase]]
 
     def __init__(self, name: str):
         self.name = name
         self.parts = dict()
         self.steps = list()
+        self.step_loads = set()
 
     def add_part(self, one_part: part.Part):
         self.parts[one_part.name] = one_part
 
     def add_step(self, one_step: step.StepBase):
         self.steps.append(one_step)
+
+    def add_load_starting_from(self, starting_step: step.StepBase, one_load: load.LoadBase):
+        """Add a load at a step, and for all the following steps."""
+        on_this_one = False
+        for one_step in self.steps:
+            on_this_one = on_this_one or one_step == starting_step
+            if on_this_one:
+                self.step_loads.add( (one_step, one_load))
+
+        if not on_this_one:
+            raise ValueError(f"Did not find {starting_step} in AbaqusModel.steps")
+
+    def add_load_specific_steps(self, active_steps: typing.Iterable[step.StepBase], one_load: load.LoadBase):
+        """Add a load but only at particular steps (so you can turn it off after a while)."""
+        for one_step in active_steps:
+            self.step_loads.add((one_step, one_load))
 
     def produce_inp_lines(self) -> typing.Iterable[str]:
         yield from self._produce_inp_lines_header()
@@ -51,7 +68,7 @@ class AbaqusModel:
         unique_name = base.deterministic_key(self, self.name)
 
         yield f"*Nset, nset={unique_name}"
-        part_set_names = [f"{part.name}.{part.everything_set_name()}" for part in self.parts.values()]
+        part_set_names = [part.get_everything_set().name_assembly for part in self.parts.values()]
         yield ", ".join(part_set_names)
 
         # For now, hard code a cylindrical axis system along the Y axis
@@ -75,6 +92,46 @@ class AbaqusModel:
         for one_step in self.steps:
             yield from base.inp_heading(f"STEP: {one_step.name}")
             yield from one_step.produce_inp_lines()
+            yield from base.inp_heading("LOADS")
+
+            all_loads = set(one_load for _, one_load in self.step_loads)
+            for one_load in sorted(all_loads):
+                all_load_events = self._step_load_actions(one_load)
+                relevant_load_events = [action for a_step, action in all_load_events if a_step == one_step]
+                if len(relevant_load_events) == 0:
+                    pass
+                elif len(relevant_load_events) == 1:
+                    action = relevant_load_events.pop()
+                    yield from one_load.produce_inp_lines(action)
+
+                else:
+                    raise ValueError(f"Got more than one thing to do with {one_load} and {one_step}... {relevant_load_events}")
+
+
+    def _step_load_actions(self, one_load: load.LoadBase):
+        """Get the load action for the steps (turn on, turn off, etc)."""
+
+        active_at_last_step = False
+        for idx, one_step in enumerate(self.steps):
+            active_at_this_step = (one_step, one_load) in self.step_loads
+            is_first_step = idx == 0
+
+            def get_event_this_combination():
+                if active_at_this_step and is_first_step:
+                    return load.Action.create_first_step
+
+                elif active_at_this_step and not active_at_last_step:
+                    return load.Action.create_subsequent_step
+
+                elif not active_at_this_step and active_at_last_step:
+                    return load.Action.remove
+
+            this_action = get_event_this_combination()
+            if this_action:
+                yield (one_step, this_action)
+
+            active_at_last_step = active_at_this_step
+
 
 
 
@@ -85,8 +142,16 @@ def make_test_model() -> AbaqusModel:
 
     one_part = part.test_make_part()
 
-    model = AbaqusModel("Test Model")
+    model = AbaqusModel("TestModel")
     model.add_part(one_part)
+
+    all_steps = [step.make_test_step(x) for x in (1, 2, 3)]
+    for one_step in all_steps:
+        model.add_step(one_step)
+
+    load_point = load.make_test_load_point()
+
+
 
     return model
 

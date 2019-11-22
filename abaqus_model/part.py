@@ -12,6 +12,8 @@ class Part:
     nodes: node.Nodes
     elements: element.Elements
     node_couples: typing.Set[node.NodeCouple]
+    node_sets: typing.Dict[str, node.NodeSet]
+    _EVERYTHING_NAME = "Everything"
 
     def __init__(self, name: str, common_material: material.MaterialBase):
         self.name = name
@@ -19,6 +21,7 @@ class Part:
         self.nodes = node.Nodes()
         self.elements = element.Elements()
         self.node_couples = set()
+        self.node_sets = dict()
 
     def add_node_validated(self, iNode: int, node: base.XYZ):
         """Adds a node and validates it."""
@@ -36,7 +39,6 @@ class Part:
             node.NodeCouple(n1=n1, n2=n2, negated=negated)
         )
 
-
     def produce_inp_lines(self) -> typing.Iterable[str]:
         yield f"*Part, name={self.name}"
         yield from self.nodes.produce_inp_lines()
@@ -45,11 +47,26 @@ class Part:
         yield ", "
         yield "*End Part"
 
-    def everything_set_name(self):
-        return f"Set_{base.deterministic_key(self, self.name)}"
+    def _ensure_everything_set_exists(self):
+        everything_set = node.NodeSet(
+            part=self,
+            name_component=self._EVERYTHING_NAME,
+            nodes=frozenset(self.nodes.keys()),
+        )
+
+        self.add_node_set(everything_set)
+
+    def add_node_set(self, node_set: node.NodeSet):
+        self.node_sets[node_set.name_component] = node_set
+
+    def get_everything_set(self):
+        self._ensure_everything_set_exists()
+        return self.node_sets[self._EVERYTHING_NAME]
 
     def _produce_elset_nset_section(self) -> typing.Iterable[str]:
-        unique_name = self.everything_set_name()
+
+        # TODO - replace with self._produce_nset
+        unique_name = self.get_everything_set().name_part
         if self.nodes:
             yield f"*Nset, nset={unique_name}, internal, generate"
             yield f"  {min(self.nodes.keys())},  {max(self.nodes.keys())},   1"
@@ -61,6 +78,11 @@ class Part:
         section_name = f"Section-{unique_name}"
         yield f"** Section: {section_name}"
         yield f"*Solid Section, elset={unique_name}, material={self.common_material.name}"
+
+    def _produce_nset(self, nset: node.NodeSet):
+        # TODO!
+        pass
+
 
     def _one_equation(self, one_couple: node.NodeCouple, dof: int) -> typing.Iterable[str]:
 

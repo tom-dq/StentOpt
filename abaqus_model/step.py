@@ -24,3 +24,20 @@ class StepDynamicExplicit(StepBase):
         yield ", " + base.abaqus_float(self.final_time)
         yield "*Bulk Viscosity"
         yield base.abaqus_float(self.bulk_visc_b1) + ", " + base.abaqus_float(self.bulk_visc_b2)
+
+
+
+def make_test_step(n: int) -> StepDynamicExplicit:
+    one_step = StepDynamicExplicit(
+        name=f"TestStep{n}",
+        final_time=123.4,
+        bulk_visc_b1=0.06,
+        bulk_visc_b2=1.2,
+    )
+
+    return one_step
+
+
+if __name__ == "__main__":
+    for l in make_test_step(1).produce_inp_lines():
+        print(l)
