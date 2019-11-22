@@ -5,7 +5,6 @@ from .base import XYZ, abaqus_float
 
 
 class Nodes(dict):
-
     def __setitem__(self, key: int, value: XYZ):
         if not all(isinstance(x, float) for x in value):
             raise TypeError("Should only be floats in here.")
@@ -16,3 +15,9 @@ class Nodes(dict):
         yield "*Node"
         for iNode, xyz in sorted(self.items()):
             yield f"{iNode:10}, {abaqus_float(xyz.x)}, {abaqus_float(xyz.y)}, {abaqus_float(xyz.z)}"
+
+
+class NodeCouple(typing.NamedTuple):
+    n1: int
+    n2: int
+    negated: bool

@@ -1,3 +1,4 @@
+import hashlib
 import typing
 
 class XYZ(typing.NamedTuple):
@@ -5,6 +6,7 @@ class XYZ(typing.NamedTuple):
     y: float
     z: float
 
+DOFs = (1, 2, 3)
 
 def abaqus_float(x) -> str:
     """Returns a float Abaqus can parse (i.e., with a dot in it)"""
@@ -20,3 +22,13 @@ def abaqus_float(x) -> str:
 
     return maybe_float
 
+
+def inp_heading(text: str) -> typing.Iterable[str]:
+    yield "**"
+    yield f"** {text}"
+    yield "**"
+
+
+def deterministic_key(class_instance, text) -> str:
+    raw_text = f"{class_instance}_{text}"
+    return hashlib.md5(raw_text.encode()).hexdigest()[0:8]
