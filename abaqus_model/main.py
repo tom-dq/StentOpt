@@ -13,6 +13,8 @@ class AbaqusModel:
     steps: typing.List[step.StepBase]
     step_loads: typing.Set[typing.Tuple[step.StepBase, load.LoadBase]]
 
+    _main_sep_line: str = "** -----------------------------"
+
     def __init__(self, name: str):
         self.name = name
         self.parts = dict()
@@ -41,6 +43,10 @@ class AbaqusModel:
         for one_step in active_steps:
             self.step_loads.add((one_step, one_load))
 
+            if one_step not in self.steps:
+                raise ValueError(f"Did not find {one_step} in AbaqusModel.steps")
+
+
     def produce_inp_lines(self) -> typing.Iterable[str]:
         yield from self._produce_inp_lines_header()
         yield from base.inp_heading("PARTS")
@@ -49,6 +55,8 @@ class AbaqusModel:
 
         yield from self._produce_inp_lines_assembly()
         yield from self._produce_inp_lines_material()
+
+
 
     def _produce_inp_lines_header(self) -> typing.Iterable[str]:
         yield "*Heading"
@@ -68,7 +76,7 @@ class AbaqusModel:
         unique_name = base.deterministic_key(self, self.name)
 
         yield f"*Nset, nset={unique_name}"
-        part_set_names = [part.get_everything_set().name_assembly for part in self.parts.values()]
+        part_set_names = [part.get_everything_set().get_name(base.SetContext.assembly) for part in self.parts.values()]
         yield ", ".join(part_set_names)
 
         # For now, hard code a cylindrical axis system along the Y axis
@@ -88,7 +96,7 @@ class AbaqusModel:
 
 
     def _produce_inp_lines_steps(self) ->  typing.Iterable[str]:
-        yield "** -----------------------------"
+        yield self._main_sep_line
         for one_step in self.steps:
             yield from base.inp_heading(f"STEP: {one_step.name}")
             yield from one_step.produce_inp_lines()
@@ -140,7 +148,7 @@ class AbaqusModel:
 
 def make_test_model() -> AbaqusModel:
 
-    one_part = part.test_make_part()
+    one_part = part.make_part_test()
 
     model = AbaqusModel("TestModel")
     model.add_part(one_part)
@@ -149,7 +157,13 @@ def make_test_model() -> AbaqusModel:
     for one_step in all_steps:
         model.add_step(one_step)
 
-    load_point = load.make_test_load_point()
+    load_point = load.make_test_load_point("LoadSet123")
+    load_dist = load.make_test_pressure("LoadPressure234")
+
+    model.add_load_starting_from(all_steps[0], load_point)
+    model.add_load_specific_steps(all_steps[0:2], load_dist)
+
+
 
 
 

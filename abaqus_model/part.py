@@ -6,6 +6,7 @@ from abaqus_model import node
 from abaqus_model import element
 from abaqus_model import material
 
+
 class Part:
     name: str
     common_material: material.MaterialBase
@@ -64,13 +65,12 @@ class Part:
         return self.node_sets[self._EVERYTHING_NAME]
 
     def _produce_elset_nset_section(self) -> typing.Iterable[str]:
+        set_context = base.SetContext.part
+        self._ensure_everything_set_exists()
+        for node_set_name, node_set in self.node_sets.items():
+            yield from node_set.generate_inp_lines(set_context)
 
-        # TODO - replace with self._produce_nset
-        unique_name = self.get_everything_set().name_part
-        if self.nodes:
-            yield f"*Nset, nset={unique_name}, internal, generate"
-            yield f"  {min(self.nodes.keys())},  {max(self.nodes.keys())},   1"
-
+        unique_name = self.get_everything_set().get_name(set_context)
         if self.elements:
             yield f"*Elset, elset={unique_name}, internal, generate"
             yield f"  {min(self.elements.keys())},  {max(self.elements.keys())},   1"
@@ -78,10 +78,6 @@ class Part:
         section_name = f"Section-{unique_name}"
         yield f"** Section: {section_name}"
         yield f"*Solid Section, elset={unique_name}, material={self.common_material.name}"
-
-    def _produce_nset(self, nset: node.NodeSet):
-        # TODO!
-        pass
 
 
     def _one_equation(self, one_couple: node.NodeCouple, dof: int) -> typing.Iterable[str]:
@@ -106,7 +102,7 @@ class Part:
 
 
 
-def test_make_part() -> Part:
+def make_part_test() -> Part:
     common_material = material.MaterialElastic(
         name="ElasticMaterial",
         density=1.0,
@@ -126,7 +122,7 @@ def test_make_part() -> Part:
     return part
 
 if __name__ == "__main__":
-    part = test_make_part()
+    part = make_part_test()
 
     for l in part.produce_inp_lines():
         print(l)

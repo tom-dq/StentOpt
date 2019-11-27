@@ -3,7 +3,7 @@ import hashlib
 
 from abaqus_model import base
 #from .base import XYZ, abaqus_float
-from .part import Part
+from abaqus_model import part  # import Part
 
 
 class Nodes(dict):
@@ -26,21 +26,30 @@ class NodeCouple(typing.NamedTuple):
 
 
 class NodeSet(typing.NamedTuple):
-    part: Part
+    part: "part.Part"
     name_component: str
     nodes: typing.FrozenSet[int]
 
-    @property
-    def name_part(self) -> str:
-        """The name from the point of view of the part, e.g., "Set_dksfjbh" """
-        node_number_hash = str(hash(self.nodes))
-        return f"Set_{self.name_component}_{base.deterministic_key(self.part, node_number_hash)}"
+    def get_name(self, set_context: base.SetContext) -> str:
+        if set_context == base.SetContext.part:
+            node_number_hash = str(hash(self.nodes))
+            return f"Set_{self.name_component}_{base.deterministic_key(self.part, node_number_hash)}"
 
-    @property
-    def name_assembly(self) -> str:
-        """The name from the point of view of the assembly, e.g., "Part-1.Set_dksfjbh" """
-        return f"{self.part.name}.{self.name_part}"
+        elif set_context == base.SetContext.assembly:
+            name_in_part = self.get_name(base.SetContext.part)
+            return f"{self.part.name}.{name_in_part}"
 
-    def generate_inp_lines(self) -> typing.Iterable[str]:
-        # TODO - yield *Nset
-        pass
+        else:
+            raise ValueError(set_context)
+
+    def generate_inp_lines(self, set_context: base.SetContext) -> typing.Iterable[str]:
+        """Generateds the *Nset lines"""
+        seq_nodes = frozenset(range(min(self.nodes), max(self.nodes)+1))
+        nodes_are_sequential = self.nodes == seq_nodes
+        if nodes_are_sequential:
+            yield f"*Nset, nset={self.get_name(set_context)}, internal, generate"
+            yield f"  {min(self.nodes)},  {max(self.nodes)},   1"
+
+        else:
+            raise ValueError("Time to write this code I guess!")
+

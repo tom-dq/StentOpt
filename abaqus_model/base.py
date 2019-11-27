@@ -1,5 +1,6 @@
 import hashlib
 import typing
+import enum
 
 class XYZ(typing.NamedTuple):
     x: float
@@ -7,6 +8,13 @@ class XYZ(typing.NamedTuple):
     z: float
 
 DOFs = (1, 2, 3)
+
+
+class SetContext(enum.Enum):
+    part = enum.auto()
+    assembly = enum.auto()
+
+
 
 def abaqus_float(x) -> str:
     """Returns a float Abaqus can parse (i.e., with a dot in it)"""
