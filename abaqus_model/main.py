@@ -6,6 +6,9 @@ from abaqus_model import base
 from abaqus_model import step
 from abaqus_model import load
 
+# Todo
+#   - Surfaces for (i.e., inner surface, outer surface)...
+
 
 class AbaqusModel:
     name: str
@@ -55,7 +58,7 @@ class AbaqusModel:
 
         yield from self._produce_inp_lines_assembly()
         yield from self._produce_inp_lines_material()
-
+        yield from self._produce_inp_lines_steps()
 
 
     def _produce_inp_lines_header(self) -> typing.Iterable[str]:
@@ -68,15 +71,23 @@ class AbaqusModel:
         yield from base.inp_heading("ASSEMBLY")
         yield f"*Assembly, name=Assembly"
         yield "**"
-        for part_name in self.parts.keys():
-            yield f"*Instance, name={part_name}-1, part={part_name}"
+        instance_names = []
+        for part_name, one_part in self.parts.items():
+            instance_names.append(one_part.name_instance)
+            yield f"*Instance, name={one_part.name_instance}, part={part_name}"
+            yield "*End Instance"
+
+        yield "**"
 
         # Need an assembly-level node set to apply the constraints.
         # As per ANALYSIS_1.pdf, 2.1.1–9, we can reference the node sets in the parts.
         unique_name = base.deterministic_key(self, self.name)
 
-        yield f"*Nset, nset={unique_name}"
-        part_set_names = [part.get_everything_set().get_name(base.SetContext.assembly) for part in self.parts.values()]
+        if len(instance_names) != 1:
+            raise ValueError("Time to deal with this!")
+
+        yield f"*Nset, nset={unique_name}, instance={instance_names[0]}"
+        part_set_names = [part.get_everything_set().get_name(base.SetContext.part) for part in self.parts.values()]
         yield ", ".join(part_set_names)
 
         # For now, hard code a cylindrical axis system along the Y axis
@@ -94,6 +105,14 @@ class AbaqusModel:
         for one_part in self.parts.values():
             yield from one_part.common_material.produce_inp_lines()
 
+    def _get_sorted_loads(self):
+        all_loads = set(one_load for _, one_load in self.step_loads)
+
+        def sort_key(one_load: load.LoadBase):
+            return one_load.sortable()
+
+        return sorted(all_loads, key=sort_key)
+
 
     def _produce_inp_lines_steps(self) ->  typing.Iterable[str]:
         yield self._main_sep_line
@@ -102,12 +121,12 @@ class AbaqusModel:
             yield from one_step.produce_inp_lines()
             yield from base.inp_heading("LOADS")
 
-            all_loads = set(one_load for _, one_load in self.step_loads)
-            for one_load in sorted(all_loads):
+            for one_load in self._get_sorted_loads():
                 all_load_events = self._step_load_actions(one_load)
                 relevant_load_events = [action for a_step, action in all_load_events if a_step == one_step]
                 if len(relevant_load_events) == 0:
                     pass
+
                 elif len(relevant_load_events) == 1:
                     action = relevant_load_events.pop()
                     yield from one_load.produce_inp_lines(action)
@@ -115,6 +134,19 @@ class AbaqusModel:
                 else:
                     raise ValueError(f"Got more than one thing to do with {one_load} and {one_step}... {relevant_load_events}")
 
+            # Have to end the step here, after the loads have been output.
+
+            # This outputs stuff we can read without starting CAE
+            yield "*FILE OUTPUT, NUMBER INTERVAL=1"
+            yield "*EL FILE"
+            yield "S"
+
+            # abaqus.bat job=job-12 interactive     >>> Run
+            # abaqus.bat job=job-12 convert=select  >>> Make .fil from .sel
+            # abaqus.bat ascfil job=job-12          >>> Make asciii .fin from .fil
+
+
+            yield "*End Step"
 
     def _step_load_actions(self, one_load: load.LoadBase):
         """Get the load action for the steps (turn on, turn off, etc)."""
@@ -171,11 +203,13 @@ def make_test_model() -> AbaqusModel:
 
 if __name__ == "__main__":
     model = make_test_model()
-    for l in model.produce_inp_lines():
-        print(l)
+    with open(r"C:\temp\aba_out.inp", "w") as fOut:
+        for l in model.produce_inp_lines():
+            print(l)
+            fOut.write(l + "\n")
 
 
-
+# Export
 
 
 

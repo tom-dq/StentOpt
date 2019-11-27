@@ -47,7 +47,7 @@ class NodeSet(typing.NamedTuple):
         seq_nodes = frozenset(range(min(self.nodes), max(self.nodes)+1))
         nodes_are_sequential = self.nodes == seq_nodes
         if nodes_are_sequential:
-            yield f"*Nset, nset={self.get_name(set_context)}, internal, generate"
+            yield f"*Nset, nset={self.get_name(set_context)}, generate"
             yield f"  {min(self.nodes)},  {max(self.nodes)},   1"
 
         else:

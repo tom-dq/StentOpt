@@ -39,4 +39,4 @@ def inp_heading(text: str) -> typing.Iterable[str]:
 
 def deterministic_key(class_instance, text) -> str:
     raw_text = f"{class_instance}_{text}"
-    return hashlib.md5(raw_text.encode()).hexdigest()[0:8]
+    return "Z_" + hashlib.md5(raw_text.encode()).hexdigest()[0:8]

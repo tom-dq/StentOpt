@@ -24,6 +24,10 @@ class Part:
         self.node_couples = set()
         self.node_sets = dict()
 
+    @property
+    def name_instance(self) -> str:
+        return f"{self.name}-1"
+
     def add_node_validated(self, iNode: int, node: base.XYZ):
         """Adds a node and validates it."""
         self.nodes[iNode] = node
@@ -72,7 +76,7 @@ class Part:
 
         unique_name = self.get_everything_set().get_name(set_context)
         if self.elements:
-            yield f"*Elset, elset={unique_name}, internal, generate"
+            yield f"*Elset, elset={unique_name}, generate"
             yield f"  {min(self.elements.keys())},  {max(self.elements.keys())},   1"
 
         section_name = f"Section-{unique_name}"
@@ -84,11 +88,11 @@ class Part:
 
         node2_factor = "1." if one_couple.negated else "-1."
 
-        yield f"** Constraint: Constraint-{self.name}-{one_couple.n1}-{one_couple.n2}-{dof}"
+        yield f"** Constraint: Constraint-{self.name_instance}-{one_couple.n1}-{one_couple.n2}-{dof}"
         yield "*Equation"
         yield "2"
-        yield f"{self.name}.{one_couple.n1}, {dof}, 1."
-        yield f"{self.name}.{one_couple.n2}, {dof}, {node2_factor}"
+        yield f"{self.name_instance}.{one_couple.n1}, {dof}, 1."
+        yield f"{self.name_instance}.{one_couple.n2}, {dof}, {node2_factor}"
 
 
     def produce_equation_inp_line(self) -> typing.Iterable[str]:

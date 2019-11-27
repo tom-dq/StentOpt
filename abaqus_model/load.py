@@ -27,6 +27,10 @@ class LoadBase:
     def produce_inp_lines(self, action: Action) -> typing.Iterable[str]:
         raise NotImplementedError()
 
+    def sortable(self):
+        type_name = self.__class__.__name__
+        return (type_name, self)
+
 
 @dataclasses.dataclass(frozen=True)
 class ConcentratedLoad(LoadBase):
