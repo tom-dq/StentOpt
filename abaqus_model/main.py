@@ -2,6 +2,7 @@
 import typing
 
 from abaqus_model import part
+from abaqus_model import instance
 from abaqus_model import base
 from abaqus_model import step
 from abaqus_model import load
@@ -12,7 +13,7 @@ from abaqus_model import load
 
 class AbaqusModel:
     name: str
-    parts: typing.Dict[str, part.Part]
+    instances: typing.Dict[str, instance.Instance]
     steps: typing.List[step.StepBase]
     step_loads: typing.Set[typing.Tuple[step.StepBase, load.LoadBase]]
 
@@ -20,12 +21,15 @@ class AbaqusModel:
 
     def __init__(self, name: str):
         self.name = name
-        self.parts = dict()
+        self.instances = dict()
         self.steps = list()
         self.step_loads = set()
 
-    def add_part(self, one_part: part.Part):
-        self.parts[one_part.name] = one_part
+    def add_instance(self, one_instance: instance.Instance):
+        if one_instance.name in self.instances:
+            raise ValueError(f"Already had an instance named {one_instance.name}")
+
+        self.instances[one_instance.name] = one_instance
 
     def add_step(self, one_step: step.StepBase):
         self.steps.append(one_step)
@@ -49,11 +53,20 @@ class AbaqusModel:
             if one_step not in self.steps:
                 raise ValueError(f"Did not find {one_step} in AbaqusModel.steps")
 
+    def get_parts(self) -> typing.Iterable[ part.Part]:
+        """Iterate through the parts referenced by any instance in the model."""
+        seen = set()
+        for one_instance in self.instances.values():
+            maybe_part = one_instance.base_part
+            if maybe_part not in seen:
+                yield maybe_part
+
+            seen.add(maybe_part)
 
     def produce_inp_lines(self) -> typing.Iterable[str]:
         yield from self._produce_inp_lines_header()
         yield from base.inp_heading("PARTS")
-        for part in self.parts.values():
+        for part in self.get_parts():
             yield from part.produce_inp_lines()
 
         yield from self._produce_inp_lines_assembly()
@@ -71,38 +84,20 @@ class AbaqusModel:
         yield from base.inp_heading("ASSEMBLY")
         yield f"*Assembly, name=Assembly"
         yield "**"
-        instance_names = []
-        for part_name, one_part in self.parts.items():
-            instance_names.append(one_part.name_instance)
-            yield f"*Instance, name={one_part.name_instance}, part={part_name}"
-            yield "*End Instance"
+        for instance_name, one_instance in self.instances.items():
+            yield from one_instance.make_inp_lines()
 
         yield "**"
 
-        # Need an assembly-level node set to apply the constraints.
-        # As per ANALYSIS_1.pdf, 2.1.1–9, we can reference the node sets in the parts.
-        unique_name = base.deterministic_key(self, self.name)
-
-        if len(instance_names) != 1:
-            raise ValueError("Time to deal with this!")
-
-        yield f"*Nset, nset={unique_name}, instance={instance_names[0]}"
-        part_set_names = [part.get_everything_set().get_name(base.SetContext.part) for part in self.parts.values()]
-        yield ", ".join(part_set_names)
-
-        # For now, hard code a cylindrical axis system along the Y axis
-        yield f"*Transform, nset={unique_name}, type=C"
-        yield " 0.,         10.,           0.,           0.,         15.,           0."
-
-        for one_part in self.parts.values():
-            yield from one_part.produce_equation_inp_line()
+        for one_instance in self.instances.values():
+            yield from one_instance.produce_equation_inp_line()
 
         yield "*End Assembly"
 
 
     def _produce_inp_lines_material(self) -> typing.Iterable[str]:
         yield from base.inp_heading("MATERIALS")
-        for one_part in self.parts.values():
+        for one_part in self.get_parts():
             yield from one_part.common_material.produce_inp_lines()
 
     def _get_sorted_loads(self):
@@ -180,10 +175,11 @@ class AbaqusModel:
 
 def make_test_model() -> AbaqusModel:
 
-    one_part = part.make_part_test()
+    # one_part = part.make_part_test()
+    one_instance = instance.make_instance_test()
 
     model = AbaqusModel("TestModel")
-    model.add_part(one_part)
+    model.add_instance(one_instance)
 
     all_steps = [step.make_test_step(x) for x in (1, 2, 3)]
     for one_step in all_steps:
