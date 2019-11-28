@@ -1,6 +1,8 @@
 import hashlib
 import typing
 import enum
+import math
+
 
 class XYZ(typing.NamedTuple):
     x: float
@@ -8,6 +10,21 @@ class XYZ(typing.NamedTuple):
     z: float
 
 DOFs = (1, 2, 3)
+
+
+
+
+class RThZ(typing.NamedTuple):
+    r: float
+    theta_deg: float
+    z: float
+
+    def to_xyz(self) -> XYZ:
+        ang_rad = math.radians(self.theta_deg)
+        x = self.r * math.sin(ang_rad)
+        y = self.z
+        z = self.r * math.cos(ang_rad)
+        return XYZ(x, y, z)
 
 
 class SetContext(enum.Enum):
