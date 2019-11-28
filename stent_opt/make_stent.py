@@ -1,5 +1,6 @@
 import itertools
 import typing
+import functools
 
 
 from stent_opt.abaqus_model import base, node, element, part, material, instance, main
@@ -17,22 +18,19 @@ class StentParams(typing.NamedTuple):
 basic_stent_params = StentParams(
     angle=60,
     divs_radial=5,
-    divs_theta=4,
-    divs_z=6,
+    divs_theta=6,
+    divs_z=7,
     r_min=10,
     r_max=15,
     length=8.0,
 )
-if __name__ == "__main__":
-    pass
-
 
 def generate_nodes(stent_params: StentParams) -> typing.Iterable[base.XYZ]:
     def gen_ordinates(n, low, high):
         vals = [ low + (high - low) * (i/(n-1)) for i in range(n)]
         return vals
 
-    r_vals = gen_ordinates(stent_params.divs_z, stent_params.r_min, stent_params.r_max)
+    r_vals = gen_ordinates(stent_params.divs_radial, stent_params.r_min, stent_params.r_max)
     th_vals = gen_ordinates(stent_params.divs_theta, 0.0, stent_params.angle)
     z_vals = gen_ordinates(stent_params.divs_z, 0.0, stent_params.length)
 
@@ -41,20 +39,46 @@ def generate_nodes(stent_params: StentParams) -> typing.Iterable[base.XYZ]:
         yield polar_coord.to_xyz()
 
 
+def node_from_index(stent_params: StentParams, iR, iTh, iZ):
+    """Node numbers (fully populated)"""
+    return (iR * (stent_params.divs_theta * stent_params.divs_z) +
+            iTh * stent_params.divs_z +
+            iZ +
+            1)  # One based node numbers!
+
+def elem_from_index(stent_params: StentParams, iR, iTh, iZ):
+    """Element numbers (fully populated) - just one fewer number in each ordinate."""
+    stent_params_minus_one = stent_params._replace(
+        divs_radial=stent_params.divs_radial - 1,
+        divs_theta=stent_params.divs_theta - 1,
+        divs_z=stent_params.divs_z - 1)
+
+    return node_from_index(stent_params_minus_one, iR, iTh, iZ)
+
+
 def generate_elements(stent_params: StentParams) -> typing.Iterable[element.Element]:
-    for iNode, (iR, iTh, iZ) in enumerate(itertools.product(
+
+    # get_iNode = functools.partial(node_from_index, stent_params=stent_params)
+
+    def get_iNode(iR, iTh, iZ):
+        return node_from_index(stent_params, iR, iTh, iZ)
+
+    for iR, iTh, iZ in itertools.product(
             range(stent_params.divs_radial-1),
             range(stent_params.divs_theta-1),
-            range(stent_params.divs_z-1)), start=1):
+            range(stent_params.divs_z-1)):
 
-        connection_this_r = [
-            iNode,
-            iNode+1,
-            iNode + stent_params.divs_z + 1,
-            iNode + stent_params.divs_z,
+        connection = [
+            get_iNode(iR, iTh, iZ),
+            get_iNode(iR, iTh+1, iZ),
+            get_iNode(iR, iTh+1, iZ+1),
+            get_iNode(iR, iTh, iZ+1),
+            get_iNode(iR+1, iTh, iZ),
+            get_iNode(iR+1, iTh + 1, iZ),
+            get_iNode(iR+1, iTh + 1, iZ + 1),
+            get_iNode(iR+1, iTh, iZ + 1),
         ]
-        connection_next_r = [i + stent_params.divs_z * stent_params.divs_theta for i in connection_this_r]
-        connection = connection_this_r + connection_next_r
+
         yield element.Element(
             name="C3D8",
             connection=tuple(connection),
@@ -87,7 +111,7 @@ def make_a_stent():
 
     with open(r"c:\temp\stent.inp", "w") as fOut:
         for l in model.produce_inp_lines():
-            print(l)
+            # print(l)
             fOut.write(l + "\n")
 
 
