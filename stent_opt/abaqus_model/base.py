@@ -1,6 +1,7 @@
 import abc
 import dataclasses
 import hashlib
+import itertools
 import typing
 import enum
 import math
@@ -48,6 +49,25 @@ def _operator_splat_const_last(op: typing.Callable, one: T, a):
 
     return type(one)(**field_dict)
 
+
+def _groups_of(items, n):
+    working_list = []
+    still_going = True
+    it = iter(items)
+    while still_going:
+        try:
+            working_list.append(next(it))
+        except StopIteration:
+            still_going = False
+
+        if len(working_list) >= n:
+            yield working_list
+            working_list = []
+
+    if working_list:
+        yield working_list
+
+
 class XYZ(typing.NamedTuple):
     x: float
     y: float
@@ -59,12 +79,17 @@ class XYZ(typing.NamedTuple):
     def __radd__(self, other):
         return _operator_dot(operator.add, other, self)
 
+    def __sub__(self, other):
+        return _operator_dot(operator.sub, self, other)
+
     def __rmul__(self, other):
         return _operator_splat_const_first(operator.mul, other, self)
 
     def __truediv__(self, other):
         return _operator_splat_const_last(operator.truediv, self, other)
 
+    def __abs__(self):
+        return math.sqrt(self.x**2 + self.y**2 + self.z**2)
 
 DOFs = (1, 2, 3)
 
@@ -86,6 +111,9 @@ class RThZ(typing.NamedTuple):
 
     def __radd__(self, other):
         return _operator_dot(operator.add, other, self)
+
+    def __sub__(self, other):
+        return _operator_dot(operator.sub, self, other)
 
     def __rmul__(self, other):
         return _operator_splat_const_first(operator.mul, other, self)
@@ -145,15 +173,21 @@ class SetBase:
 
     def generate_inp_lines(self, set_context: SetContext) -> typing.Iterable[str]:
         """Generateds the *Nset or *Elset lines"""
+
+        key = self.set_type.set_name_key()
+        MAX_PER_LINE = 10
+
         fully_populated_sequence = frozenset(range(min(self._entity_numbers()), max(self._entity_numbers())+1))
         is_sequential = self._entity_numbers() == fully_populated_sequence
         if is_sequential:
-            key = self.set_type.set_name_key()
+
             yield f"*{key.title()}, {key.lower()}={self.get_name(set_context)}, generate"
             yield f"  {min(self._entity_numbers())},  {max(self._entity_numbers())},   1"
 
         else:
-            raise ValueError("Time to write this code I guess!")
+            yield f"*{key.title()}, {key.lower()}={self.get_name(set_context)}"
+            for sub_list in _groups_of(sorted(self._entity_numbers()), MAX_PER_LINE):
+                yield ", ".join(str(x) for x in sub_list)
 
 
 def abaqus_float(x) -> str:
@@ -191,3 +225,12 @@ if __name__ == "__main__":
 
     print(-1 * a1)
     print(a1 / 4.5)
+
+    a = [1, 2, 3, 4, 5]
+
+    for n in (2, 3, 4, 5, 6):
+        print(n)
+        for x in _groups_of(a, n):
+            print(x)
+
+        print()

@@ -16,12 +16,12 @@ class StentParams(typing.NamedTuple):
 
 basic_stent_params = StentParams(
     angle=60,
-    divs_radial=16,
-    divs_theta=20,
-    divs_z=40,
+    divs_radial=30,
+    divs_theta=40,
+    divs_z=60,
     r_min=10,
     r_max=15,
-    length=8.0,
+    length=20.0,
 )
 
 def generate_nodes_polar(stent_params: StentParams) -> typing.Iterable[base.RThZ]:
@@ -104,17 +104,42 @@ def make_a_stent():
         iElem: e for iElem, e in enumerate(generate_elements(stent_params=basic_stent_params), start=1)
     }
 
-    def elem_cent_polar(e: element.Element):
+    def elem_cent_polar(e: element.Element) -> base.RThZ:
         node_pos = [nodes_polar[iNode] for iNode in e.connection]
         ave_node_pos = sum(node_pos) / len(node_pos)
         return ave_node_pos
 
+    def include_elem_decider() -> typing.Callable:
+        """As a first test, make some cavities in the segment."""
+
+        rs = [0.5 * (basic_stent_params.r_min + basic_stent_params.r_max),]
+        thetas = [0.0, basic_stent_params.angle]
+        z_vals = [0, 0.5*basic_stent_params.length, basic_stent_params.length]
+
+        cavities = []
+        for r, th, z in itertools.product(rs, thetas, z_vals):
+            cavities.append( (base.RThZ(r=r, theta_deg=th, z=z).to_xyz(), 3.5))
+
+        def check_elem(e: element.Element) -> bool:
+            for cent, max_dist in cavities:
+                this_elem_cent = elem_cent_polar(e)
+                dist = abs(cent - this_elem_cent.to_xyz())
+                if dist < max_dist:
+                    return False
+
+            return True
+
+        return check_elem
+
     for iNode, one_node_polar in nodes_polar.items():
-        stent_part.add_node_validated(iNode, one_node_polar)
+        stent_part.add_node_validated(iNode, one_node_polar.to_xyz())
+
+    should_include_elem = include_elem_decider()
 
     for iElem, one_elem in elems_all.items():
-        print(one_elem, elem_cent_polar(one_elem))
-        stent_part.add_element_validate(iElem, one_elem)
+        #print(one_elem, elem_cent_polar(one_elem))
+        if should_include_elem(one_elem):
+            stent_part.add_element_validate(iElem, one_elem)
 
     one_instance = instance.Instance(base_part=stent_part)
 

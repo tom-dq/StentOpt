@@ -26,6 +26,9 @@ class Part:
 
     def add_node_validated(self, iNode: int, node: base.XYZ):
         """Adds a node and validates it."""
+        if not isinstance(node, base.XYZ):
+            raise ValueError(node)
+
         self.nodes[iNode] = node
 
     def add_element_validate(self, iElem: int, element: element.Element):
