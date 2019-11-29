@@ -13,13 +13,18 @@ class SurfaceFace(enum.Enum):
 
 
 class Surface:
+    name: str
     sets_and_faces: typing.List[ typing.Tuple[element.ElementSet, SurfaceFace]]
 
-    def __init__(self):
-        self.sets_and_faces = []
+    def __init__(self, name: str, sets_and_faces: typing.List[ typing.Tuple[element.ElementSet, SurfaceFace]]):
+        self.name = name
+        self.sets_and_faces = sets_and_faces
 
-    def add_set(self, element_set: element.ElementSet, face: SurfaceFace):
-        self.sets_and_faces.append( (element_set, face) )
+    #def add_set(self, element_set: element.ElementSet, face: SurfaceFace):
+    #    self.sets_and_faces.append( (element_set, face) )
 
-    def generate_inp_lines(self) -> typing.Iterable[str]:
-        pass
+    def produce_inp_lines(self) -> typing.Iterable[str]:
+        yield f"*Surface, type=ELEMENT, name={self.name}"
+        for elem_set, face in self.sets_and_faces:
+            yield f"{elem_set.get_name(base.SetContext.part)}, {face.name}"
+

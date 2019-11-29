@@ -1,7 +1,7 @@
 
 import typing
 
-from stent_opt.abaqus_model import base, step, load, instance, part
+from stent_opt.abaqus_model import base, step, load, instance, part, surface, element
 
 
 # Todo
@@ -183,6 +183,15 @@ def make_test_model() -> AbaqusModel:
     model.add_load_starting_from(all_steps[0], load_point)
     model.add_load_specific_steps(all_steps[0:2], load_dist)
 
+    # Make a surface
+    one_elem_set = element.ElementSet(
+        part=one_instance.base_part,
+        name_component="TestSetName",
+        elements=one_instance.base_part.elements.copy(),
+    )
+
+    surf_data = [ (one_elem_set, surface.SurfaceFace.S2) , ]
+    one_surface = surface.Surface(name="TestSurface", surf_data)
 
     return model
 
