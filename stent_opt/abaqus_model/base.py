@@ -4,13 +4,67 @@ import hashlib
 import typing
 import enum
 import math
+import operator
 
 # from stent_opt.abaqus_model import part
+
+T = typing.Type["T"]
+
+def _operator_dot(op: typing.Callable, one: T, two: T):
+    """Maps an operator to the components of the class.
+    e.g., A(a=3, b=5) + A(a=56, b=67)  => A(3+56, b=5+67)"""
+
+    # Special case for 0 + T -> T (to make the "sum" builtin work)
+    if one == 0:
+        return two
+
+    if one.__class__ != two.__class__:
+        raise TypeError(f"Can't apply {op} to {one} and {two}.")
+
+    field_dict = {
+        f: op(getattr(one, f), getattr(two, f)) for f in one._fields
+    }
+
+    return type(one)(**field_dict)
+
+def _operator_splat_const_first(op: typing.Callable, a, one: T):
+    """Splats an operator across the components of the class.
+    e.g., 2 * A(a=3, b=5)  => A(2 * 3, b=2 * 5)"""
+
+    field_dict = {
+        f: op(a, getattr(one, f)) for f in one._fields
+    }
+
+    return type(one)(**field_dict)
+
+
+def _operator_splat_const_last(op: typing.Callable, one: T, a):
+    """Splats an operator across the components of the class.
+    e.g., A(a=3, b=5) / 3.4  => A(3 / 3.4, b=5 / 3.4)"""
+
+    field_dict = {
+        f: op(getattr(one, f), a) for f in one._fields
+    }
+
+    return type(one)(**field_dict)
 
 class XYZ(typing.NamedTuple):
     x: float
     y: float
     z: float
+
+    def __add__(self, other):
+        return _operator_dot(operator.add, self, other)
+
+    def __radd__(self, other):
+        return _operator_dot(operator.add, other, self)
+
+    def __rmul__(self, other):
+        return _operator_splat_const_first(operator.mul, other, self)
+
+    def __truediv__(self, other):
+        return _operator_splat_const_last(operator.truediv, self, other)
+
 
 DOFs = (1, 2, 3)
 
@@ -26,6 +80,18 @@ class RThZ(typing.NamedTuple):
         y = self.z
         z = self.r * math.cos(ang_rad)
         return XYZ(x, y, z)
+
+    def __add__(self, other):
+        return _operator_dot(operator.add, self, other)
+
+    def __radd__(self, other):
+        return _operator_dot(operator.add, other, self)
+
+    def __rmul__(self, other):
+        return _operator_splat_const_first(operator.mul, other, self)
+
+    def __truediv__(self, other):
+        return _operator_splat_const_last(operator.truediv, self, other)
 
 
 class SetContext(enum.Enum):
@@ -114,3 +180,14 @@ def inp_heading(text: str) -> typing.Iterable[str]:
 def deterministic_key(class_instance, text) -> str:
     raw_text = f"{class_instance}_{text}"
     return "Z_" + hashlib.md5(raw_text.encode()).hexdigest()[0:8]
+
+
+
+if __name__ == "__main__":
+    a1 = RThZ(r=2.3, theta_deg=34.1, z=5.6)
+    a2 = RThZ(r=1, theta_deg=2, z=3)
+    print(a1)
+    print(a1+a2)
+
+    print(-1 * a1)
+    print(a1 / 4.5)

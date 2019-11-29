@@ -24,7 +24,7 @@ basic_stent_params = StentParams(
     length=8.0,
 )
 
-def generate_nodes(stent_params: StentParams) -> typing.Iterable[base.XYZ]:
+def generate_nodes_polar(stent_params: StentParams) -> typing.Iterable[base.RThZ]:
     def gen_ordinates(n, low, high):
         vals = [ low + (high - low) * (i/(n-1)) for i in range(n)]
         return vals
@@ -35,7 +35,7 @@ def generate_nodes(stent_params: StentParams) -> typing.Iterable[base.XYZ]:
 
     for r, th, z in itertools.product(r_vals, th_vals, z_vals):
         polar_coord = base.RThZ(r, th, z)
-        yield polar_coord.to_xyz()
+        yield polar_coord
 
 
 def node_from_index(stent_params: StentParams, iR, iTh, iZ):
@@ -83,7 +83,6 @@ def generate_elements(stent_params: StentParams) -> typing.Iterable[element.Elem
             connection=tuple(connection),
         )
 
-
 def make_a_stent():
     common_material = material.MaterialElastic(
         name="ElasticMaterial",
@@ -97,10 +96,24 @@ def make_a_stent():
         common_material=common_material,
     )
 
-    for iNode, one_node in enumerate(generate_nodes(stent_params=basic_stent_params), start=1):
-        stent_part.add_node_validated(iNode, one_node)
+    nodes_polar = {
+        iNode: n_p for iNode, n_p in enumerate(generate_nodes_polar(stent_params=basic_stent_params), start=1)
+    }
 
-    for iElem, one_elem in enumerate(generate_elements(stent_params=basic_stent_params), start=1):
+    elems_all = {
+        iElem: e for iElem, e in enumerate(generate_elements(stent_params=basic_stent_params), start=1)
+    }
+
+    def elem_cent_polar(e: element.Element):
+        node_pos = [nodes_polar[iNode] for iNode in e.connection]
+        ave_node_pos = sum(node_pos) / len(node_pos)
+        return ave_node_pos
+
+    for iNode, one_node_polar in nodes_polar.items():
+        stent_part.add_node_validated(iNode, one_node_polar)
+
+    for iElem, one_elem in elems_all.items():
+        print(one_elem, elem_cent_polar(one_elem))
         stent_part.add_element_validate(iElem, one_elem)
 
     one_instance = instance.Instance(base_part=stent_part)
