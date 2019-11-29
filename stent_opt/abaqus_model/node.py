@@ -1,3 +1,4 @@
+import dataclasses
 import typing
 
 from stent_opt.abaqus_model import base, part
@@ -7,7 +8,7 @@ from stent_opt.abaqus_model import base, part
 
 
 class Nodes(dict):
-    def __setitem__(self, key: int, value: base.XYZ):
+    def __setitem__(self, key: int, value: "base.XYZ"):
         if not all(isinstance(x, float) for x in value):
             raise TypeError("Should only be floats in here.")
 
@@ -25,33 +26,17 @@ class NodeCouple(typing.NamedTuple):
     negated: bool
 
 
-class NodeSet(typing.NamedTuple):
-    part: "part.Part"
-    name_component: str
+
+@dataclasses.dataclass(frozen=True)
+class NodeSet(base.SetBase):
     nodes: typing.FrozenSet[int]
 
-    def get_name(self, set_context: base.SetContext) -> str:
-        if set_context == base.SetContext.part:
-            node_number_hash = str(hash(self.nodes))
-            return f"Set_{self.name_component}_{base.deterministic_key(self.part, node_number_hash)}"
+    def _entity_numbers(self) -> typing.FrozenSet[int]:
+        return self.nodes
 
-        elif set_context == base.SetContext.assembly:
-            name_in_part = self.get_name(base.SetContext.part)
-            return f"{self.part.name}.{name_in_part}"
-
-        else:
-            raise ValueError(set_context)
-
-    def generate_inp_lines(self, set_context: base.SetContext) -> typing.Iterable[str]:
-        """Generateds the *Nset lines"""
-        seq_nodes = frozenset(range(min(self.nodes), max(self.nodes)+1))
-        nodes_are_sequential = self.nodes == seq_nodes
-        if nodes_are_sequential:
-            yield f"*Nset, nset={self.get_name(set_context)}, generate"
-            yield f"  {min(self.nodes)},  {max(self.nodes)},   1"
-
-        else:
-            raise ValueError("Time to write this code I guess!")
+    @property
+    def set_type(self) -> base.SetType:
+        return base.SetType.node
 
 
 if __name__ == "__main__":

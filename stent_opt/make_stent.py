@@ -1,6 +1,5 @@
 import itertools
 import typing
-import functools
 
 
 from stent_opt.abaqus_model import base, node, element, part, material, instance, main
@@ -17,9 +16,9 @@ class StentParams(typing.NamedTuple):
 
 basic_stent_params = StentParams(
     angle=60,
-    divs_radial=5,
-    divs_theta=6,
-    divs_z=7,
+    divs_radial=16,
+    divs_theta=20,
+    divs_z=40,
     r_min=10,
     r_max=15,
     length=8.0,

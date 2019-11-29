@@ -165,11 +165,6 @@ class AbaqusModel:
             active_at_last_step = active_at_this_step
 
 
-
-
-
-
-
 def make_test_model() -> AbaqusModel:
 
     # one_part = part.make_part_test()

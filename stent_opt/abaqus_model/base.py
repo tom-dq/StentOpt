@@ -1,8 +1,11 @@
+import abc
+import dataclasses
 import hashlib
 import typing
 import enum
 import math
 
+# from stent_opt.abaqus_model import part
 
 class XYZ(typing.NamedTuple):
     x: float
@@ -10,8 +13,6 @@ class XYZ(typing.NamedTuple):
     z: float
 
 DOFs = (1, 2, 3)
-
-
 
 
 class RThZ(typing.NamedTuple):
@@ -31,6 +32,62 @@ class SetContext(enum.Enum):
     part = enum.auto()
     assembly = enum.auto()
 
+
+class SetType(enum.Enum):
+    node = enum.auto()
+    element = enum.auto()
+
+    def set_name_key(self) -> str:
+        """Either "Elset" or "Nset"""
+
+        if self == SetType.node:
+            return "Nset"
+
+        elif self == SetType.element:
+            return "Elset"
+
+        else:
+            raise ValueError(self)
+
+
+
+@dataclasses.dataclass(frozen=True)
+class SetBase:
+    part: "part.Part"
+    name_component: str
+
+    @abc.abstractmethod
+    def _entity_numbers(self) -> typing.FrozenSet[int]:
+        raise NotImplementedError()
+
+    @property
+    @abc.abstractmethod
+    def set_type(self) -> SetType:
+        raise NotImplementedError()
+
+    def get_name(self, set_context: SetContext) -> str:
+        if set_context == SetContext.part:
+            node_number_hash = str(hash(self._entity_numbers()))
+            return f"Set_{self.name_component}_{deterministic_key(self.part, node_number_hash)}"
+
+        elif set_context == SetContext.assembly:
+            name_in_part = self.get_name(SetContext.part)
+            return f"{self.part.name}.{name_in_part}"
+
+        else:
+            raise ValueError(set_context)
+
+    def generate_inp_lines(self, set_context: SetContext) -> typing.Iterable[str]:
+        """Generateds the *Nset or *Elset lines"""
+        fully_populated_sequence = frozenset(range(min(self._entity_numbers()), max(self._entity_numbers())+1))
+        is_sequential = self._entity_numbers() == fully_populated_sequence
+        if is_sequential:
+            key = self.set_type.set_name_key()
+            yield f"*{key.title()}, {key.lower()}={self.get_name(set_context)}, generate"
+            yield f"  {min(self._entity_numbers())},  {max(self._entity_numbers())},   1"
+
+        else:
+            raise ValueError("Time to write this code I guess!")
 
 
 def abaqus_float(x) -> str:

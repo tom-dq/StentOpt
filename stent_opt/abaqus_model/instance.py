@@ -26,7 +26,8 @@ class Instance:
         # As per ANALYSIS_1.pdf, 2.1.1–9, we can reference the node sets in the parts.
         unique_name = base.deterministic_key(self, self.name)
         yield f"*Nset, nset={unique_name}, instance={self.name}"
-        yield self.base_part.get_everything_set().get_name(base.SetContext.part)
+        all_node_set = self.base_part.get_everything_set(base.SetType.node)
+        yield all_node_set.get_name(base.SetContext.part)
 
         # For now, hard code a cylindrical axis system along the Y axis
         yield f"*Transform, nset={unique_name}, type=C"
