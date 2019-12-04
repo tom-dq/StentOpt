@@ -9,7 +9,7 @@ class Instance:
     name: str
 
     node_couples: typing.Set[node.NodeCouple]
-    surfaces: typing.List[surface.Surface]
+    surfaces: typing.Dict[str, surface.Surface]
 
     def __init__(self, base_part: part.Part, name: typing.Optional[str] = None):
         if name is None:
@@ -18,7 +18,7 @@ class Instance:
         self.base_part = base_part
         self.name = name
         self.node_couples = set()
-        self.surfaces = list()
+        self.surfaces = dict()
 
     def make_inp_lines(self) -> typing.Iterable[str]:
         yield f"*Instance, name={self.name}, part={self.base_part.name}"
@@ -42,7 +42,7 @@ class Instance:
         yield f"*Transform, nset={unique_name}, type=C"
         yield " 0.,         10.,           0.,           0.,         15.,           0."
 
-        for surf in self.surfaces:
+        for surf_name, surf in self.surfaces.items():
             yield from surf.produce_inp_lines()
 
 
@@ -76,7 +76,10 @@ class Instance:
             if one_set not in self.base_part.element_sets.values():
                 raise ValueError(f"Missing definition for {one_set}.")
 
-        self.surfaces.append(surf)
+        if surf.name in self.surfaces:
+            raise ValueError(f"Duplicate surface name {surf.name}")
+
+        self.surfaces[surf.name] = surf
 
 
 def make_instance_test() -> Instance:

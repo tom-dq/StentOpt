@@ -60,6 +60,14 @@ class AbaqusModel:
 
             seen.add(maybe_part)
 
+    def get_only_instance(self) -> instance.Instance:
+
+        if len(self.instances) != 1:
+            raise ValueError(f"Expected a single instance, got {len(self.instances)}.")
+
+        return list(self.instances.values())[0]
+
+
     def produce_inp_lines(self) -> typing.Iterable[str]:
         yield from self._produce_inp_lines_header()
         yield from base.inp_heading("PARTS")
