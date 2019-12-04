@@ -53,6 +53,12 @@ def generate_nodes_polar(stent_params: StentParams) -> typing.Iterable[base.RThZ
         yield polar_coord
 
 
+def _stent_params_node_to_elem_idx(stent_params: StentParams) -> StentParams:
+    return stent_params._replace(
+        divs_radial=stent_params.divs_radial - 1,
+        divs_theta=stent_params.divs_theta - 1,
+        divs_z=stent_params.divs_z - 1)
+
 def node_from_index(stent_params: StentParams, iR, iTh, iZ):
     """Node numbers (fully populated)"""
     return (iR * (stent_params.divs_theta * stent_params.divs_z) +
@@ -62,21 +68,21 @@ def node_from_index(stent_params: StentParams, iR, iTh, iZ):
 
 def elem_from_index(stent_params: StentParams, iR, iTh, iZ):
     """Element numbers (fully populated) - just one fewer number in each ordinate."""
-    stent_params_minus_one = stent_params._replace(
-        divs_radial=stent_params.divs_radial - 1,
-        divs_theta=stent_params.divs_theta - 1,
-        divs_z=stent_params.divs_z - 1)
-
+    stent_params_minus_one = _stent_params_node_to_elem_idx(stent_params)
     return node_from_index(stent_params_minus_one, iR, iTh, iZ)
 
 
-def generate_elem_indices(stent_params: StentParams) -> typing.Iterable[typing.Tuple[int, Index]]:
+def generate_node_indices(stent_params: StentParams) -> typing.Iterable[typing.Tuple[int, Index]]:
     for iElem, (iR, iTh, iZ) in enumerate(itertools.product(
-            range(stent_params.divs_radial-1),
-            range(stent_params.divs_theta-1),
-            range(stent_params.divs_z-1)), start=1):
+            range(stent_params.divs_radial),
+            range(stent_params.divs_theta),
+            range(stent_params.divs_z)), start=1):
 
         yield iElem, Index(R=iR, Th=iTh, Z=iZ)
+
+def generate_elem_indices(stent_params: StentParams) -> typing.Iterable[typing.Tuple[int, Index]]:
+    stent_params_minus_one = _stent_params_node_to_elem_idx(stent_params)
+    yield from generate_node_indices(stent_params_minus_one)
 
 
 def generate_elements_all(stent_params: StentParams) -> typing.Iterable[typing.Tuple[int, element.Element]]:
@@ -102,11 +108,16 @@ def generate_elements_all(stent_params: StentParams) -> typing.Iterable[typing.T
         )
 
 def make_a_stent():
-    common_material = material.MaterialElastic(
-        name="ElasticMaterial",
-        density=1.0,
-        elast_mod=200.0,
+    stress_strain_table = (
+        material.Point(stress=205., strain=0.0),
+        material.Point(stress=515., strain=0.6),
+    )
+    common_material = material.MaterialElasticPlastic(
+        name="Steel",
+        density=7.85e-09,
+        elast_mod=196000.0,
         elast_possion=0.3,
+        plastic=stress_strain_table,
     )
 
     stent_part = part.Part(
@@ -253,13 +264,36 @@ def apply_loads(model: main.AbaqusModel):
 def couple_boundaries(model: main.AbaqusModel):
     """Find the node pairs and couples them."""
 
+    stent_instance = model.get_only_instance()
+    stent_part = stent_instance.base_part
+
+    def gen_active_pairs():
+        nodes_on_bound = {
+            iNode: i for iNode, i in generate_node_indices(basic_stent_params)
+            if (i.Th == 0 or i.Th == basic_stent_params.divs_theta-1)
+        }
+
+        pairs = collections.defaultdict(set)
+        for iNode, i in nodes_on_bound.items():
+
+            key = (i.R, i.Z)
+            pairs[key].add(iNode)
+
+        for pair_of_nodes in pairs.values():
+            if len(pair_of_nodes) != 2:
+                raise ValueError(pair_of_nodes)
+
+            if all(iNode in stent_part.nodes for iNode in pair_of_nodes):
+                yield tuple(pair_of_nodes)
+
+    for n1, n2 in gen_active_pairs():
+        stent_instance.add_node_couple(n1, n2, False)
 
 
 
 def write_model(model: main.AbaqusModel):
-    with open(r"c:\temp\stent.inp", "w") as fOut:
+    with open(r"c:\temp\aba\stent-6.inp", "w") as fOut:
         for l in model.produce_inp_lines():
-            # print(l)
             fOut.write(l + "\n")
 
 
@@ -267,4 +301,5 @@ if __name__ == "__main__":
     model = make_a_stent()
     create_surfaces(model)
     apply_loads(model)
+    couple_boundaries(model)
     write_model(model)

@@ -103,11 +103,12 @@ class Part:
 
 
 def make_part_test() -> Part:
-    common_material = material.MaterialElastic(
+    common_material = material.MaterialElasticPlastic(
         name="ElasticMaterial",
         density=1.0,
         elast_mod=200.0,
         elast_possion=0.3,
+        plastic=None,
     )
 
     part = Part(name="Part-1", common_material=common_material)

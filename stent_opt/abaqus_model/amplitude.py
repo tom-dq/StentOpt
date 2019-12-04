@@ -21,8 +21,19 @@ class Amplitude(typing.NamedTuple):
 
         str_data = (base.abaqus_float(x) for x in generate_single_points())
 
-        for one_row in base.groups_of(str_data, 4):
-            yield ', '.join(one_row)
+        """ ***ERROR: ALL DATA LINES ON *AMPLITUDE, DEFINITION=TABULAR, EXCEPTING THE LAST 
+           DATA LINE, MUST HAVE EXACTLY FOUR DATA PAIRS (EIGHT ENTRIES) OR ONE 
+           SINGLE DATA PAIR (TWO ENTRIES). PLEASE CHECK THE DATA LINES FOR 
+           *AMPLITUDE."""
+
+        for one_row in base.groups_of(str_data, 8):
+
+            if len(one_row) < 8:
+                for one_pair in base.groups_of(one_row, 2):
+                    yield ', '.join(one_pair)
+
+            else:
+                yield ', '.join(one_row)
 
 
 def make_test_amplitude() -> Amplitude:

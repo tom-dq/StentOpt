@@ -1,7 +1,7 @@
 
 import typing
 
-from stent_opt.abaqus_model import amplitude, base, step, load, instance, part, surface, element
+from stent_opt.abaqus_model import amplitude, base, step, load, instance, part, surface, element, output_requests
 
 
 # Todo
@@ -131,9 +131,17 @@ class AbaqusModel:
 
     def _produce_inp_lines_steps(self) ->  typing.Iterable[str]:
         yield self._main_sep_line
-        for one_step in self.steps:
+        for idx_step, one_step in enumerate(self.steps):
+
             yield from base.inp_heading(f"STEP: {one_step.name}")
             yield from one_step.produce_inp_lines()
+
+            is_first_step = idx_step == 0
+            if is_first_step:
+                yield "** Mass Scaling: Semi-Automatic"
+                yield "**               Whole Model"
+                yield "*Variable Mass Scaling, dt=1e-05, type=set equal dt, frequency=1"
+
             yield from base.inp_heading("LOADS")
 
             for one_load in self._get_sorted_loads():
@@ -148,6 +156,8 @@ class AbaqusModel:
 
                 else:
                     raise ValueError(f"Got more than one thing to do with {one_load} and {one_step}... {relevant_load_events}")
+
+            yield from output_requests.produce_inp_lines(output_requests.general_components)
 
             # Have to end the step here, after the loads have been output.
 
