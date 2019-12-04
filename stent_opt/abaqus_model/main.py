@@ -1,7 +1,7 @@
 
 import typing
 
-from stent_opt.abaqus_model import base, step, load, instance, part, surface, element
+from stent_opt.abaqus_model import amplitude, base, step, load, instance, part, surface, element
 
 
 # Todo
@@ -67,6 +67,7 @@ class AbaqusModel:
             yield from part.produce_inp_lines()
 
         yield from self._produce_inp_lines_assembly()
+        yield from self._produce_inp_lines_amplitude()
         yield from self._produce_inp_lines_material()
         yield from self._produce_inp_lines_steps()
 
@@ -90,6 +91,20 @@ class AbaqusModel:
             yield from one_instance.produce_equation_inp_line()
 
         yield "*End Assembly"
+
+
+    def _produce_inp_lines_amplitude(self) -> typing.Iterable[str]:
+        def generate_referenced_amplitudes():
+            seen = set()
+            seen.add(None)  # If there's no amplitude, it will be a None.
+            all_loads = self._get_sorted_loads()
+            for one_load in all_loads:
+                if one_load.amplitude not in seen:
+                    yield one_load.amplitude
+                    seen.add(one_load.amplitude)
+
+        for amp in generate_referenced_amplitudes():
+            yield from amp.make_inp_lines()
 
 
     def _produce_inp_lines_material(self) -> typing.Iterable[str]:
@@ -185,9 +200,10 @@ def make_test_model() -> AbaqusModel:
 
 
     # Add the loads
+    one_amplitude = amplitude.make_test_amplitude()
     some_node_set = one_instance.base_part.get_everything_set(base.SetType.node)
     load_point = load.make_test_load_point(some_node_set)
-    load_dist = load.make_test_pressure(one_surface)
+    load_dist = load.make_test_pressure(one_surface, one_amplitude)
     model.add_load_starting_from(all_steps[0], load_point)
     model.add_load_specific_steps(all_steps[0:2], load_dist)
 

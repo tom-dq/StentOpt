@@ -4,7 +4,6 @@ import typing
 
 from stent_opt.abaqus_model import base, node, element, part, material, instance, main
 
-
 class StentParams(typing.NamedTuple):
     angle: float
     divs_radial: int

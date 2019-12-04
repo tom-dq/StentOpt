@@ -50,7 +50,7 @@ def _operator_splat_const_last(op: typing.Callable, one: T, a):
     return type(one)(**field_dict)
 
 
-def _groups_of(items, n):
+def groups_of(items, n):
     working_list = []
     still_going = True
     it = iter(items)
@@ -189,7 +189,7 @@ class SetBase:
 
         else:
             yield f"*{key.title()}, {key.lower()}={self.get_name(set_context)}"
-            for sub_list in _groups_of(sorted(self._entity_numbers()), MAX_PER_LINE):
+            for sub_list in groups_of(sorted(self._entity_numbers()), MAX_PER_LINE):
                 yield ", ".join(str(x) for x in sub_list)
 
     def reference_part_level_set(self, instance_name: str):
@@ -227,6 +227,17 @@ def deterministic_key(class_instance, text, context: typing.Optional[SetContext]
     return "Z_" + hashlib.md5(raw_text.encode()).hexdigest()[0:8]
 
 
+def quoted_if_necessary(s: str) -> str:
+    if '"' in s:
+        raise ValueError(f"String can't contain quotes: {s}")
+
+    if ' ' in s:
+        return '"' + s + '"'
+
+    else:
+        return s
+
+
 
 if __name__ == "__main__":
     a1 = RThZ(r=2.3, theta_deg=34.1, z=5.6)
@@ -241,7 +252,7 @@ if __name__ == "__main__":
 
     for n in (2, 3, 4, 5, 6):
         print(n)
-        for x in _groups_of(a, n):
+        for x in groups_of(a, n):
             print(x)
 
         print()
