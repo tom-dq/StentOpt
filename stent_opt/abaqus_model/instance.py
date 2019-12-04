@@ -24,6 +24,13 @@ class Instance:
         yield f"*Instance, name={self.name}, part={self.base_part.name}"
         yield "*End Instance"
 
+        # Define all the node and element sets at the assembly level
+        for node_set in self.base_part.node_sets.values():
+            yield from node_set.reference_part_level_set(self.name)
+
+        for elem_set in self.base_part.element_sets.values():
+            yield from elem_set.reference_part_level_set(self.name)
+
         # Need an assembly-level node set to apply the constraints.
         # As per ANALYSIS_1.pdf, 2.1.1–9, we can reference the node sets in the parts.
         unique_name = base.deterministic_key(self, self.name)

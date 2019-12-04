@@ -166,13 +166,16 @@ class SetBase:
 
         elif set_context == SetContext.assembly:
             name_in_part = self.get_name(SetContext.part)
-            return f"{self.part.name}.{name_in_part}"
+            return f"{self.part.name}-{name_in_part}"
 
         else:
             raise ValueError(set_context)
 
     def generate_inp_lines(self, set_context: SetContext) -> typing.Iterable[str]:
-        """Generateds the *Nset or *Elset lines"""
+        """Generated the *Nset or *Elset lines which have the entity numbers in them directly."""
+
+        if set_context != SetContext.part:
+            raise ValueError(set_context)
 
         key = self.set_type.set_name_key()
         MAX_PER_LINE = 10
@@ -188,6 +191,13 @@ class SetBase:
             yield f"*{key.title()}, {key.lower()}={self.get_name(set_context)}"
             for sub_list in _groups_of(sorted(self._entity_numbers()), MAX_PER_LINE):
                 yield ", ".join(str(x) for x in sub_list)
+
+    def reference_part_level_set(self, instance_name: str):
+        """Generate the an *Nset which references another *Nset, say."""
+        key = self.set_type.set_name_key()
+        yield f"*{key.title()}, {key.lower()}={self.get_name(SetContext.assembly)}, instance={instance_name}"
+        yield self.get_name(SetContext.part)
+
 
 
 def abaqus_float(x) -> str:
@@ -211,8 +221,9 @@ def inp_heading(text: str) -> typing.Iterable[str]:
     yield "**"
 
 
-def deterministic_key(class_instance, text) -> str:
-    raw_text = f"{class_instance}_{text}"
+def deterministic_key(class_instance, text, context: typing.Optional[SetContext] = None) -> str:
+    context_text = context.name if context else ""
+    raw_text = f"{class_instance}_{text}_{context_text}"
     return "Z_" + hashlib.md5(raw_text.encode()).hexdigest()[0:8]
 
 

@@ -90,13 +90,16 @@ class Part:
         for node_set_name, node_set in self.node_sets.items():
             yield from node_set.generate_inp_lines(set_context)
 
-        all_elem_set = self.get_everything_set(base.SetType.element)
-        set_name = all_elem_set.get_name(set_context)
-        yield from all_elem_set.generate_inp_lines(set_context)
+        for elem_set_name, elem_set in self.element_sets.items():
+            yield from elem_set.generate_inp_lines(set_context)
 
-        section_name = f"Section-{set_name}"
+        # Assign the same section to all the elements.
+        all_elem_set = self.get_everything_set(base.SetType.element)
+        all_elem_set = all_elem_set.get_name(set_context)
+
+        section_name = f"Section-{all_elem_set}"
         yield f"** Section: {section_name}"
-        yield f"*Solid Section, elset={set_name}, material={self.common_material.name}"
+        yield f"*Solid Section, elset={all_elem_set}, material={self.common_material.name}"
 
 
 def make_part_test() -> Part:
@@ -112,9 +115,15 @@ def make_part_test() -> Part:
     part.add_node_validated(2, base.XYZ(3.4, 3.6, 6.7))
     part.add_node_validated(3, base.XYZ(3.14, 3.5, 6.7))
     part.add_node_validated(4, base.XYZ(3.14, 3.5, 6.2))
-    part.add_element_validate(1, element.Element("C3D4", (1, 2, 3, 4)))
+    part.add_node_validated(5, base.XYZ(2.0, 3.5, 6.2))
 
+    e1 = element.Element("C3D4", (1, 2, 3, 4))
+    e2 = element.Element("C3D4", (5, 2, 3, 1))
+    part.add_element_validate(1, e1)
+    part.add_element_validate(2, e2)
 
+    elem_set = element.ElementSet(part, "OneElem", element.Elements( {1: e1} ))
+    part.add_element_set(elem_set)
 
     return part
 

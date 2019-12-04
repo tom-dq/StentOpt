@@ -2,7 +2,7 @@ import typing
 import dataclasses
 import enum
 
-from stent_opt.abaqus_model import base
+from stent_opt.abaqus_model import base, node, surface
 
 
 class Action(enum.Enum):
@@ -35,7 +35,7 @@ class LoadBase:
 @dataclasses.dataclass(frozen=True)
 class ConcentratedLoad(LoadBase):
     name: str
-    set_name: str
+    node_set: node.NodeSet
     axis: int
     value: float
 
@@ -44,13 +44,14 @@ class ConcentratedLoad(LoadBase):
         yield f"*Cload{action.load_new_text()}"
 
         if action != Action.remove:
-            yield f"{self.set_name}, {self.axis}, {base.abaqus_float(self.value)}"
+            set_name = self.node_set.get_name(base.SetContext.assembly)
+            yield f"{set_name}, {self.axis}, {base.abaqus_float(self.value)}"
 
 
 @dataclasses.dataclass(frozen=True)
 class PressureLoad(LoadBase):
     name: str
-    set_name: str
+    on_surface: surface.Surface
     value: float
 
     def produce_inp_lines(self, action: Action) -> typing.Iterable[str]:
@@ -58,13 +59,13 @@ class PressureLoad(LoadBase):
         yield f"*Dsload{action.load_new_text()}"
 
         if action != Action.remove:
-            yield f"{self.set_name}, P, {base.abaqus_float(self.value)}"
+            yield f"{self.on_surface.name}, P, {base.abaqus_float(self.value)}"
 
 
-def make_test_load_point(set_name) -> ConcentratedLoad:
+def make_test_load_point(node_set: node.NodeSet) -> ConcentratedLoad:
     cload = ConcentratedLoad(
         name="Test Point Load",
-        set_name=set_name,
+        node_set=node_set,
         axis=1,
         value=123.456,
     )
@@ -72,15 +73,16 @@ def make_test_load_point(set_name) -> ConcentratedLoad:
     return cload
 
 
-def make_test_pressure(set_name) -> PressureLoad:
+def make_test_pressure(on_surface: surface.Surface) -> PressureLoad:
     pload = PressureLoad(
         name="Test Pressure Load",
-        set_name=set_name,
+        on_surface=on_surface,
         value=345.678,
     )
     return pload
 
 if __name__ == "__main__":
+
     cload = make_test_load_point("Set123")
     pload = make_test_load_point("Set123")
     for action in Action:

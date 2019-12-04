@@ -20,11 +20,8 @@ class Surface:
         self.name = name
         self.sets_and_faces = sets_and_faces
 
-    #def add_set(self, element_set: element.ElementSet, face: SurfaceFace):
-    #    self.sets_and_faces.append( (element_set, face) )
-
     def produce_inp_lines(self) -> typing.Iterable[str]:
         yield f"*Surface, type=ELEMENT, name={self.name}"
         for elem_set, face in self.sets_and_faces:
-            yield f"{elem_set.get_name(base.SetContext.part)}, {face.name}"
+            yield f"{elem_set.get_name(base.SetContext.assembly)}, {face.name}"
 

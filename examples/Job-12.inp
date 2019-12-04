@@ -134,6 +134,11 @@ B1, 3, -1.
 A2, 1, 1.
 B2, 1, -1.
 *End Assembly
+
+*Amplitude, name=AMP_MAC
+             0.,              0.,              8.,             0.4
+             9.75,             0.8,             10.,            -0.1
+
 ** 
 ** MATERIALS
 ** 
@@ -155,7 +160,7 @@ B2, 1, -1.
 ** LOADS
 ** 
 ** Name: Load-S1-Only   Type: Pressure
-*Dsload
+*Dsload, amplitude=AMP_MAC
 Surf-2, P, 2.34
 ** Name: Load-S1S2   Type: Concentrated force
 *Cload

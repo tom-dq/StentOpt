@@ -177,21 +177,19 @@ def make_test_model() -> AbaqusModel:
     for one_step in all_steps:
         model.add_step(one_step)
 
-    load_point = load.make_test_load_point("LoadSet123")
-    load_dist = load.make_test_pressure("LoadPressure234")
+    # Make a surface
+    one_elem_set = one_instance.base_part.element_sets["OneElem"]
+    surf_data = [ (one_elem_set, surface.SurfaceFace.S2) , ]
+    one_surface = surface.Surface(name="TestSurface", sets_and_faces=surf_data)
+    one_instance.add_surface(one_surface)
 
+
+    # Add the loads
+    some_node_set = one_instance.base_part.get_everything_set(base.SetType.node)
+    load_point = load.make_test_load_point(some_node_set)
+    load_dist = load.make_test_pressure(one_surface)
     model.add_load_starting_from(all_steps[0], load_point)
     model.add_load_specific_steps(all_steps[0:2], load_dist)
-
-    # Make a surface
-    one_elem_set = element.ElementSet(
-        part=one_instance.base_part,
-        name_component="TestSetName",
-        elements=one_instance.base_part.elements.copy(),
-    )
-
-    surf_data = [ (one_elem_set, surface.SurfaceFace.S2) , ]
-    one_surface = surface.Surface(name="TestSurface", surf_data)
 
     return model
 
