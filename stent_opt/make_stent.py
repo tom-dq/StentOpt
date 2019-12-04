@@ -1,4 +1,5 @@
 import itertools
+import math
 import typing
 import collections
 import statistics
@@ -29,9 +30,9 @@ class Index(typing.NamedTuple):
 
 dylan_r10n1_params = StentParams(
     angle=60,
-    divs_radial=6,
-    divs_theta=30,
-    divs_z=250,
+    divs_radial=7,
+    divs_theta=35,
+    divs_z=300,
     r_min=0.65,
     r_max=0.75,
     length=11.0,
@@ -103,7 +104,7 @@ def generate_elements_all(stent_params: StentParams) -> typing.Iterable[typing.T
         ]
 
         yield iElem, element.Element(
-            name="C3D8",
+            name="C3D8R",
             connection=tuple(connection),
         )
 
@@ -158,10 +159,46 @@ def make_a_stent():
 
         return check_elem
 
+    def include_elem_decider_dylan() -> typing.Callable:
+        """Make an include decider something like Dylan's early stent."""
+
+        long_strut_width = 0.2
+        crossbar_width = 0.25
+
+        long_strut_angs = [0.25, 0.75]
+        long_strut_cents = [ratio * basic_stent_params.angle for ratio in long_strut_angs]
+
+        theta_struts_h1 = [0.25* basic_stent_params.length, 0.75 * basic_stent_params.length]
+        theta_struts_h2 = [0.0, 0.5 * basic_stent_params.length, basic_stent_params.length]
+
+        nominal_radius = 0.5 * (basic_stent_params.r_min + basic_stent_params.r_max)
+
+        def check_elem(e: element.Element) -> bool:
+            this_elem_cent = elem_cent_polar(e)
+
+            # Check if on the long struts first
+            long_strut_dist_ang = [abs(this_elem_cent.theta_deg - one_ang) for one_ang in long_strut_cents]
+            linear_distance = math.radians(min(long_strut_dist_ang)) * nominal_radius
+            if linear_distance <= 0.5 * long_strut_width:
+                return True
+
+            # If not, check if on the cross bars.
+            in_first_half = long_strut_cents[0] < this_elem_cent.theta_deg <= long_strut_cents[1]
+            theta_struts = theta_struts_h1 if in_first_half else theta_struts_h2
+
+            theta_strut_dist = [abs(this_elem_cent.z - one_z) for one_z in theta_struts]
+            if min(theta_strut_dist) <= 0.5 * crossbar_width:
+                return True
+
+            return False
+
+        return check_elem
+
+
     for iNode, one_node_polar in nodes_polar.items():
         stent_part.add_node_validated(iNode, one_node_polar.to_xyz())
 
-    should_include_elem = include_elem_decider_cavities()
+    should_include_elem = include_elem_decider_dylan()
 
     for iElem, one_elem in elems_all.items():
         #print(one_elem, elem_cent_polar(one_elem))
@@ -292,7 +329,9 @@ def couple_boundaries(model: main.AbaqusModel):
 
 
 def write_model(model: main.AbaqusModel):
-    with open(r"c:\temp\aba\stent-6.inp", "w") as fOut:
+    fn = r"c:\temp\aba\stent-10.inp"
+    print(fn)
+    with open(fn, "w") as fOut:
         for l in model.produce_inp_lines():
             fOut.write(l + "\n")
 
