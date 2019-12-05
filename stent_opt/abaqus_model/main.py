@@ -5,7 +5,9 @@ from stent_opt.abaqus_model import amplitude, base, step, load, instance, part, 
 
 
 # Todo
-#   - Surfaces for (i.e., inner surface, outer surface)...
+#   - Sym
+#   - Balloon
+
 
 
 class AbaqusModel:

@@ -31,7 +31,7 @@ class Index(typing.NamedTuple):
 dylan_r10n1_params = StentParams(
     angle=60,
     divs_radial=7,
-    divs_theta=35,
+    divs_theta=41,
     divs_z=300,
     r_min=0.65,
     r_max=0.75,
@@ -280,8 +280,8 @@ def apply_loads(model: main.AbaqusModel):
 
     amp_data = (
         amplitude.XY(0.0, 0.0),
-        amplitude.XY(3.25, 0.32),
-        amplitude.XY(3.75, 1),
+        amplitude.XY(3.25, 0.18),
+        amplitude.XY(3.75, 0.2),
         amplitude.XY(4, 0.0),
     )
 
@@ -329,7 +329,7 @@ def couple_boundaries(model: main.AbaqusModel):
 
 
 def write_model(model: main.AbaqusModel):
-    fn = r"c:\temp\aba\stent-10.inp"
+    fn = r"c:\temp\aba\stent-14.inp"
     print(fn)
     with open(fn, "w") as fOut:
         for l in model.produce_inp_lines():
