@@ -52,9 +52,23 @@ SP2 REAL,
 SP3 REAL
 )"""
 
+
+ElementStrain = collections.namedtuple("ElementStrainPEEQ", (
+    "frame_rowid",
+    "elem_num",
+    "PEEQ",
+))
+
+make_element_strain = """CREATE TABLE IF NOT EXISTS ElementStrain(
+frame_rowid REFERENCES Frame(rowid), 
+elem_num INTEGER,
+PEEQ REAL
+)"""
+
 all_types_and_tables = [
     (Frame, make_frame),
     (ElementStress, make_element_stress),
+    (ElementStrain, make_element_strain),
 ]
 
 if __name__ == "__main__":

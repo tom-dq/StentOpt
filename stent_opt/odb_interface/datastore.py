@@ -3,7 +3,8 @@
 import itertools
 import sqlite3
 
-from stent_opt.odb_interface import db_defs
+#from stent_opt.odb_interface import db_defs
+import db_defs
 
 
 class Datastore:
@@ -18,6 +19,13 @@ class Datastore:
         with self.connection:
             for _, make_table in db_defs.all_types_and_tables:
                 self.connection.execute(make_table)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.connection.commit()
+        self.connection.close()
 
     def add_frame_and_results(self, frame, many_results):
         """
