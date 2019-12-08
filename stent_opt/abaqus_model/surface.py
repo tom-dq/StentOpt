@@ -10,6 +10,8 @@ class SurfaceFace(enum.Enum):
     S4 = enum.auto()
     S5 = enum.auto()
     S6 = enum.auto()
+    SPOS = enum.auto()
+    SNEG = enum.auto()
 
 
 class Surface:

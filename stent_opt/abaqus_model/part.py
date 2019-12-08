@@ -95,11 +95,10 @@ class Part:
 
         # Assign the same section to all the elements.
         all_elem_set = self.get_everything_set(base.SetType.element)
-        all_elem_set = all_elem_set.get_name(set_context)
+        all_elem_set_name = all_elem_set.get_name(set_context)
 
-        section_name = f"Section-{all_elem_set}"
-        yield f"** Section: {section_name}"
-        yield f"*Solid Section, elset={all_elem_set}, material={self.common_material.name}"
+        section_name = f"Section-{all_elem_set_name}"
+        yield from self.common_material.produce_inp_lines_section(section_name, all_elem_set_name)
 
 
 def make_part_test() -> Part:

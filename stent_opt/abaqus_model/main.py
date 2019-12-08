@@ -6,8 +6,7 @@ from stent_opt.abaqus_model import amplitude, base, step, load, instance, part, 
 
 # Todo
 #   - Sym
-#   - Balloon
-
+#   - Contact between the balloon and stent
 
 
 class AbaqusModel:
@@ -69,6 +68,13 @@ class AbaqusModel:
 
         return list(self.instances.values())[0]
 
+    def get_only_instance_base_part_name(self, base_part_name: str):
+        relevant_instances = [inst for inst in self.instances.values() if inst.base_part.name == base_part_name]
+
+        if len(relevant_instances) != 1:
+            raise ValueError(f"Expected a single instance, got {len(self.instances)}.")
+
+        return relevant_instances[0]
 
     def produce_inp_lines(self) -> typing.Iterable[str]:
         yield from self._produce_inp_lines_header()
