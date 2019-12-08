@@ -12,7 +12,7 @@ import odbAccess
 fn_odb = r"C:\TEMP\aba\stent-13.odb"
 
 from datastore import Datastore
-from db_defs import Frame, ElementStress
+from db_defs import Frame, ElementStress, ElementPEEQ
 
 # Get the command line option (should be last!).
 db_fn = sys.argv[-1]
@@ -102,10 +102,10 @@ def get_strain_results_PEEQ_one_frame(extraction_meta):
 
     for one_value in stress_field_centroid.values:
         if one_value.elementLabel in extraction_meta.elem_labels:
-            yield ElementStress(
+            yield ElementPEEQ(
                 frame_rowid=None,
                 elem_num=one_value.elementLabel,
-                PEEQ=one_value.data[0],
+                PEEQ=one_value.data,
             )
 
 
@@ -123,8 +123,8 @@ def extract_file_results(fn_odb):
     with Datastore(fn=db_fn) as datastore:
         for frame_db, extraction_meta in walk_file_frames(fn_odb):
             print_in_term(frame_db)
-            stress_results = get_stresses_one_frame(extraction_meta)
-            datastore.add_frame_and_results(frame_db, stress_results)
+            all_results = get_results_one_frame(extraction_meta)
+            datastore.add_frame_and_results(frame_db, all_results)
 
 
 
