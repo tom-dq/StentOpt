@@ -38,9 +38,7 @@ class MaterialElasticPlastic(MaterialBase):
             for point in self.plastic:
                 yield ", ".join( [base.abaqus_float(point.stress), base.abaqus_float(point.strain)] )
 
-    def produce_inp_lines_section(self, section_name, elset_name) -> typing.Iterable[str]:
-        yield f"** Section: {section_name}"
-        yield f"*Solid Section, elset={elset_name}, material={self.name}"
+
 
 
 @dataclasses.dataclass(frozen=True)

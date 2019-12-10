@@ -130,7 +130,7 @@ class AbaqusModel:
     def _produce_inp_lines_material(self) -> typing.Iterable[str]:
         yield from base.inp_heading("MATERIALS")
         for one_part in self.get_parts():
-            yield from one_part.common_material.produce_inp_lines()
+            yield from one_part.common_section.mat.produce_inp_lines()
 
     def _produce_inp_lines_interaction_properties(self) -> typing.Iterable[str]:
         all_int_props = {one_int.int_property for one_int in self.interactions}

@@ -7,7 +7,7 @@ import enum
 
 from stent_opt.abaqus_model import base, amplitude, step, element, part, material
 from stent_opt.abaqus_model import instance, main, surface, load, interaction_property
-from stent_opt.abaqus_model import interaction, node, boundary_condition
+from stent_opt.abaqus_model import interaction, node, boundary_condition, section
 
 
 class GlobalPartNames:
@@ -65,8 +65,8 @@ dylan_r10n1_params = StentParams(
     length=11.0,
     balloon=Balloon(
         inner_radius_ratio=0.8,
-        overshoot_ratio=0.5,
-        foldover_param=0.6,
+        overshoot_ratio=0.2,
+        foldover_param=0.2,
         divs=PolarIndex(
             R=1,
             Th=20,
@@ -104,8 +104,8 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
     typing.Tuple[base.RThZ, typing.Set[GlobalNodeSetNames]]]:
 
     # Theta values fall into one of a few potential segments.
-    RATIO_A = 0.05
-    RATIO_B = 0.2
+    RATIO_A = 0.1
+    RATIO_B = 0.3
     RATIO_HEIGHT = 0.1
 
     # Zero-to-one to radius-ratio
@@ -250,7 +250,7 @@ def make_a_stent():
             material.Point(stress=205., strain=0.0),
             material.Point(stress=515., strain=0.6),
         )
-        common_material = material.MaterialElasticPlastic(
+        steel = material.MaterialElasticPlastic(
             name="Steel",
             density=7.85e-09,
             elast_mod=196000.0,
@@ -258,9 +258,14 @@ def make_a_stent():
             plastic=stress_strain_table,
         )
 
+        common_section = section.SolidSection(
+            name="SolidSteel",
+            mat=steel,
+        )
+
         stent_part = part.Part(
             name=GlobalPartNames.STENT,
-            common_material=common_material,
+            common_section=common_section,
         )
 
         nodes_polar = {
@@ -349,7 +354,7 @@ def make_a_stent():
 
     def make_balloon_part():
         # Material properties are from Dylan's model.
-        material_balloon_base = material.MaterialElasticPlastic(
+        rubber = material.MaterialElasticPlastic(
             name="Rubber",
             density=1.1E-009,
             elast_mod=920.0,
@@ -357,9 +362,15 @@ def make_a_stent():
             plastic=None,
         )
 
+        common_section_balloon = section.MembraneSection(
+            name="RubberMembrane",
+            mat=rubber,
+            thickness=0.02,
+        )
+
         balloon_part = part.Part(
             name=GlobalPartNames.BALLOON,
-            common_material=material_balloon_base,
+            common_section=common_section_balloon,
         )
 
         # Make the nodes and keep track of the leading/trailing edges.
@@ -512,10 +523,18 @@ def apply_boundaries(model: main.AbaqusModel):
     stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
     stent_part = stent_instance.base_part
 
+    # Only generate the equations on the active nodes.
+    uncoupled_nodes_in_part = set()
+    for elem in stent_part.elements.values():
+        uncoupled_nodes_in_part.update(elem.connection)
+
+    if not uncoupled_nodes_in_part:
+        raise ValueError()
+
     def gen_active_pairs():
         nodes_on_bound = {
             iNode: i for iNode, i in generate_node_indices(basic_stent_params.divs)
-            if (i.Th == 0 or i.Th == basic_stent_params.divs.Th-1)
+            if (i.Th == 0 or i.Th == basic_stent_params.divs.Th-1) and iNode in uncoupled_nodes_in_part
         }
 
         pairs = collections.defaultdict(set)
@@ -533,6 +552,22 @@ def apply_boundaries(model: main.AbaqusModel):
 
     for n1, n2 in gen_active_pairs():
         stent_instance.add_node_couple(n1, n2, False)
+        uncoupled_nodes_in_part.remove(n1)
+        uncoupled_nodes_in_part.remove(n2)
+
+    # Fix a single node in Theta and Z to stop rigid body rotation
+    arbitrary_uncoupled_node = min(uncoupled_nodes_in_part)
+    rigid_node_set = node.NodeSet(stent_part, "RigidRest", frozenset( [arbitrary_uncoupled_node] ))
+    stent_part.add_node_set(rigid_node_set)
+    bc_components = (
+        boundary_condition.DispRotBoundComponent(node_set=rigid_node_set, dof=2, value=0.0),
+        boundary_condition.DispRotBoundComponent(node_set=rigid_node_set, dof=3, value=0.0),
+    )
+    rigid_bc = boundary_condition.BoundaryDispRot(
+        name="RigidRestraint",
+        components=bc_components,
+    )
+    model.boundary_conditions.add(rigid_bc)
 
     # Balloon has sym boundaries.
     sym_conds = {
@@ -559,7 +594,7 @@ def apply_boundaries(model: main.AbaqusModel):
 
 
 def write_model(model: main.AbaqusModel):
-    fn = r"c:\temp\aba\stent-20.inp"
+    fn = r"c:\temp\aba\stent-23.inp"
     print(fn)
     with open(fn, "w") as fOut:
         for l in model.produce_inp_lines():

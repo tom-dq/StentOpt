@@ -1,20 +1,20 @@
 import typing
 
-from stent_opt.abaqus_model import node, base, material, element
+from stent_opt.abaqus_model import node, base, material, element, section
 
 
 class Part:
     name: str
-    common_material: material.MaterialBase
+    common_section: section.SectionBase
     nodes: "node.Nodes"
     elements: element.Elements
     node_sets: typing.Dict[str, "node.NodeSet"]
     element_sets: typing.Dict[str, "element.ElementSet"]
     _EVERYTHING_NAME = "Everything"
 
-    def __init__(self, name: str, common_material: material.MaterialBase):
+    def __init__(self, name: str, common_section: section.SectionBase):
         self.name = name
-        self.common_material = common_material
+        self.common_section = common_section
         self.nodes = node.Nodes()
         self.elements = element.Elements()
         self.node_sets = dict()
@@ -97,8 +97,7 @@ class Part:
         all_elem_set = self.get_everything_set(base.SetType.element)
         all_elem_set_name = all_elem_set.get_name(set_context)
 
-        section_name = f"Section-{all_elem_set_name}"
-        yield from self.common_material.produce_inp_lines_section(section_name, all_elem_set_name)
+        yield from self.common_section.produce_inp_lines(all_elem_set)
 
 
 def make_part_test() -> Part:
@@ -110,7 +109,12 @@ def make_part_test() -> Part:
         plastic=None,
     )
 
-    part = Part(name="Part-1", common_material=common_material)
+    common_section = section.SolidSection(
+        name="Solid",
+        mat=common_material
+    )
+
+    part = Part(name="Part-1", common_section=common_section)
     part.add_node_validated(1, base.XYZ(3.4, 3.5, 6.7))
     part.add_node_validated(2, base.XYZ(3.4, 3.6, 6.7))
     part.add_node_validated(3, base.XYZ(3.14, 3.5, 6.7))
