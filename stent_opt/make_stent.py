@@ -3,9 +3,11 @@ import math
 import typing
 import collections
 import statistics
+import enum
 
 from stent_opt.abaqus_model import base, amplitude, step, element, part, material
-from stent_opt.abaqus_model import instance, main, surface, load
+from stent_opt.abaqus_model import instance, main, surface, load, interaction_property
+from stent_opt.abaqus_model import interaction, node, boundary_condition
 
 
 class GlobalPartNames:
@@ -17,7 +19,14 @@ class GlobalSurfNames:
     INNER_SURFACE = "InAll"
     INNER_BOTTOM_HALF = "InLowHalf"
     INNER_MIN_RADIUS = "InMinR"
-    BALLOON = "Balloon"
+    BALLOON_INNER = "BalInner"
+
+
+class GlobalNodeSetNames(enum.Enum):
+    BalloonTheta0 = enum.auto()
+    BalloonThetaMax = enum.auto()
+    BalloonZ0 = enum.auto()
+    BalloonZMax = enum.auto()
 
 
 class PolarIndex(typing.NamedTuple):
@@ -91,7 +100,8 @@ def generate_nodes_stent_polar(stent_params: StentParams) -> typing.Iterable[bas
         yield polar_coord
 
 
-def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[base.RThZ]:
+def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
+    typing.Tuple[base.RThZ, typing.Set[GlobalNodeSetNames]]]:
 
     # Theta values fall into one of a few potential segments.
     RATIO_A = 0.05
@@ -142,8 +152,15 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[b
 
     z_overshoot = 0.5 * stent_params.length * (stent_params.balloon.overshoot_ratio)
     z_vals = _gen_ordinates(stent_params.balloon.divs.Z, -z_overshoot, stent_params.length+z_overshoot)
-    for r_th, z in itertools.product(r_th_points, z_vals):
-        yield r_th._replace(z=z)
+    for (idx_r, r_th), (idx_z, z) in itertools.product(enumerate(r_th_points), enumerate(z_vals)):
+        boundary_set = set()
+        if idx_r == 0: boundary_set.add(GlobalNodeSetNames.BalloonTheta0)
+        if idx_r == len(r_th_points) - 1: boundary_set.add(GlobalNodeSetNames.BalloonThetaMax)
+        if idx_z == 0: boundary_set.add(GlobalNodeSetNames.BalloonZ0)
+        if idx_z == len(z_vals) - 1: boundary_set.add(GlobalNodeSetNames.BalloonZMax)
+
+        this_point = r_th._replace(z=z)
+        yield this_point, boundary_set
 
 
 
@@ -331,14 +348,13 @@ def make_a_stent():
         model.add_instance(one_instance)
 
     def make_balloon_part():
-        # TODO - proper materials
-        material_balloon_base = material.MaterialHyperElasticMembrane(
+        # Material properties are from Dylan's model.
+        material_balloon_base = material.MaterialElasticPlastic(
             name="Rubber",
-            density=1.234,
-            order=2,
-            coeffs=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7),
-            thickness=0.01,
-            elast_possion=0.49,
+            density=1.1E-009,
+            elast_mod=920.0,
+            elast_possion=0.4,
+            plastic=None,
         )
 
         balloon_part = part.Part(
@@ -346,9 +362,17 @@ def make_a_stent():
             common_material=material_balloon_base,
         )
 
-        nodes_polar = {
-            iNode: n_p for iNode, n_p in enumerate(generate_nodes_balloon_polar(stent_params=basic_stent_params), start=1)
-        }
+        # Make the nodes and keep track of the leading/trailing edges.
+        nodes_polar = {}
+        boundary_set_name_to_nodes = collections.defaultdict(set)
+        for iNode, (n_p, boundary_sets) in enumerate(generate_nodes_balloon_polar(stent_params=basic_stent_params), start=1):
+            nodes_polar[iNode] = n_p
+            for boundary_set in boundary_sets:
+                boundary_set_name_to_nodes[boundary_set.name].add(iNode)
+
+        for node_set_name, nodes in boundary_set_name_to_nodes.items():
+            one_node_set = node.NodeSet(balloon_part, node_set_name, frozenset(nodes))
+            balloon_part.add_node_set(one_node_set)
 
         elems_all = {iElem: e for iElem, e in generate_plate_elements_all(divs=basic_stent_params.balloon.divs)}
 
@@ -428,7 +452,7 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
     if stent_params.balloon:
         instance_balloon = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON)
         all_balloon_elems = instance_balloon.base_part.elements.keys()
-        create_elem_surface(instance_balloon, all_balloon_elems, GlobalSurfNames.BALLOON, surface.SurfaceFace.SNEG)
+        create_elem_surface(instance_balloon, all_balloon_elems, GlobalSurfNames.BALLOON_INNER, surface.SurfaceFace.SNEG)
 
 
 def apply_loads(model: main.AbaqusModel):
@@ -451,7 +475,7 @@ def apply_loads(model: main.AbaqusModel):
     )
 
     amp = amplitude.Amplitude("Amp-1", amp_data)
-    surf = model.get_only_instance_base_part_name(GlobalPartNames.STENT).surfaces[GlobalSurfNames.INNER_BOTTOM_HALF]
+    surf = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).surfaces[GlobalSurfNames.BALLOON_INNER]
 
     one_load = load.PressureLoad(
         name="Pressure",
@@ -463,9 +487,28 @@ def apply_loads(model: main.AbaqusModel):
     model.add_load_specific_steps([one_step], one_load)
 
 
-def couple_boundaries(model: main.AbaqusModel):
-    """Find the node pairs and couples them."""
+def add_interaction(model: main.AbaqusModel):
+    """Simple interaction between the balloon and the stent."""
+    if len(model.instances) > 1:
+        int_prop = interaction_property.SurfaceInteraction(
+            name="FrictionlessContact",
+            lateral_friction=0.0,
+        )
 
+        one_int = interaction.Interaction(
+            name="Interaction",
+            int_property=int_prop,
+            interaction_surface_type=interaction.InteractionSurfaces.AllWithSelf,
+            surface_pairs=None,
+        )
+
+        model.interactions.add(one_int)
+
+
+def apply_boundaries(model: main.AbaqusModel):
+    """Find the node pairs and couple them, and apply sym conditions."""
+
+    # Stent has coupled boundaries
     stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
     stent_part = stent_instance.base_part
 
@@ -491,10 +534,32 @@ def couple_boundaries(model: main.AbaqusModel):
     for n1, n2 in gen_active_pairs():
         stent_instance.add_node_couple(n1, n2, False)
 
+    # Balloon has sym boundaries.
+    sym_conds = {
+        GlobalNodeSetNames.BalloonTheta0: boundary_condition.BoundaryType.YSYMM,    # YSYMM fixes DoF 2 (i.e., Theta)
+        GlobalNodeSetNames.BalloonThetaMax: boundary_condition.BoundaryType.YSYMM,
+        GlobalNodeSetNames.BalloonZ0: boundary_condition.BoundaryType.ZSYMM,        # ZSYMM fixes DoF 3 (i.e., Z)
+        GlobalNodeSetNames.BalloonZMax: boundary_condition.BoundaryType.ZSYMM,
+    }
+
+    has_balloon = len(model.instances) > 1
+    if has_balloon:
+        balloon_part = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).base_part
+
+        for sym_name, boundary_type in sym_conds.items():
+            relevant_set = balloon_part.node_sets[sym_name.name]
+            one_bc = boundary_condition.BoundarySymEncastre(
+                name=f"{sym_name} - Sym",
+                boundary_type=boundary_type,
+                node_set=relevant_set,
+            )
+
+            model.boundary_conditions.add(one_bc)
+
 
 
 def write_model(model: main.AbaqusModel):
-    fn = r"c:\temp\aba\stent-18.inp"
+    fn = r"c:\temp\aba\stent-20.inp"
     print(fn)
     with open(fn, "w") as fOut:
         for l in model.produce_inp_lines():
@@ -505,5 +570,6 @@ if __name__ == "__main__":
     model = make_a_stent()
     create_surfaces(basic_stent_params, model)
     apply_loads(model)
-    couple_boundaries(model)
+    add_interaction(model)
+    apply_boundaries(model)
     write_model(model)

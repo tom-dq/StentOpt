@@ -1,12 +1,9 @@
 
 import typing
 
-from stent_opt.abaqus_model import amplitude, base, step, load, instance, part, surface, element, output_requests
-
-
-# Todo
-#   - Sym
-#   - Contact between the balloon and stent
+from stent_opt.abaqus_model import amplitude, base, step, load, instance, part
+from stent_opt.abaqus_model import surface, element, output_requests, interaction
+from stent_opt.abaqus_model import boundary_condition
 
 
 class AbaqusModel:
@@ -14,6 +11,8 @@ class AbaqusModel:
     instances: typing.Dict[str, instance.Instance]
     steps: typing.List[step.StepBase]
     step_loads: typing.Set[typing.Tuple[step.StepBase, load.LoadBase]]
+    interactions: typing.Set[interaction.Interaction]
+    boundary_conditions: typing.Set[boundary_condition.BoundaryBase]
 
     _main_sep_line: str = "** -----------------------------"
 
@@ -22,6 +21,8 @@ class AbaqusModel:
         self.instances = dict()
         self.steps = list()
         self.step_loads = set()
+        self.interactions = set()
+        self.boundary_conditions = set()
 
     def add_instance(self, one_instance: instance.Instance):
         if one_instance.name in self.instances:
@@ -85,6 +86,9 @@ class AbaqusModel:
         yield from self._produce_inp_lines_assembly()
         yield from self._produce_inp_lines_amplitude()
         yield from self._produce_inp_lines_material()
+        yield from self._produce_inp_lines_interaction_properties()
+        yield from self._produce_inp_lines_boundary()
+        yield from self._produce_inp_lines_interactions()
         yield from self._produce_inp_lines_steps()
 
 
@@ -127,6 +131,27 @@ class AbaqusModel:
         yield from base.inp_heading("MATERIALS")
         for one_part in self.get_parts():
             yield from one_part.common_material.produce_inp_lines()
+
+    def _produce_inp_lines_interaction_properties(self) -> typing.Iterable[str]:
+        all_int_props = {one_int.int_property for one_int in self.interactions}
+        if all_int_props:
+            yield from base.inp_heading("INTERACTION PROPERTIES")
+
+            for one_int_prop in sorted(all_int_props):
+                yield from one_int_prop.produce_inp_lines()
+
+    def _produce_inp_lines_boundary(self) -> typing.Iterable[str]:
+        if self.boundary_conditions:
+            yield from base.inp_heading("BOUNDARY CONDITIONS")
+            for one_bc in self.boundary_conditions:
+                yield from one_bc.produce_inp_lines()
+
+    def _produce_inp_lines_interactions(self) -> typing.Iterable[str]:
+        if self.interactions:
+            yield from base.inp_heading("INTERACTIONS")
+
+            for one_int in sorted(self.interactions):
+                yield from one_int.produce_inp_lines()
 
     def _get_sorted_loads(self):
         all_loads = set(one_load for _, one_load in self.step_loads)
