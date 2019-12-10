@@ -3,8 +3,14 @@
 import itertools
 import sqlite3
 
-#from stent_opt.odb_interface import db_defs
-import db_defs
+# Hacky way of making this usable as a standalone Abaqus-Python2 module, or a Python3 subpackage.
+import sys
+
+if sys.version_info[0] == 2:
+    import db_defs
+
+elif sys.version_info[0] == 3:
+    from stent_opt.odb_interface import db_defs
 
 
 class Datastore:
@@ -17,7 +23,7 @@ class Datastore:
         self.connection = sqlite3.connect(fn)
 
         with self.connection:
-            for _, make_table in db_defs.all_types_and_tables:
+            for make_table in db_defs.all_table_defs:
                 self.connection.execute(make_table)
 
     def __enter__(self):
@@ -65,7 +71,7 @@ class Datastore:
 
 
 if __name__ == "__main__":
-    db_fn = r"c:\temp\aba\db-2.db"
+    db_fn = r"c:\temp\aba\db-5.db"
     data_store = Datastore(db_fn)
 
     frame = db_defs.Frame(

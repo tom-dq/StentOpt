@@ -64,9 +64,9 @@ dylan_r10n1_params = StentParams(
     r_max=0.75,
     length=11.0,
     balloon=Balloon(
-        inner_radius_ratio=0.8,
-        overshoot_ratio=0.2,
-        foldover_param=1.0,
+        inner_radius_ratio=0.85,
+        overshoot_ratio=0.05,
+        foldover_param=0.4,
         divs=PolarIndex(
             R=1,
             Th=20,
@@ -104,8 +104,8 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
     typing.Tuple[base.RThZ, typing.Set[GlobalNodeSetNames]]]:
 
     # Theta values fall into one of a few potential segments.
-    RATIO_A = 0.1
-    RATIO_B = 0.3
+    RATIO_A = 0.05
+    RATIO_B = 0.15
     RATIO_HEIGHT = 0.1
 
     # Zero-to-one to radius-ratio
@@ -146,7 +146,10 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
     # The plus one is because the balloon spacing is based on the element, not node indices
     out_by_num_points = (sum(planned_num_points.values()) + 1) - stent_params.balloon.divs.Th
 
-    if abs(out_by_num_points) == 1:
+    if out_by_num_points == 0:
+        pass
+
+    elif abs(out_by_num_points) == 1:
         # Change the middle one
         planned_num_points[2] -= out_by_num_points
 
@@ -156,7 +159,7 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
         planned_num_points[1] -= adjustment
         planned_num_points[2] -= adjustment
 
-    elif abs(out_by_num_points) == 2:
+    elif abs(out_by_num_points) == 3:
         # Change the two either side and the middle
         adjustment = out_by_num_points // 3
         planned_num_points[1] -= adjustment
@@ -509,9 +512,9 @@ def apply_loads(model: main.AbaqusModel):
 
     amp_data = (
         amplitude.XY(0.0, 0.0),
-        amplitude.XY(3.25, 0.18),
-        amplitude.XY(3.75, 0.2),
-        amplitude.XY(4, 0.0),
+        amplitude.XY(3.25, 0.32),
+        amplitude.XY(3.75, 1.0),
+        amplitude.XY(4, -0.01),
     )
 
     amp = amplitude.Amplitude("Amp-1", amp_data)
@@ -623,7 +626,7 @@ def apply_boundaries(model: main.AbaqusModel):
 
 
 def write_model(model: main.AbaqusModel):
-    fn = r"c:\temp\aba\stent-24.inp"
+    fn = r"c:\temp\aba\stent-31.inp"
     print(fn)
     with open(fn, "w") as fOut:
         for l in model.produce_inp_lines():

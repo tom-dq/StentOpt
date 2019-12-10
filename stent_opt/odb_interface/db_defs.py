@@ -31,15 +31,20 @@ simulation_time REAL
 """
 
 
-all_types_and_tables = [
-    (Frame, make_frame),
+all_table_defs = [
+    make_frame
 ]
 
-def _make_nt_and_table_create(table_name, field_names):
+class ResultEntity:
+    node_num = "node_num"
+    elem_num = "elem_num"
+
+
+def _make_nt_and_table_create(table_name, result_entity, field_names):
     """This is a horrible global mutation sideffect-y thing but hopefully I'll
     never have to think about it again."""
 
-    nt_fields = ["frame_rowid", "elem_num"]
+    nt_fields = ["frame_rowid", result_entity]
     nt_fields.extend(field_names)
     NT_type = collections.namedtuple(table_name, nt_fields)
 
@@ -47,19 +52,18 @@ def _make_nt_and_table_create(table_name, field_names):
 
     create_table_string = """CREATE TABLE IF NOT EXISTS {0}(
 frame_rowid REFERENCES Frame(rowid), 
-elem_num INTEGER,
-{1}
-)""".format(table_name, ", \n".join(create_table_fields))
+{1} INTEGER,
+{2}
+)""".format(table_name, result_entity, ", \n".join(create_table_fields))
 
-    all_types_and_tables.append(
-        (NT_type, create_table_string)
-    )
+    all_table_defs.append(create_table_string)
 
-    return NT_type, create_table_string
+    return NT_type
 
 
-ElementStress, make_element_stress = _make_nt_and_table_create("ElementStress", ("SP1", "SP2", "SP3"))
-ElementPEEQ, make_element_peeq = _make_nt_and_table_create("ElementPEEQ", ("PEEQ", ))
+NodePos = _make_nt_and_table_create("NodePos", ResultEntity.node_num, ("X", "Y", "Z"))
+ElementStress = _make_nt_and_table_create("ElementStress", ResultEntity.elem_num, ("SP1", "SP2", "SP3", "von_mises"))
+ElementPEEQ = _make_nt_and_table_create("ElementPEEQ", ResultEntity.elem_num, ("PEEQ", ))
 
 
 
