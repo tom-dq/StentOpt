@@ -66,7 +66,7 @@ dylan_r10n1_params = StentParams(
     balloon=Balloon(
         inner_radius_ratio=0.8,
         overshoot_ratio=0.2,
-        foldover_param=0.2,
+        foldover_param=1.0,
         divs=PolarIndex(
             R=1,
             Th=20,
@@ -135,12 +135,41 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
     nominal_theta_spacing = total_length / stent_params.balloon.divs.Th
 
     r_th_points = []
-    for p1, p2 in segments:
-        this_length = abs(p1.to_xyz()-p2.to_xyz())
-        num_points = round(this_length/nominal_theta_spacing)
 
+    # Might need to adjust some of the numbers of points to match the spacing requirements.
+    planned_num_points = {}
+
+    for idx, (p1, p2) in enumerate(segments):
+        this_length = abs(p1.to_xyz()-p2.to_xyz())
+        planned_num_points[idx] = round(this_length/nominal_theta_spacing)
+
+    # The plus one is because the balloon spacing is based on the element, not node indices
+    out_by_num_points = (sum(planned_num_points.values()) + 1) - stent_params.balloon.divs.Th
+
+    if abs(out_by_num_points) == 1:
+        # Change the middle one
+        planned_num_points[2] -= out_by_num_points
+
+    elif abs(out_by_num_points) == 2:
+        # Change the two either side
+        adjustment = out_by_num_points // 2
+        planned_num_points[1] -= adjustment
+        planned_num_points[2] -= adjustment
+
+    elif abs(out_by_num_points) == 2:
+        # Change the two either side and the middle
+        adjustment = out_by_num_points // 3
+        planned_num_points[1] -= adjustment
+        planned_num_points[2] -= adjustment
+        planned_num_points[3] -= adjustment
+
+    else:
+        raise ValueError(f"Need to adjust {abs(out_by_num_points)} points?")
+
+    for idx, (p1, p2) in enumerate(segments):
         diff = p2-p1
 
+        num_points = planned_num_points[idx]
         for one_int_point in range(num_points):
             r_th_points.append(p1 + (one_int_point/num_points * diff))
 
@@ -594,7 +623,7 @@ def apply_boundaries(model: main.AbaqusModel):
 
 
 def write_model(model: main.AbaqusModel):
-    fn = r"c:\temp\aba\stent-23.inp"
+    fn = r"c:\temp\aba\stent-24.inp"
     print(fn)
     with open(fn, "w") as fOut:
         for l in model.produce_inp_lines():

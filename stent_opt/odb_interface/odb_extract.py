@@ -9,7 +9,7 @@ import collections
 import abaqusConstants
 import odbAccess
 
-fn_odb = r"C:\TEMP\aba\stent-13.odb"
+fn_odb = r"C:\TEMP\aba\stent-23.odb"
 
 from datastore import Datastore
 from db_defs import Frame, ElementStress, ElementPEEQ
