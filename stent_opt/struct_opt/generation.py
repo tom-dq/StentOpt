@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 
 from stent_opt.odb_interface import datastore, db_defs
 from stent_opt.struct_opt import design
+from stent_opt.abaqus_model import base
 
 
 class Tail(enum.Enum):
@@ -24,6 +25,22 @@ class Tail(enum.Enum):
 #   - Stop it disconnecting bits
 
 
+# Zero based node indexes from Figure 28.1.1–1 in the Abaqus manual
+FACES_OF_HEX = (
+    (0, 1, 2, 3),
+    (4, 5, 6, 7),
+    (0, 1, 5, 4),
+    (1, 2, 6, 5),
+    (2, 3, 7, 6),
+    (3, 0, 4, 7),
+)
+
+class PrimaryRankingComponent(typing.NamedTuple):
+    comp_name: str
+    elem_id: int
+    value: float
+
+
 def get_overall_ranking(*lists):
     overall_rank = collections.Counter()
 
@@ -32,6 +49,76 @@ def get_overall_ranking(*lists):
             overall_rank[one_row.elem_num] += idx
 
     return overall_rank
+
+
+def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+    """All the nt_rows should be the same type"""
+
+    nt_rows = list(nt_rows)
+    nt_row = nt_rows[0]
+
+    if isinstance(nt_row, db_defs.ElementPEEQ):
+        for row in nt_rows:
+            yield PrimaryRankingComponent(
+                comp_name=row.__class__.__name__,
+                elem_id=row.elem_num,
+                value=row.PEEQ
+            )
+
+    elif isinstance(nt_row, db_defs.ElementStress):
+        for row in nt_rows:
+            yield PrimaryRankingComponent(
+                comp_name=row.__class__.__name__,
+                elem_id=row.elem_num,
+                value=row.von_mises
+            )
+
+    else:
+        raise ValueError(nt_row)
+
+
+def _angles_of_element(node_to_pos: typing.Dict[design.PolarIndex, base.XYZ], elem_id, elem_connection) -> PrimaryRankingComponent:
+
+    corner_points_numpy = {
+        iNode: numpy.array(node_to_pos[iNode]) for iNode in elem_connection
+    }
+
+    angles_delta = []
+    CORNERS_OF_QUAD = (
+        (0, 1, 2),
+        (1, 2, 3),
+        (2, 3, 0),
+        (3, 0, 1),
+    )
+    for one_face_idx in FACES_OF_HEX:
+        one_face_nodes = [elem_connection[i] for i in one_face_idx]
+
+        for one_corner_idx in CORNERS_OF_QUAD:
+            ia, ib, ic = [one_face_nodes[j] for j in one_corner_idx]
+
+            a = corner_points_numpy[ia]
+            b = corner_points_numpy[ib]
+            c = corner_points_numpy[ic]
+
+            ba = a - b
+            bc = c - b
+
+            cosine_angle = numpy.dot(ba, bc) / (numpy.linalg.norm(ba) * numpy.linalg.norm(bc))
+            angle = numpy.arccos(cosine_angle)
+
+            angle_off_by = abs(angle-numpy.pi/2)
+            angles_delta.append(angle_off_by)
+
+    return PrimaryRankingComponent(
+        comp_name="InternalAngle",
+        elem_id=elem_id,
+        value=max(angles_delta)
+    )
+
+
+
+def get_primary_ranking_element_distortion(nt_rows, old_design: design.StentDesign) -> typing.Iterable[PrimaryRankingComponent]:
+    pass
 
 
 def get_relevant_measure(nt_row):
@@ -216,5 +303,33 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str) -> design.St
     return design.StentDesign(design_space=old_design.design_space, active_elements=frozenset(new_active_elements))
 
 
+
+def make_plot_tests():
+    db_fn = r"C:\TEMP\aba\opt-5\It-000000.db"
+
+    from stent_opt import make_stent
+    from stent_opt.struct_opt import display
+
+    stent_params = make_stent.basic_stent_params
+    old_design = make_stent.make_initial_design(stent_params)
+
+
+    with datastore.Datastore(db_fn) as data:
+        all_frames = list(data.get_all_frames())
+        good_frames = [f for f in all_frames if f.instance_name == "STENT-1"]
+        one_frame = good_frames.pop()
+
+        peeq_rows = list(data.get_all_rows_at_frame(db_defs.ElementPEEQ, one_frame))
+        stress_rows = list(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))
+        pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
+
+    prim_rank_comps = list(get_primary_ranking_components(stress_rows))
+
+    pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in pos_rows}
+    display.render_status(old_design, pos_lookup, prim_rank_comps)
+
+
+
+
 if __name__ == '__main__':
-    make_new_generation(None, r"C:\TEMP\aba\db-9.db")
+    make_plot_tests()

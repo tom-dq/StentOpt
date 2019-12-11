@@ -17,6 +17,16 @@ from stent_opt.abaqus_model import interaction, node, boundary_condition, sectio
 from stent_opt.struct_opt.design import PolarIndex, StentDesign, node_from_index, generate_node_indices, generate_elem_indices, get_c3d8_connection
 from stent_opt.struct_opt.generation import make_new_generation
 
+working_dir_orig = os.getcwd()
+working_dir_extract = os.path.join(working_dir_orig, "odb_interface")
+
+# This seems to be required to get
+try:
+    os.environ.pop('PYTHONIOENCODING')
+except KeyError:
+    pass
+
+
 class GlobalPartNames:
     STENT = "Stent"
     BALLOON = "Balloon"
@@ -628,7 +638,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=12', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', 'cpus=2', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -654,18 +664,16 @@ def run_model(inp_fn):
 
 def perform_extraction(odb_fn, out_db_fn):
     old_working_dir = os.getcwd()
-    os.chdir(r"D:\Tom Wilson\Documents\PhD-Code\StentOpt\stent_opt\odb_interface")
+    os.chdir(working_dir_extract)
     args = ["abaqus.bat", "cae", "noGui=odb_extract.py", "--", str(odb_fn), str(out_db_fn)]
 
-    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(args)
     ret_code = proc.wait()
-
-    os.chdir(old_working_dir)
-
+    print(ret_code)
 
 
 def do_opt():
-    working_dir = pathlib.Path(r"C:\Temp\aba\opt-3")
+    working_dir = pathlib.Path(r"C:\Temp\aba\opt-5")
 
     done = False
     for i in range(10):
