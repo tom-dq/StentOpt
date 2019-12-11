@@ -21,6 +21,7 @@ class Tail(enum.Enum):
 #   - Try the Jacobian or somesuch to get the deformation in an element.
 #   - Rolling window of "rigid body removed deformation" to favour hinges.
 #   - Be able to plot objective functions...
+#   - Stop it disconnecting bits
 
 
 def get_overall_ranking(*lists):
