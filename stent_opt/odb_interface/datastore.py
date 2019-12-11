@@ -23,7 +23,7 @@ class Datastore:
         self.connection = sqlite3.connect(fn)
 
         with self.connection:
-            for make_table in db_defs.all_table_defs:
+            for _, make_table in db_defs.all_nt_and_table_defs:
                 self.connection.execute(make_table)
 
     def __enter__(self):
@@ -64,7 +64,18 @@ class Datastore:
         return self._generate_insert_string_nt_class(named_tuple_instance.__class__)
 
 
+    def get_all_frames(self):
+        with self.connection:
+            rows = self.connection.execute("SELECT * FROM Frame")
+            for row in rows:
+                yield db_defs.Frame(*row)
 
+    def get_all_rows_at_frame(self, named_tuple_class, frame):
+        with self.connection:
+            select_string = "SELECT * FROM {0} WHERE frame_rowid=?".format(named_tuple_class.__name__)
+            rows = self.connection.execute(select_string, (frame.rowid, ))
+            for row in rows:
+                yield named_tuple_class(*row)
 
 
 

@@ -10,7 +10,7 @@ import collections
 Frame = collections.namedtuple("Frame", (
     "rowid",
     "fn_odb",
-    "part_name",
+    "instance_name",
     "step_num",
     "step_name",
     "frame_id",
@@ -21,7 +21,7 @@ Frame = collections.namedtuple("Frame", (
 make_frame = """CREATE TABLE IF NOT EXISTS Frame(
 rowid INTEGER PRIMARY KEY,
 fn_odb TEXT,
-part_name TEXT,
+instance_name TEXT,
 step_num INTEGER,
 step_name TEXT,
 frame_id INTEGER,
@@ -31,8 +31,8 @@ simulation_time REAL
 """
 
 
-all_table_defs = [
-    make_frame
+all_nt_and_table_defs = [
+    (Frame, make_frame)
 ]
 
 class ResultEntity:
@@ -56,7 +56,7 @@ frame_rowid REFERENCES Frame(rowid),
 {2}
 )""".format(table_name, result_entity, ", \n".join(create_table_fields))
 
-    all_table_defs.append(create_table_string)
+    all_nt_and_table_defs.append( (NT_type, create_table_string) )
 
     return NT_type
 

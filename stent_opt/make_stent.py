@@ -1,14 +1,21 @@
 import itertools
 import math
+import os
+import pathlib
+import subprocess
 import typing
 import collections
 import statistics
 import enum
 
+import psutil
+
 from stent_opt.abaqus_model import base, amplitude, step, element, part, material
 from stent_opt.abaqus_model import instance, main, surface, load, interaction_property
 from stent_opt.abaqus_model import interaction, node, boundary_condition, section
 
+from stent_opt.struct_opt.design import PolarIndex, StentDesign, node_from_index, generate_node_indices, generate_elem_indices, get_c3d8_connection
+from stent_opt.struct_opt.generation import make_new_generation
 
 class GlobalPartNames:
     STENT = "Stent"
@@ -27,12 +34,6 @@ class GlobalNodeSetNames(enum.Enum):
     BalloonThetaMax = enum.auto()
     BalloonZ0 = enum.auto()
     BalloonZMax = enum.auto()
-
-
-class PolarIndex(typing.NamedTuple):
-    R: int
-    Th: int
-    Z: int
 
 
 class Balloon(typing.NamedTuple):
@@ -57,8 +58,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=3,
-        Th=21,
-        Z=100,
+        Th=31,
+        Z=150,
     ),
     r_min=0.65,
     r_max=0.75,
@@ -75,7 +76,7 @@ dylan_r10n1_params = StentParams(
     ),
 )
 
-basic_stent_params = dylan_r10n1_params
+basic_stent_params = dylan_r10n1_params._replace(balloon=None)
 
 def _pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2, s3), ..."
@@ -195,59 +196,11 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
         yield this_point, boundary_set
 
 
-
-def _stent_params_node_to_elem_idx(divs: PolarIndex) -> PolarIndex:
-    return divs._replace(
-        R=divs.R - 1,
-        Th=divs.Th - 1,
-        Z=divs.Z - 1)
-
-def node_from_index(divs: PolarIndex, iR, iTh, iZ):
-    """Node numbers (fully populated)"""
-    return (iR * (divs.Th * divs.Z) +
-            iTh * divs.Z +
-            iZ +
-            1)  # One based node numbers!
-
-def elem_from_index(stent_params: StentParams, iR, iTh, iZ):
-    """Element numbers (fully populated) - just one fewer number in each ordinate."""
-    divs_minus_one = _stent_params_node_to_elem_idx(stent_params.divs)
-    return node_from_index(divs_minus_one, iR, iTh, iZ)
-
-
-def generate_node_indices(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int, PolarIndex]]:
-    for iNode, (iR, iTh, iZ) in enumerate(itertools.product(
-            range(divs.R),
-            range(divs.Th),
-            range(divs.Z)), start=1):
-
-        yield iNode, PolarIndex(R=iR, Th=iTh, Z=iZ)
-
-def generate_elem_indices(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int, PolarIndex]]:
-    divs_minus_one = _stent_params_node_to_elem_idx(divs)
-    yield from generate_node_indices(divs_minus_one)
-
-
-def generate_brick_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int, element.Element]]:
-
-    def get_iNode(iR, iTh, iZ):
-        return node_from_index(divs, iR, iTh, iZ)
-
-    for iElem, i in generate_elem_indices(divs):
-        connection = [
-            get_iNode(i.R, i.Th, i.Z),
-            get_iNode(i.R, i.Th+1, i.Z),
-            get_iNode(i.R, i.Th+1, i.Z+1),
-            get_iNode(i.R, i.Th, i.Z+1),
-            get_iNode(i.R+1, i.Th, i.Z),
-            get_iNode(i.R+1, i.Th+1, i.Z),
-            get_iNode(i.R+1, i.Th+1, i.Z+1),
-            get_iNode(i.R+1, i.Th, i.Z+1),
-        ]
-
-        yield iElem, element.Element(
+def generate_brick_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
+    for iElem, one_elem_idx in generate_elem_indices(divs):
+        yield one_elem_idx, iElem, element.Element(
             name="C3D8R",
-            connection=tuple(connection),
+            connection=get_c3d8_connection(divs, one_elem_idx),
         )
 
 def generate_plate_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int, element.Element]]:
@@ -273,7 +226,7 @@ def generate_plate_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tupl
             connection=tuple(connection),
         )
 
-def make_a_stent():
+def make_a_stent(stent_params: StentParams, stent_design: StentDesign):
     model = main.AbaqusModel("StentModel")
 
     def make_stent_part():
@@ -301,86 +254,17 @@ def make_a_stent():
         )
 
         nodes_polar = {
-            iNode: n_p for iNode, n_p in enumerate(generate_nodes_stent_polar(stent_params=basic_stent_params), start=1)
+            iNode: n_p for iNode, n_p in enumerate(generate_nodes_stent_polar(stent_params=stent_params), start=1)
         }
-
-        elems_all = {iElem: e for iElem, e in generate_brick_elements_all(divs=basic_stent_params.divs)}
-
-        def elem_cent_polar(e: element.Element) -> base.RThZ:
-            node_pos = [nodes_polar[iNode] for iNode in e.connection]
-            ave_node_pos = sum(node_pos) / len(node_pos)
-            return ave_node_pos
-
-        def include_elem_decider_cavities() -> typing.Callable:
-            """As a first test, make some cavities in the segment."""
-
-            rs = [0.5 * (basic_stent_params.r_min + basic_stent_params.r_max),]
-            thetas = [0.0, basic_stent_params.angle]
-            z_vals = [0, 0.5*basic_stent_params.length, basic_stent_params.length]
-
-            cavities = []
-            for r, th, z in itertools.product(rs, thetas, z_vals):
-                cavities.append( (base.RThZ(r=r, theta_deg=th, z=z).to_xyz(), 0.25))
-
-            def check_elem(e: element.Element) -> bool:
-                for cent, max_dist in cavities:
-                    this_elem_cent = elem_cent_polar(e)
-                    dist = abs(cent - this_elem_cent.to_xyz())
-                    if dist < max_dist:
-                        return False
-
-                return True
-
-            return check_elem
-
-        def include_elem_decider_dylan() -> typing.Callable:
-            """Make an include decider something like Dylan's early stent."""
-
-            long_strut_width = 0.2
-            crossbar_width = 0.25
-
-            long_strut_angs = [0.25, 0.75]
-            long_strut_cents = [ratio * basic_stent_params.angle for ratio in long_strut_angs]
-
-            theta_struts_h1 = [0.25* basic_stent_params.length, 0.75 * basic_stent_params.length]
-            theta_struts_h2 = [0.0, 0.5 * basic_stent_params.length, basic_stent_params.length]
-
-            nominal_radius = 0.5 * (basic_stent_params.r_min + basic_stent_params.r_max)
-
-            def check_elem(e: element.Element) -> bool:
-                this_elem_cent = elem_cent_polar(e)
-
-                # Check if on the long struts first
-                long_strut_dist_ang = [abs(this_elem_cent.theta_deg - one_ang) for one_ang in long_strut_cents]
-                linear_distance = math.radians(min(long_strut_dist_ang)) * nominal_radius
-                if linear_distance <= 0.5 * long_strut_width:
-                    return True
-
-                # If not, check if on the cross bars.
-                in_first_half = long_strut_cents[0] < this_elem_cent.theta_deg <= long_strut_cents[1]
-                theta_struts = theta_struts_h1 if in_first_half else theta_struts_h2
-
-                theta_strut_dist = [abs(this_elem_cent.z - one_z) for one_z in theta_struts]
-                if min(theta_strut_dist) <= 0.5 * crossbar_width:
-                    return True
-
-                return False
-
-            return check_elem
-
 
         for iNode, one_node_polar in nodes_polar.items():
             stent_part.add_node_validated(iNode, one_node_polar.to_xyz())
 
-        should_include_elem = include_elem_decider_dylan()
-
-        for iElem, one_elem in elems_all.items():
-            #print(one_elem, elem_cent_polar(one_elem))
-            if should_include_elem(one_elem):
+        for idx, iElem, one_elem in generate_brick_elements_all(divs=stent_params.divs):
+            if idx in stent_design.active_elements:
                 stent_part.add_element_validate(iElem, one_elem)
 
         one_instance = instance.Instance(base_part=stent_part)
-
 
         model.add_instance(one_instance)
 
@@ -408,7 +292,7 @@ def make_a_stent():
         # Make the nodes and keep track of the leading/trailing edges.
         nodes_polar = {}
         boundary_set_name_to_nodes = collections.defaultdict(set)
-        for iNode, (n_p, boundary_sets) in enumerate(generate_nodes_balloon_polar(stent_params=basic_stent_params), start=1):
+        for iNode, (n_p, boundary_sets) in enumerate(generate_nodes_balloon_polar(stent_params=stent_params), start=1):
             nodes_polar[iNode] = n_p
             for boundary_set in boundary_sets:
                 boundary_set_name_to_nodes[boundary_set.name].add(iNode)
@@ -417,7 +301,7 @@ def make_a_stent():
             one_node_set = node.NodeSet(balloon_part, node_set_name, frozenset(nodes))
             balloon_part.add_node_set(one_node_set)
 
-        elems_all = {iElem: e for iElem, e in generate_plate_elements_all(divs=basic_stent_params.balloon.divs)}
+        elems_all = {iElem: e for iElem, e in generate_plate_elements_all(divs=stent_params.balloon.divs)}
 
         for iNode, one_node_polar in nodes_polar.items():
             balloon_part.add_node_validated(iNode, one_node_polar.to_xyz())
@@ -430,7 +314,7 @@ def make_a_stent():
 
     make_stent_part()
 
-    if basic_stent_params.balloon:
+    if stent_params.balloon:
         make_balloon_part()
 
     return model
@@ -442,7 +326,7 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
     stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
     stent_part = stent_instance.base_part
 
-    elem_indexes_all = {iElem: i for iElem, i in generate_elem_indices(divs=basic_stent_params.divs)}
+    elem_indexes_all = {iElem: i for iElem, i in generate_elem_indices(divs=stent_params.divs)}
     elem_indexes = {iElem: i for iElem, i in elem_indexes_all.items() if iElem in stent_part.elements}
 
     def create_elem_surface(one_instance: instance.Instance, elem_nums, name, one_surf: surface.SurfaceFace):
@@ -498,12 +382,22 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
         create_elem_surface(instance_balloon, all_balloon_elems, GlobalSurfNames.BALLOON_INNER, surface.SurfaceFace.SNEG)
 
 
-def apply_loads(model: main.AbaqusModel):
+def apply_loads(stent_params: StentParams, model: main.AbaqusModel):
     # Some nominal amplitude from Dylan's model.
+
+    if stent_params.balloon:
+        max_pressure = 2.0
+        total_time = 5.0
+        surf = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).surfaces[GlobalSurfNames.BALLOON_INNER]
+
+    else:
+        max_pressure = 0.2
+        total_time = 1.5
+        surf = model.get_only_instance_base_part_name(GlobalPartNames.STENT).surfaces[GlobalSurfNames.INNER_BOTTOM_HALF]
 
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
-        final_time=4.0,
+        final_time=total_time,
         bulk_visc_b1=0.06,
         bulk_visc_b2=1.2,
     )
@@ -512,13 +406,13 @@ def apply_loads(model: main.AbaqusModel):
 
     amp_data = (
         amplitude.XY(0.0, 0.0),
-        amplitude.XY(3.25, 0.32),
-        amplitude.XY(3.75, 1.0),
-        amplitude.XY(4, -0.01),
+        amplitude.XY(0.65*total_time, 0.16*max_pressure),
+        amplitude.XY(0.75*total_time, 0.5*max_pressure),
+        amplitude.XY(0.9*total_time, max_pressure),
+        amplitude.XY(total_time, 0.05*max_pressure),
     )
 
     amp = amplitude.Amplitude("Amp-1", amp_data)
-    surf = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).surfaces[GlobalSurfNames.BALLOON_INNER]
 
     one_load = load.PressureLoad(
         name="Pressure",
@@ -548,7 +442,7 @@ def add_interaction(model: main.AbaqusModel):
         model.interactions.add(one_int)
 
 
-def apply_boundaries(model: main.AbaqusModel):
+def apply_boundaries(stent_params: StentParams, model: main.AbaqusModel):
     """Find the node pairs and couple them, and apply sym conditions."""
 
     # Stent has coupled boundaries
@@ -565,8 +459,8 @@ def apply_boundaries(model: main.AbaqusModel):
 
     def gen_active_pairs():
         nodes_on_bound = {
-            iNode: i for iNode, i in generate_node_indices(basic_stent_params.divs)
-            if (i.Th == 0 or i.Th == basic_stent_params.divs.Th-1) and iNode in uncoupled_nodes_in_part
+            iNode: i for iNode, i in generate_node_indices(stent_params.divs)
+            if (i.Th == 0 or i.Th == stent_params.divs.Th-1) and iNode in uncoupled_nodes_in_part
         }
 
         pairs = collections.defaultdict(set)
@@ -576,11 +470,16 @@ def apply_boundaries(model: main.AbaqusModel):
             pairs[key].add(iNode)
 
         for pair_of_nodes in pairs.values():
-            if len(pair_of_nodes) != 2:
+            if len(pair_of_nodes) == 1:
+                pass  # Only have elements on one side.
+
+            elif len(pair_of_nodes) == 2:
+                if all(iNode in stent_part.nodes for iNode in pair_of_nodes):
+                    yield tuple(pair_of_nodes)
+
+            else:
                 raise ValueError(pair_of_nodes)
 
-            if all(iNode in stent_part.nodes for iNode in pair_of_nodes):
-                yield tuple(pair_of_nodes)
 
     for n1, n2 in gen_active_pairs():
         stent_instance.add_node_couple(n1, n2, False)
@@ -625,18 +524,179 @@ def apply_boundaries(model: main.AbaqusModel):
 
 
 
-def write_model(model: main.AbaqusModel):
-    fn = r"c:\temp\aba\stent-31.inp"
-    print(fn)
-    with open(fn, "w") as fOut:
+def write_model(model: main.AbaqusModel, fn_inp):
+    print(fn_inp)
+    with open(fn_inp, "w") as fOut:
         for l in model.produce_inp_lines():
             fOut.write(l + "\n")
 
 
-if __name__ == "__main__":
-    model = make_a_stent()
-    create_surfaces(basic_stent_params, model)
-    apply_loads(model)
+
+def ___include_elem_decider_cavities() -> typing.Callable:
+    """As a first test, make some cavities in the segment."""
+
+    rs = [0.5 * (basic_stent_params.r_min + basic_stent_params.r_max), ]
+    thetas = [0.0, basic_stent_params.angle]
+    z_vals = [0, 0.5 * basic_stent_params.length, basic_stent_params.length]
+
+    cavities = []
+    for r, th, z in itertools.product(rs, thetas, z_vals):
+        cavities.append((base.RThZ(r=r, theta_deg=th, z=z).to_xyz(), 0.25))
+
+    def check_elem(e: element.Element) -> bool:
+        for cent, max_dist in cavities:
+            this_elem_cent = elem_cent_polar(e)
+            dist = abs(cent - this_elem_cent.to_xyz())
+            if dist < max_dist:
+                return False
+
+        return True
+
+    return check_elem
+
+
+def make_initial_design(stent_params: StentParams) -> StentDesign:
+    """Makes in initial design (where elements are to be located) based on one of Dylan's early stents."""
+    long_strut_width = 0.2
+    crossbar_width = 0.25
+
+    long_strut_angs = [0.25, 0.75]
+    long_strut_cents = [ratio * stent_params.angle for ratio in long_strut_angs]
+
+    theta_struts_h1 = [0.25* stent_params.length, 0.75 * stent_params.length]
+    theta_struts_h2 = [0.0, 0.5 * stent_params.length, stent_params.length]
+
+    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
+
+    nodes_polar = {
+        iNode: n_p for iNode, n_p in enumerate(generate_nodes_stent_polar(stent_params=stent_params), start=1)
+    }
+
+
+    def elem_cent_polar(e: element.Element) -> base.RThZ:
+        node_pos = [nodes_polar[iNode] for iNode in e.connection]
+        ave_node_pos = sum(node_pos) / len(node_pos)
+        return ave_node_pos
+
+
+    def check_elem(e: element.Element) -> bool:
+        this_elem_cent = elem_cent_polar(e)
+
+        # Check if on the long struts first
+        long_strut_dist_ang = [abs(this_elem_cent.theta_deg - one_ang) for one_ang in long_strut_cents]
+        linear_distance = math.radians(min(long_strut_dist_ang)) * nominal_radius
+        if linear_distance <= 0.5 * long_strut_width:
+            return True
+
+        # If not, check if on the cross bars.
+        in_first_half = long_strut_cents[0] < this_elem_cent.theta_deg <= long_strut_cents[1]
+        theta_struts = theta_struts_h1 if in_first_half else theta_struts_h2
+
+        theta_strut_dist = [abs(this_elem_cent.z - one_z) for one_z in theta_struts]
+        if min(theta_strut_dist) <= 0.5 * crossbar_width:
+            return True
+
+        return False
+
+    included_elements = (idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs) if check_elem(e))
+    return StentDesign(
+        design_space=stent_params.divs,
+        active_elements=frozenset(included_elements)
+    )
+
+
+def make_stent_model(stent_params: StentParams, stent_design: StentDesign, fn_inp: str):
+    model = make_a_stent(stent_params, stent_design)
+    create_surfaces(stent_params, model)
+    apply_loads(stent_params, model)
     add_interaction(model)
-    apply_boundaries(model)
-    write_model(model)
+    apply_boundaries(stent_params, model)
+    write_model(model, fn_inp)
+
+
+def kill_process_id(proc_id: int):
+    process = psutil.Process(proc_id)
+    for proc in process.children(recursive=True):
+        proc.kill()
+
+    process.kill()
+
+def run_model(inp_fn):
+    old_working_dir = os.getcwd()
+
+
+    path, fn = os.path.split(inp_fn)
+    fn_solo = os.path.splitext(fn)[0]
+    #print(multiprocessing.current_process().name, fn_solo)
+    args = ['abaqus.bat', 'cpus=12', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+
+    os.chdir(path)
+
+    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    TIMEOUT = 3600 * 24  # 1 day
+
+    try:
+        ret_code = proc.wait(timeout=TIMEOUT)
+
+    except subprocess.TimeoutExpired:
+        ret_code = 'TimeoutExpired on {0}'.format(args)
+
+        try:
+            kill_process_id(proc.pid)
+
+        except psutil.NoSuchProcess:
+            # No problem if it's already gone in the meantime...
+            pass
+
+    os.chdir(old_working_dir)
+
+
+def perform_extraction(odb_fn, out_db_fn):
+    old_working_dir = os.getcwd()
+    os.chdir(r"D:\Tom Wilson\Documents\PhD-Code\StentOpt\stent_opt\odb_interface")
+    args = ["abaqus.bat", "cae", "noGui=odb_extract.py", "--", str(odb_fn), str(out_db_fn)]
+
+    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ret_code = proc.wait()
+
+    os.chdir(old_working_dir)
+
+
+
+def do_opt():
+    working_dir = pathlib.Path(r"C:\Temp\aba\opt-3")
+
+    done = False
+    for i in range(10):
+        inp_fn = working_dir / f'It-{str(i).rjust(6, "0")}.inp'
+        odb_fn = inp_fn.with_suffix(".odb")
+
+        if i == 0:
+            design = make_initial_design(basic_stent_params)
+
+        else:
+            design = make_new_generation(old_design, db_fn)
+
+            num_new = len(design.active_elements - old_design.active_elements)
+            num_removed = len(old_design.active_elements - design.active_elements)
+            print(f"Added: {num_new}\tRemoved: {num_removed}.")
+            if design == old_design:
+                done = True
+
+        make_stent_model(basic_stent_params, design, inp_fn)
+        run_model(inp_fn)
+        db_fn = inp_fn.with_suffix(".db")
+        perform_extraction(odb_fn, db_fn)
+
+
+        old_design = design
+
+        if done:
+            break
+
+
+
+if __name__ == "__main__":
+    do_opt()
+

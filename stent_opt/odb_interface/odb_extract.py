@@ -4,14 +4,18 @@
 
 # Rule of thumb - make everything a double!
 
+SAVE_IMAGES = True
+
 import sys
 import collections
 
 import abaqusConstants
 import odbAccess
 
-fn_odb = r"C:\TEMP\aba\stent-31.odb"
-db_fn = r"C:\TEMP\aba\db-5.db"
+if SAVE_IMAGES:
+    import abaqus
+
+
 
 LAST_FRAME_OF_STEP = True
 
@@ -19,13 +23,19 @@ from datastore import Datastore
 from db_defs import Frame, NodePos, ElementStress, ElementPEEQ
 
 # Get the command line option (should be last!).
-# db_fn = sys.argv[-1]
+fn_odb = sys.argv[-2]
+db_fn = sys.argv[-1]
+
+
+#fn_odb = r"C:\TEMP\aba\stent-36.odb"
+#db_fn = r"C:\TEMP\aba\db-9.db"
 
 ExtractionMeta = collections.namedtuple("ExtractionMeta", (
     "frame",
     "node_labels",
     "elem_labels",
     "node_init_pos",
+    "odb_instance",
 ))
 
 def print_in_term(x):
@@ -64,16 +74,13 @@ def walk_file_frames(fn_odb):
     :return type: Iterable[Frame, ExtractionMeta]
     """
     this_odb = odbAccess.openOdb(fn_odb)
-    print_in_term(this_odb)
 
     for one_instance_name, instance in this_odb.rootAssembly.instances.items():
-        print_in_term(one_instance_name)
         this_part_elem_labels = frozenset(elem.label for elem in instance.elements)
         this_part_node_labels = _get_nodes_on_elements(instance.elements)
         this_part_node_initial_pos = _get_node_initial_pos(instance)
         previous_step_time = 0.0
         for step_num, (step_name, one_step) in enumerate(this_odb.steps.items()):
-            print_in_term(step_name)
 
             last_frame_id_of_step = len(one_step.frames) - 1
 
@@ -84,7 +91,7 @@ def walk_file_frames(fn_odb):
                         Frame(
                             rowid=None,
                             fn_odb=fn_odb,
-                            part_name=one_instance_name,
+                            instance_name=one_instance_name,
                             step_num=step_num,
                             step_name=step_name,
                             frame_id=frame_id,
@@ -96,59 +103,76 @@ def walk_file_frames(fn_odb):
                             node_labels=this_part_node_labels,
                             elem_labels=this_part_elem_labels,
                             node_init_pos=this_part_node_initial_pos,
+                            odb_instance=instance,
                         )
                     )
 
                 if frame_id == last_frame_id_of_step:
                     previous_step_time += frame.frameValue
 
+                    if SAVE_IMAGES:
+                        # Print to file?
+                        fn = r"c:\temp\aba\Mod-{0}-{1}-{2}.png".format(one_instance_name, step_name, frame_id)
+                        abaqus.session.printOptions.setValues(vpBackground=True)
+                        abaqus.session.printToFile(fn, format=abaqusConstants.PNG)
 
     this_odb.close()
 
 
 def get_stresses_one_frame(extraction_meta):
-    frame = extraction_meta.frame
-    stress_field_integration_points = frame.fieldOutputs['S']
-    stress_field_centroid = stress_field_integration_points.getSubset(position=abaqusConstants.CENTROID)
+    relevant_stress_field = (
+        extraction_meta
+            .frame
+            .fieldOutputs['S']
+            .getSubset(position=abaqusConstants.CENTROID)
+            .getSubset(region=extraction_meta.odb_instance)
+    )
 
-    for one_value in stress_field_centroid.values:
-        if one_value.elementLabel in extraction_meta.elem_labels:
-            yield ElementStress(
-                frame_rowid=None,
-                elem_num=one_value.elementLabel,
-                SP1=one_value.minPrincipal,
-                SP2=one_value.midPrincipal,
-                SP3=one_value.maxPrincipal,
-                von_mises=one_value.mises,
-            )
+    for one_value in relevant_stress_field.values:
+        yield ElementStress(
+            frame_rowid=None,
+            elem_num=one_value.elementLabel,
+            SP1=one_value.minPrincipal,
+            SP2=one_value.midPrincipal,
+            SP3=one_value.maxPrincipal,
+            von_mises=one_value.mises,
+        )
 
 
 def get_strain_results_PEEQ_one_frame(extraction_meta):
-    frame = extraction_meta.frame
-    stress_field_integration_points = frame.fieldOutputs['PEEQ']
-    stress_field_centroid = stress_field_integration_points.getSubset(position=abaqusConstants.CENTROID)
+    relevant_peeq_field = (
+        extraction_meta
+            .frame
+            .fieldOutputs['PEEQ']
+            .getSubset(position=abaqusConstants.CENTROID)
+            .getSubset(region=extraction_meta.odb_instance)
+    )
 
-    for one_value in stress_field_centroid.values:
-        if one_value.elementLabel in extraction_meta.elem_labels:
-            yield ElementPEEQ(
-                frame_rowid=None,
-                elem_num=one_value.elementLabel,
-                PEEQ=one_value.data,
-            )
+    for one_value in relevant_peeq_field.values:
+        yield ElementPEEQ(
+            frame_rowid=None,
+            elem_num=one_value.elementLabel,
+            PEEQ=one_value.data,
+        )
 
 
 def get_node_position_one_frame(extraction_meta):
-    disp_field = extraction_meta.frame.fieldOutputs['U']
-    for one_value in disp_field.values:
-        if one_value.nodeLabel in extraction_meta.node_labels:
-            overall_pos = _get_data_array_as_double(one_value) + extraction_meta.node_init_pos[one_value.nodeLabel]
-            yield NodePos(
-                frame_rowid=None,
-                node_num=one_value.nodeLabel,
-                X=overall_pos[0],
-                Y=overall_pos[1],
-                Z=overall_pos[2]
-            )
+    relevant_disp_field = (
+        extraction_meta
+            .frame
+            .fieldOutputs['U']
+            .getSubset(region=extraction_meta.odb_instance)
+    )
+
+    for one_value in relevant_disp_field.values:
+        overall_pos = _get_data_array_as_double(one_value) + extraction_meta.node_init_pos[one_value.nodeLabel]
+        yield NodePos(
+            frame_rowid=None,
+            node_num=one_value.nodeLabel,
+            X=overall_pos[0],
+            Y=overall_pos[1],
+            Z=overall_pos[2]
+        )
 
 
 def get_results_one_frame(extraction_meta):
