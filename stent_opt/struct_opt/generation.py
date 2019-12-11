@@ -17,6 +17,12 @@ class Tail(enum.Enum):
     top = enum.auto()
 
 
+# TODO - hinge behaviour
+#   - Try the Jacobian or somesuch to get the deformation in an element.
+#   - Rolling window of "rigid body removed deformation" to favour hinges.
+#   - Be able to plot objective functions...
+
+
 def get_overall_ranking(*lists):
     overall_rank = collections.Counter()
 
