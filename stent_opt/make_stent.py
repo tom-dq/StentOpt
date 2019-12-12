@@ -872,7 +872,7 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt():
-    working_dir = pathlib.Path(r"C:\Temp\aba\opt-23")
+    working_dir = pathlib.Path(r"C:\Temp\aba\opt-25")
 
     os.makedirs(working_dir, exist_ok=False)
 

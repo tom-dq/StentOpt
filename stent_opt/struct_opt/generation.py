@@ -333,8 +333,11 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str, title_if_plo
     all_ranks.append(sec_rank)
 
     if MAKE_PLOTS:
-        for one_rank in all_ranks:
-            display.render_status(old_design, pos_lookup, one_rank, title_if_plotting)
+        stress_rank = list(get_primary_ranking_components(stress_rows))
+        for plot_rank in [stress_rank, sec_rank]:
+            display.render_status(old_design, pos_lookup, plot_rank, title_if_plotting)
+        #for one_rank in all_ranks:
+        #    display.render_status(old_design, pos_lookup, one_rank, title_if_plotting)
 
 
     overall_rank = {one.elem_id: one.value for one in sec_rank}
@@ -345,7 +348,7 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str, title_if_plo
     unsmoothed = {elem_num_to_indices[iElem]: val for iElem, val in overall_rank.items()}
     smoothed = gaussian_smooth(old_design.design_space, unsmoothed)
 
-    if MAKE_PLOTS:
+    if MAKE_PLOTS and False:  # Turn this off for now.
         # Dress the smoothed value up as a primary ranking component to display
         elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.design_space)}
         smoothed_rank_comps = []
