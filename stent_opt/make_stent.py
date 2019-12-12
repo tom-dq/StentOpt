@@ -832,7 +832,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=14', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', 'cpus=8', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -872,7 +872,7 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt():
-    working_dir = pathlib.Path(r"C:\Temp\aba\opt-25")
+    working_dir = pathlib.Path(r"C:\Temp\aba\opt-26")
 
     os.makedirs(working_dir, exist_ok=False)
 

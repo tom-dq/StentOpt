@@ -9,6 +9,7 @@ import matplotlib.colors as mcolors
 import pylab as pl
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
+import stent_opt.struct_opt.score
 from stent_opt.struct_opt import design, generation
 from stent_opt.abaqus_model import base
 
@@ -89,7 +90,7 @@ def render_status(
 
         for one_elem in stent_design.active_elements:
             elem_connection = design.get_c3d8_connection(stent_design.design_space, one_elem)
-            for one_face_idx in generation.FACES_OF_HEX:
+            for one_face_idx in stent_opt.struct_opt.score.FACES_OF_HEX:
                 global_node_nums = [elem_connection[i] for i in one_face_idx]
                 yield global_node_nums, elem_lookup[one_elem]
 
