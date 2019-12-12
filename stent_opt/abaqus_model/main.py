@@ -1,6 +1,7 @@
 
 import typing
 
+import stent_opt.abaqus_model.base
 from stent_opt.abaqus_model import amplitude, base, step, load, instance, part
 from stent_opt.abaqus_model import surface, element, output_requests, interaction
 from stent_opt.abaqus_model import boundary_condition
@@ -10,8 +11,8 @@ class AbaqusModel:
     name: str
     instances: typing.Dict[str, instance.Instance]
     steps: typing.List[step.StepBase]
-    step_loads: typing.Set[typing.Tuple[step.StepBase, load.LoadBase]]
-    interactions: typing.Set[interaction.Interaction]
+    step_loads: typing.Set[typing.Tuple[step.StepBase, base.LoadBoundaryBase]]
+    interactions: typing.Set[interaction.InteractionBase]
     boundary_conditions: typing.Set[boundary_condition.BoundaryBase]
 
     _main_sep_line: str = "** -----------------------------"
@@ -33,7 +34,7 @@ class AbaqusModel:
     def add_step(self, one_step: step.StepBase):
         self.steps.append(one_step)
 
-    def add_load_starting_from(self, starting_step: step.StepBase, one_load: load.LoadBase):
+    def add_load_starting_from(self, starting_step: step.StepBase, one_load: base.LoadBoundaryBase):
         """Add a load at a step, and for all the following steps."""
         on_this_one = False
         for one_step in self.steps:
@@ -44,7 +45,7 @@ class AbaqusModel:
         if not on_this_one:
             raise ValueError(f"Did not find {starting_step} in AbaqusModel.steps")
 
-    def add_load_specific_steps(self, active_steps: typing.Iterable[step.StepBase], one_load: load.LoadBase):
+    def add_load_specific_steps(self, active_steps: typing.Iterable[step.StepBase], one_load: base.LoadBoundaryBase):
         """Add a load but only at particular steps (so you can turn it off after a while)."""
         for one_step in active_steps:
             self.step_loads.add((one_step, one_load))
@@ -88,7 +89,7 @@ class AbaqusModel:
         yield from self._produce_inp_lines_material()
         yield from self._produce_inp_lines_interaction_properties()
         yield from self._produce_inp_lines_boundary()
-        yield from self._produce_inp_lines_interactions()
+        yield from self._produce_inp_lines_interactions(step_dependent=False)
         yield from self._produce_inp_lines_steps()
 
 
@@ -119,9 +120,9 @@ class AbaqusModel:
             seen.add(None)  # If there's no amplitude, it will be a None.
             all_loads = self._get_sorted_loads()
             for one_load in all_loads:
-                if one_load.amplitude not in seen:
-                    yield one_load.amplitude
-                    seen.add(one_load.amplitude)
+                if one_load.with_amplitude not in seen:
+                    yield one_load.with_amplitude
+                    seen.add(one_load.with_amplitude)
 
         for amp in generate_referenced_amplitudes():
             yield from amp.make_inp_lines()
@@ -130,7 +131,9 @@ class AbaqusModel:
     def _produce_inp_lines_material(self) -> typing.Iterable[str]:
         yield from base.inp_heading("MATERIALS")
         for one_part in self.get_parts():
-            yield from one_part.common_section.mat.produce_inp_lines()
+            maybe_material = one_part.common_section.mat
+            if maybe_material:
+                yield from maybe_material.produce_inp_lines()
 
     def _produce_inp_lines_interaction_properties(self) -> typing.Iterable[str]:
         all_int_props = {one_int.int_property for one_int in self.interactions}
@@ -141,26 +144,37 @@ class AbaqusModel:
                 yield from one_int_prop.produce_inp_lines()
 
     def _produce_inp_lines_boundary(self) -> typing.Iterable[str]:
+        # Global boundary conditions which are there for the whole analysis.
         if self.boundary_conditions:
             yield from base.inp_heading("BOUNDARY CONDITIONS")
             for one_bc in self.boundary_conditions:
-                yield from one_bc.produce_inp_lines()
+                yield from one_bc.produce_inp_lines(base.Action.create_first_step)
 
-    def _produce_inp_lines_interactions(self) -> typing.Iterable[str]:
-        if self.interactions:
+    def _produce_inp_lines_interactions(self, step_dependent: bool) -> typing.Iterable[str]:
+        """Interaction properties can either be step dependent, or global. This does both."""
+        maybe_ints = self._some_interaction_sorted(step_dependent)
+        if maybe_ints:
             yield from base.inp_heading("INTERACTIONS")
 
-            for one_int in sorted(self.interactions):
+            for one_int in maybe_ints:
                 yield from one_int.produce_inp_lines()
 
     def _get_sorted_loads(self):
         all_loads = set(one_load for _, one_load in self.step_loads)
 
-        def sort_key(one_load: load.LoadBase):
+        def sort_key(one_load: base.LoadBoundaryBase):
             return one_load.sortable()
 
         return sorted(all_loads, key=sort_key)
 
+    def _some_interaction_sorted(self, step_dependent: bool) -> typing.List[interaction.InteractionBase]:
+        rel_ones = [one_int for one_int in self.interactions if one_int.is_step_dependent == step_dependent]
+
+        def sort_key(one_load: base.LoadBoundaryBase):
+            return one_load.sortable()
+
+        rel_ones.sort(key=sort_key)
+        return rel_ones
 
     def _produce_inp_lines_steps(self) ->  typing.Iterable[str]:
         yield self._main_sep_line
@@ -190,6 +204,8 @@ class AbaqusModel:
                 else:
                     raise ValueError(f"Got more than one thing to do with {one_load} and {one_step}... {relevant_load_events}")
 
+            yield from self._produce_inp_lines_interactions(step_dependent=True)
+
             yield from output_requests.produce_inp_lines(output_requests.general_components)
 
             # Have to end the step here, after the loads have been output.
@@ -206,7 +222,7 @@ class AbaqusModel:
 
             yield "*End Step"
 
-    def _step_load_actions(self, one_load: load.LoadBase):
+    def _step_load_actions(self, one_load: base.LoadBoundaryBase):
         """Get the load action for the steps (turn on, turn off, etc)."""
 
         active_at_last_step = False
@@ -216,13 +232,13 @@ class AbaqusModel:
 
             def get_event_this_combination():
                 if active_at_this_step and is_first_step:
-                    return load.Action.create_first_step
+                    return stent_opt.abaqus_model.base.Action.create_first_step
 
                 elif active_at_this_step and not active_at_last_step:
-                    return load.Action.create_subsequent_step
+                    return stent_opt.abaqus_model.base.Action.create_subsequent_step
 
                 elif not active_at_this_step and active_at_last_step:
-                    return load.Action.remove
+                    return stent_opt.abaqus_model.base.Action.remove
 
             this_action = get_event_this_combination()
             if this_action:
@@ -262,7 +278,7 @@ def make_test_model() -> AbaqusModel:
 
 if __name__ == "__main__":
     model = make_test_model()
-    with open(r"C:\temp\aba_out.inp", "w") as fOut:
+    with open(r"C:\temp\aba_out222.inp", "w") as fOut:
         for l in model.produce_inp_lines():
             print(l)
             fOut.write(l + "\n")

@@ -1,12 +1,20 @@
 import dataclasses
 import itertools
 import typing
+import enum
 
 from stent_opt.abaqus_model import base
 
 
+class ElemType(enum.Enum):
+    C3D4 = enum.auto()
+    C3D8R = enum.auto()
+    M3D4R = enum.auto()
+    SFM3D4R = enum.auto()  # Computationally efficient for elements where everything is constrained.
+
+
 class Element(typing.NamedTuple):
-    name: str  # e.g., C3D8R
+    name: ElemType  # e.g., C3D8R
     connection: typing.Tuple[int, ...]
 
 
@@ -28,7 +36,7 @@ class Elements(dict):
             return name_num_conn[0]
 
         for name, iterable in itertools.groupby(elem_nums_and_data, key=group_key):
-            yield f"*Element, type={name}"
+            yield f"*Element, type={name.name}"
             for _, num, conn in iterable:
                 conn_str = ", ".join(str(x) for x in conn)
                 yield f"{num}, {conn_str}"

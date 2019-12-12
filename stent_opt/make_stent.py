@@ -30,6 +30,7 @@ except KeyError:
 class GlobalPartNames:
     STENT = "Stent"
     BALLOON = "Balloon"
+    CYL_INNER = "CylInner"
 
 
 class GlobalSurfNames:
@@ -37,6 +38,7 @@ class GlobalSurfNames:
     INNER_BOTTOM_HALF = "InLowHalf"
     INNER_MIN_RADIUS = "InMinR"
     BALLOON_INNER = "BalInner"
+    CYL_INNER = "CylInner"
 
 
 class GlobalNodeSetNames(enum.Enum):
@@ -44,6 +46,13 @@ class GlobalNodeSetNames(enum.Enum):
     BalloonThetaMax = enum.auto()
     BalloonZ0 = enum.auto()
     BalloonZMax = enum.auto()
+    RigidCyl = enum.auto()
+
+
+class Actuation(enum.Enum):
+    direct_pressure = enum.auto()
+    rigid_cylinder = enum.auto()
+    balloon = enum.auto()
 
 
 class Balloon(typing.NamedTuple):
@@ -56,7 +65,9 @@ class Balloon(typing.NamedTuple):
 class Cylinder(typing.NamedTuple):
     initial_radius_ratio: float
     final_radius_ratio: float
+    overshoot_ratio: float
     divs: PolarIndex
+
 
 class StentParams(typing.NamedTuple):
     angle: float
@@ -67,14 +78,42 @@ class StentParams(typing.NamedTuple):
     balloon: typing.Optional[Balloon]
     cylinder: typing.Optional[Cylinder]
 
+    @property
+    def actuation(self) -> Actuation:
+        has_balloon = bool(self.balloon)
+        has_cyl = bool(self.cylinder)
+
+        if has_balloon and has_cyl:
+            raise ValueError("Both Cyl and Balloon?")
+
+        if has_balloon:
+            return Actuation.balloon
+
+        elif has_cyl:
+            return Actuation.rigid_cylinder
+
+        else:
+            return Actuation.direct_pressure
+
+
+    @property
+    def actuation_surface_ratio(self) -> typing.Optional[float]:
+        if self.actuation == Actuation.rigid_cylinder:
+            return self.r_min * self.cylinder.initial_radius_ratio
+
+        elif self.actuation == Actuation.balloon:
+            return self.r_min * self.balloon.inner_radius_ratio
+
+        else:
+            return None
 
 
 dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=2,
-        Th=31,
-        Z=150,
+        Th=31,  # 31
+        Z=120,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -90,12 +129,13 @@ dylan_r10n1_params = StentParams(
         ),
     ),
     cylinder=Cylinder(
-        initial_radius_ratio=0.85,
+        initial_radius_ratio=0.6,
         final_radius_ratio=3.0,
+        overshoot_ratio=0.05,
         divs=PolarIndex(
             R=1,
             Th=20,
-            Z=30,
+            Z=2,
         ),
     )
 )
@@ -125,6 +165,22 @@ def generate_nodes_stent_polar(stent_params: StentParams) -> typing.Iterable[bas
         yield polar_coord
 
 
+def generate_nodes_inner_cyl(stent_params: StentParams) -> typing.Iterable[base.RThZ]:
+    if stent_params.cylinder.divs.R != 1:
+        raise ValueError(stent_params.cylinder.divs.R)
+
+    theta_half_overshoot = 0.5 * stent_params.angle * stent_params.cylinder.overshoot_ratio
+    z_half_overshoot = 0.5 * stent_params.length * stent_params.cylinder.overshoot_ratio
+
+    r_val = stent_params.actuation_surface_ratio
+    th_vals = _gen_ordinates(stent_params.cylinder.divs.Th, -theta_half_overshoot, stent_params.angle+theta_half_overshoot)
+    z_vals = _gen_ordinates(stent_params.cylinder.divs.Z, -z_half_overshoot, stent_params.length+z_half_overshoot)
+
+    for th, z in itertools.product(th_vals, z_vals):
+        polar_coord = base.RThZ(r_val, th, z)
+        yield polar_coord
+
+
 def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
     typing.Tuple[base.RThZ, typing.Set[GlobalNodeSetNames]]]:
 
@@ -143,7 +199,7 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
         (1.0, 0.0),
     ]
 
-    nominal_r = stent_params.balloon.inner_radius_ratio * stent_params.r_min
+    nominal_r = stent_params.actuation_surface_ratio
     theta_half_overshoot = 0.5 * stent_params.angle * stent_params.balloon.overshoot_ratio
     theta_total_span = stent_params.angle + 2*theta_half_overshoot
     theta_mapping = [
@@ -223,11 +279,11 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
 def generate_brick_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
     for iElem, one_elem_idx in generate_elem_indices(divs):
         yield one_elem_idx, iElem, element.Element(
-            name="C3D8R",
+            name=element.ElemType.C3D8R,
             connection=get_c3d8_connection(divs, one_elem_idx),
         )
 
-def generate_plate_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int, element.Element]]:
+def generate_plate_elements_all(divs: PolarIndex, elem_type: element.ElemType) -> typing.Iterable[typing.Tuple[int, element.Element]]:
 
     if divs.R != 1:
         raise ValueError(divs)
@@ -246,11 +302,12 @@ def generate_plate_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tupl
         ]
 
         yield iElem, element.Element(
-            name="M3D4R",
+            name=elem_type,
             connection=tuple(connection),
         )
 
 def make_a_stent(stent_params: StentParams, stent_design: StentDesign):
+
     model = main.AbaqusModel("StentModel")
 
     def make_stent_part():
@@ -325,7 +382,7 @@ def make_a_stent(stent_params: StentParams, stent_design: StentDesign):
             one_node_set = node.NodeSet(balloon_part, node_set_name, frozenset(nodes))
             balloon_part.add_node_set(one_node_set)
 
-        elems_all = {iElem: e for iElem, e in generate_plate_elements_all(divs=stent_params.balloon.divs)}
+        elems_all = {iElem: e for iElem, e in generate_plate_elements_all(divs=stent_params.balloon.divs, elem_type=element.ElemType.M3D4R)}
 
         for iNode, one_node_polar in nodes_polar.items():
             balloon_part.add_node_validated(iNode, one_node_polar.to_xyz())
@@ -336,10 +393,53 @@ def make_a_stent(stent_params: StentParams, stent_design: StentDesign):
         one_instance = instance.Instance(base_part=balloon_part)
         model.add_instance(one_instance)
 
+    def make_cyl_part():
+        cyl_mat = material.MaterialElasticPlastic(
+            name="Cyl",
+            density=1.1E-007,
+            elast_mod=1e3,
+            elast_possion=0.4,
+            plastic=None,
+        )
+
+        common_section_cyl = section.MembraneSection(
+            name="CylMembrane",
+            mat=cyl_mat,
+            thickness=0.02,
+        )
+
+        cyl_inner_part = part.Part(
+            name=GlobalPartNames.CYL_INNER,
+            common_section=common_section_cyl,
+        )
+
+        nodes_polar = {
+            iNode: n_p for iNode, n_p in enumerate(generate_nodes_inner_cyl(stent_params=stent_params), start=1)
+        }
+
+        elems_all = {iElem: e for iElem, e in generate_plate_elements_all(divs=stent_params.cylinder.divs, elem_type=element.ElemType.SFM3D4R)}
+
+        for iNode, one_node_polar in nodes_polar.items():
+            cyl_inner_part.add_node_validated(iNode, one_node_polar.to_xyz())
+
+        for iElem, one_elem in elems_all.items():
+            cyl_inner_part.add_element_validate(iElem, one_elem)
+
+        # All the nodes go in the boundary set.
+        all_node_set = node.NodeSet(cyl_inner_part, GlobalNodeSetNames.RigidCyl.name, frozenset(nodes_polar.keys()))
+        cyl_inner_part.add_node_set(all_node_set)
+
+        one_instance = instance.Instance(base_part=cyl_inner_part)
+
+        model.add_instance(one_instance)
+
     make_stent_part()
 
-    if stent_params.balloon:
+    if stent_params.actuation == Actuation.balloon:
         make_balloon_part()
+
+    elif stent_params.actuation == Actuation.rigid_cylinder:
+        make_cyl_part()
 
     return model
 
@@ -400,13 +500,67 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
 
     create_elem_surface_S1(min_bottom_half, GlobalSurfNames.INNER_BOTTOM_HALF)
 
-    if stent_params.balloon:
+    if stent_params.actuation == Actuation.balloon:
         instance_balloon = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON)
         all_balloon_elems = instance_balloon.base_part.elements.keys()
         create_elem_surface(instance_balloon, all_balloon_elems, GlobalSurfNames.BALLOON_INNER, surface.SurfaceFace.SNEG)
 
+    elif stent_params.actuation == Actuation.rigid_cylinder:
+        instance_cyl = model.get_only_instance_base_part_name(GlobalPartNames.CYL_INNER)
+        all_cyl_elements = instance_cyl.base_part.elements.keys()
+        create_elem_surface(instance_cyl, all_cyl_elements, GlobalSurfNames.CYL_INNER, surface.SurfaceFace.SNEG)
+
+
 
 def apply_loads(stent_params: StentParams, model: main.AbaqusModel):
+    if stent_params.actuation == Actuation.rigid_cylinder:
+        _apply_loads_enforced_disp(stent_params, model)
+
+    else:
+        _apply_loads_pressure(stent_params, model)
+
+
+def _apply_loads_enforced_disp(stent_params: StentParams, model: main.AbaqusModel):
+    init_radius = stent_params.actuation_surface_ratio
+    final_radius = stent_params.r_min * stent_params.cylinder.final_radius_ratio
+    dr = final_radius - init_radius
+
+    total_time = 2.0
+
+    one_step = step.StepDynamicExplicit(
+        name=f"Expand",
+        final_time=total_time,
+        bulk_visc_b1=0.06,
+        bulk_visc_b2=1.2,
+    )
+
+    model.add_step(one_step)
+
+    amp_data = (
+        amplitude.XY(0.0, 0.0),
+        amplitude.XY(total_time, dr),
+    )
+
+    amp = amplitude.Amplitude("Amp-1", amp_data)
+
+    cyl_inst = model.get_only_instance_base_part_name(GlobalPartNames.CYL_INNER)
+    node_set = cyl_inst.base_part.node_sets[GlobalNodeSetNames.RigidCyl.name]
+
+    enf_disp = boundary_condition.BoundaryDispRot(
+        name="ExpRad",
+        with_amplitude=amp,
+        components=(
+            boundary_condition.DispRotBoundComponent(node_set=node_set, dof=1, value=1.0),
+            boundary_condition.DispRotBoundComponent(node_set=node_set, dof=2, value=0.0),
+            boundary_condition.DispRotBoundComponent(node_set=node_set, dof=3, value=0.0),
+        ),
+    )
+
+    model.add_load_specific_steps([one_step], enf_disp)
+
+
+
+def _apply_loads_pressure(stent_params: StentParams, model: main.AbaqusModel):
     # Some nominal amplitude from Dylan's model.
 
     if stent_params.balloon:
@@ -440,7 +594,7 @@ def apply_loads(stent_params: StentParams, model: main.AbaqusModel):
 
     one_load = load.PressureLoad(
         name="Pressure",
-        amplitude=amp,
+        with_amplitude=amp,
         on_surface=surf,
         value=1.0,
     )
@@ -448,22 +602,44 @@ def apply_loads(stent_params: StentParams, model: main.AbaqusModel):
     model.add_load_specific_steps([one_step], one_load)
 
 
-def add_interaction(model: main.AbaqusModel):
-    """Simple interaction between the balloon and the stent."""
-    if len(model.instances) > 1:
+def add_interaction(stent_params: StentParams, model: main.AbaqusModel):
+    """Simple interaction between the balloon/cyl and the stent."""
+
+
+
+    if stent_params.actuation != Actuation.direct_pressure:
+
+        if stent_params.actuation == Actuation.balloon:
+            inner_surf = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).surfaces[GlobalSurfNames.BALLOON_INNER]
+
+        elif stent_params.actuation == Actuation.rigid_cylinder:
+            inner_surf = model.get_only_instance_base_part_name(GlobalPartNames.CYL_INNER).surfaces[GlobalSurfNames.CYL_INNER]
+
+        else:
+            raise ValueError(stent_params.actuation)
+
+        outer_surf = model.get_only_instance_base_part_name(GlobalPartNames.STENT).surfaces[GlobalSurfNames.INNER_SURFACE]
+
+
         int_prop = interaction_property.SurfaceInteraction(
             name="FrictionlessContact",
             lateral_friction=0.0,
         )
 
-        one_int = interaction.Interaction(
+        one_int_general = interaction.GeneralContact(
             name="Interaction",
             int_property=int_prop,
-            interaction_surface_type=interaction.InteractionSurfaces.AllWithSelf,
-            surface_pairs=None,
         )
 
-        model.interactions.add(one_int)
+
+        one_int_specified = interaction.ContactPair(
+            name="Interaction",
+            int_property=int_prop,
+            mechanical_constraint=interaction.MechanicalConstraint.Penalty,
+            surface_pair=(inner_surf, outer_surf),
+        )
+
+        model.interactions.add(one_int_specified)
 
 
 def apply_boundaries(stent_params: StentParams, model: main.AbaqusModel):
@@ -520,6 +696,7 @@ def apply_boundaries(stent_params: StentParams, model: main.AbaqusModel):
     )
     rigid_bc = boundary_condition.BoundaryDispRot(
         name="RigidRestraint",
+        with_amplitude=None,
         components=bc_components,
     )
     model.boundary_conditions.add(rigid_bc)
@@ -532,14 +709,14 @@ def apply_boundaries(stent_params: StentParams, model: main.AbaqusModel):
         GlobalNodeSetNames.BalloonZMax: boundary_condition.BoundaryType.ZSYMM,
     }
 
-    has_balloon = len(model.instances) > 1
-    if has_balloon:
+    if stent_params.actuation == Actuation.balloon:
         balloon_part = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).base_part
 
         for sym_name, boundary_type in sym_conds.items():
             relevant_set = balloon_part.node_sets[sym_name.name]
             one_bc = boundary_condition.BoundarySymEncastre(
                 name=f"{sym_name} - Sym",
+                with_amplitude=None,
                 boundary_type=boundary_type,
                 node_set=relevant_set,
             )
@@ -633,7 +810,7 @@ def make_stent_model(stent_params: StentParams, stent_design: StentDesign, fn_in
     model = make_a_stent(stent_params, stent_design)
     create_surfaces(stent_params, model)
     apply_loads(stent_params, model)
-    add_interaction(model)
+    add_interaction(stent_params, model)
     apply_boundaries(stent_params, model)
     write_model(model, fn_inp)
 
@@ -652,7 +829,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=12', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', 'cpus=8', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -692,7 +869,7 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt():
-    working_dir = pathlib.Path(r"C:\Temp\aba\opt-9")
+    working_dir = pathlib.Path(r"C:\Temp\aba\opt-21")
 
     os.makedirs(working_dir, exist_ok=False)
 

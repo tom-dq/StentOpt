@@ -199,6 +199,47 @@ class SetBase:
         yield self.get_name(SetContext.part)
 
 
+class Action(enum.Enum):
+    create_first_step = enum.auto()
+    create_subsequent_step = enum.auto()
+    remove = enum.auto()
+
+    def load_new_text(self) -> str:
+        if self == Action.create_first_step:
+            return ""
+
+        elif self in (Action.create_subsequent_step, Action.remove):
+            return ", op=NEW"
+
+        else:
+            raise ValueError(self)
+
+
+@dataclasses.dataclass(frozen=True)
+class SortableDataclass:
+
+    def sortable(self):
+        type_name = self.__class__.__name__
+        return (type_name, self)
+
+
+@dataclasses.dataclass(frozen=True)
+class LoadBoundaryBase(SortableDataclass):
+    name: str  # All loads have to have this!
+    with_amplitude: typing.Optional["with_amplitude.Amplitude"]
+
+    def produce_inp_lines(self, action: Action) -> typing.Iterable[str]:
+        raise NotImplementedError()
+
+
+    def _amplitude_suffix(self) -> str:
+        if self.with_amplitude:
+            return f", amplitude={self.with_amplitude.name}"
+
+        else:
+            return ""
+
+
 
 def abaqus_float(x) -> str:
     """Returns a float Abaqus can parse (i.e., with a dot in it)"""
@@ -256,3 +297,5 @@ if __name__ == "__main__":
             print(x)
 
         print()
+
+

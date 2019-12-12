@@ -121,8 +121,8 @@ def make_part_test() -> Part:
     part.add_node_validated(4, base.XYZ(3.14, 3.5, 6.2))
     part.add_node_validated(5, base.XYZ(2.0, 3.5, 6.2))
 
-    e1 = element.Element("C3D4", (1, 2, 3, 4))
-    e2 = element.Element("C3D4", (5, 2, 3, 1))
+    e1 = element.Element(element.ElemType.C3D4, (1, 2, 3, 4))
+    e2 = element.Element(element.ElemType.C3D4, (5, 2, 3, 1))
     part.add_element_validate(1, e1)
     part.add_element_validate(2, e2)
 

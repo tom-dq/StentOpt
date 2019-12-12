@@ -2,7 +2,7 @@ import enum
 import dataclasses
 import typing
 
-from stent_opt.abaqus_model import base, node
+from stent_opt.abaqus_model import base, node, amplitude
 
 
 class BoundaryType(enum.Enum):
@@ -14,11 +14,8 @@ class BoundaryType(enum.Enum):
 
 
 @dataclasses.dataclass(frozen=True)
-class BoundaryBase:
-    name: str
-
-    def produce_inp_lines(self):
-        raise NotImplementedError()
+class BoundaryBase(base.LoadBoundaryBase):
+    pass
 
 
 @dataclasses.dataclass(frozen=True)
@@ -27,12 +24,13 @@ class BoundarySymEncastre(BoundaryBase):
     boundary_type: BoundaryType
     node_set: node.NodeSet
 
-    def produce_inp_lines(self):
-        set_name = self.node_set.get_name(base.SetContext.assembly)
 
+    def produce_inp_lines(self, action: base.Action) -> typing.Iterable[str]:
         yield f"** Name: {self.name} Type: Symmetry/Antisymmetry/Encastre"
-        yield "*Boundary"
-        yield f"{set_name}, {self.boundary_type.name}"
+        yield f"*Boundary{action.load_new_text()}"
+        if action != base.Action.remove:
+            set_name = self.node_set.get_name(base.SetContext.assembly)
+            yield f"{set_name}, {self.boundary_type.name}"
 
 
 class DispRotBoundComponent(typing.NamedTuple):
@@ -44,11 +42,14 @@ class DispRotBoundComponent(typing.NamedTuple):
 @dataclasses.dataclass(frozen=True)
 class BoundaryDispRot(BoundaryBase):
     name: str
+    with_amplitude: typing.Optional[amplitude.Amplitude]
     components: typing.Tuple[DispRotBoundComponent, ...]
 
-    def produce_inp_lines(self):
+
+    def produce_inp_lines(self, action: base.Action) -> typing.Iterable[str]:
         yield f"** Name: {self.name} Type: Displacement/Rotation"
-        yield "*Boundary"
-        for comp in self.components:
-            set_name = comp.node_set.get_name(base.SetContext.assembly)
-            yield f"{set_name}, {comp.dof}, {comp.dof}, {base.abaqus_float(comp.value)}"
+        yield f"*Boundary{action.load_new_text()}{self._amplitude_suffix()}"
+        if action != base.Action.remove:
+            for comp in self.components:
+                set_name = comp.node_set.get_name(base.SetContext.assembly)
+                yield f"{set_name}, {comp.dof}, {comp.dof}, {base.abaqus_float(comp.value)}"
