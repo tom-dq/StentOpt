@@ -111,9 +111,9 @@ class StentParams(typing.NamedTuple):
 dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
-        R=2,
-        Th=31,  # 31
-        Z=120,  # 120
+        R=5,
+        Th=61,  # 31
+        Z=200,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -402,10 +402,10 @@ def make_a_stent(stent_params: StentParams, stent_design: StentDesign):
             plastic=None,
         )
 
-        common_section_cyl = section.MembraneSection(
-            name="CylMembrane",
-            mat=cyl_mat,
-            thickness=0.02,
+        common_section_cyl = section.SurfaceSection(
+            name="CylSurf",
+            mat=None,
+            surf_density=1e-3,
         )
 
         cyl_inner_part = part.Part(
@@ -629,6 +629,9 @@ def add_interaction(stent_params: StentParams, model: main.AbaqusModel):
         one_int_general = interaction.GeneralContact(
             name="Interaction",
             int_property=int_prop,
+            included_surface_pairs=(
+                (inner_surf, outer_surf),
+            )
         )
 
 
@@ -639,7 +642,7 @@ def add_interaction(stent_params: StentParams, model: main.AbaqusModel):
             surface_pair=(inner_surf, outer_surf),
         )
 
-        model.interactions.add(one_int_specified)
+        model.interactions.add(one_int_general)
 
 
 def apply_boundaries(stent_params: StentParams, model: main.AbaqusModel):
@@ -829,7 +832,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=8', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', 'cpus=14', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -869,7 +872,7 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt():
-    working_dir = pathlib.Path(r"C:\Temp\aba\opt-21")
+    working_dir = pathlib.Path(r"C:\Temp\aba\opt-23")
 
     os.makedirs(working_dir, exist_ok=False)
 
