@@ -111,9 +111,9 @@ class StentParams(typing.NamedTuple):
 dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
-        R=5,
-        Th=61,  # 31
-        Z=200,  # 120
+        R=2,
+        Th=91,  # 31
+        Z=360,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -131,10 +131,10 @@ dylan_r10n1_params = StentParams(
     cylinder=Cylinder(
         initial_radius_ratio=0.6,
         final_radius_ratio=3.0,
-        overshoot_ratio=0.05,
+        overshoot_ratio=0.1,
         divs=PolarIndex(
             R=1,
-            Th=20,
+            Th=46,
             Z=2,
         ),
     )
@@ -525,7 +525,7 @@ def _apply_loads_enforced_disp(stent_params: StentParams, model: main.AbaqusMode
     final_radius = stent_params.r_min * stent_params.cylinder.final_radius_ratio
     dr = final_radius - init_radius
 
-    total_time = 2.0
+    total_time = 3.0
 
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
@@ -538,7 +538,8 @@ def _apply_loads_enforced_disp(stent_params: StentParams, model: main.AbaqusMode
 
     amp_data = (
         amplitude.XY(0.0, 0.0),
-        amplitude.XY(total_time, dr),
+        amplitude.XY(0.75 * total_time, dr),
+        amplitude.XY(total_time, 0),
     )
 
     amp = amplitude.Amplitude("Amp-1", amp_data)
@@ -832,7 +833,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=8', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', 'cpus=6', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -872,12 +873,13 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt():
-    working_dir = pathlib.Path(r"C:\Temp\aba\opt-26")
+    working_dir = pathlib.Path(r"C:\Temp\aba\opt-28")
+    history_db = working_dir / "History.db"
 
     os.makedirs(working_dir, exist_ok=False)
 
     done = False
-    for i in range(100):
+    for i in range(1000):
         inp_fn = working_dir / f'It-{str(i).rjust(6, "0")}.inp'
         odb_fn = inp_fn.with_suffix(".odb")
 
@@ -885,7 +887,7 @@ def do_opt():
             design = make_initial_design(basic_stent_params)
 
         else:
-            design = make_new_generation(old_design, db_fn, title_if_plotting=f"Iteration {i}")
+            design = make_new_generation(old_design, db_fn, history_db, i, inp_fn)
 
             num_new = len(design.active_elements - old_design.active_elements)
             num_removed = len(old_design.active_elements - design.active_elements)

@@ -12,8 +12,7 @@ from stent_opt.struct_opt import design
 from stent_opt.abaqus_model import base
 
 
-from stent_opt.struct_opt import display
-from stent_opt.struct_opt import score
+from stent_opt.struct_opt import display, score, history
 
 
 class Tail(enum.Enum):
@@ -36,7 +35,7 @@ MAKE_PLOTS = True
 T_index_to_val = typing.Dict[design.PolarIndex, float]
 def gaussian_smooth(design_space: design.PolarIndex, unsmoothed: T_index_to_val) -> T_index_to_val:
 
-    GAUSSIAN_SIGMA = 0.5
+    GAUSSIAN_SIGMA = 1.2  # Was 0.5
 
     # Make a 3D array
     design_space_elements = design.node_to_elem_design_space(design_space)
@@ -106,7 +105,12 @@ def display_design_flat(design_space: design.PolarIndex, data: T_index_to_val):
     plt.show()
 
 
-def make_new_generation(old_design: design.StentDesign, db_fn: str, title_if_plotting: str = '') -> design.StentDesign:
+def make_new_generation(old_design: design.StentDesign, db_fn: str, history_db, iteration_num: int, inp_fn) -> design.StentDesign:
+    title_if_plotting = f"Iteration {iteration_num}"
+
+    # Go between num (1234) and idx (5, 6, 7)...
+    elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(old_design.design_space)}
+    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.design_space)}
 
     # Get the old data.
     with datastore.Datastore(db_fn) as data:
@@ -133,6 +137,23 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str, title_if_plo
     sec_rank = list(score.get_secondary_ranking_sum_of_norm(all_ranks))
     all_ranks.append(sec_rank)
 
+    # Log the history
+    with history.History(history_db) as hist:
+        snapshot = history.Snapshot(
+            iteration_num=iteration_num,
+            filename=str(inp_fn),
+            active_elements=frozenset(elem_indices_to_num[idx] for idx in old_design.active_elements) )
+
+        status_checks = (history.StatusCheck(
+            iteration_num=iteration_num,
+            elem_num=rank_comp.elem_id,
+            metric_name=rank_comp.comp_name,
+            metric_val=rank_comp.value) for rank_comp_list in all_ranks for rank_comp in rank_comp_list)
+
+        hist.add_snapshot(snapshot)
+        hist.add_many_status_checks(status_checks)
+
+
     if MAKE_PLOTS:
         stress_rank = list(score.get_primary_ranking_components(stress_rows))
         for plot_rank in [stress_rank, sec_rank]:
@@ -140,15 +161,14 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str, title_if_plo
 
     overall_rank = {one.elem_id: one.value for one in sec_rank}
 
-    # Get the element number (1234) to idx (5, 6, 7) mapping.
-    elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(old_design.design_space)}
+
 
     unsmoothed = {elem_num_to_indices[iElem]: val for iElem, val in overall_rank.items()}
     smoothed = gaussian_smooth(old_design.design_space, unsmoothed)
 
     if MAKE_PLOTS and False:  # Turn this off for now.
         # Dress the smoothed value up as a primary ranking component to display
-        elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.design_space)}
+
         smoothed_rank_comps = []
         for elem_idx, value in smoothed.items():
             one_sec = score.SecondaryRankingComponent(
