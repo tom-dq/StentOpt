@@ -13,10 +13,14 @@ from stent_opt.struct_opt import design
 from stent_opt.abaqus_model import base
 
 
+from stent_opt.struct_opt import display
+
 class Tail(enum.Enum):
     bottom = enum.auto()
     top = enum.auto()
 
+
+MAKE_PLOTS = True
 
 # TODO - hinge behaviour
 #   - Try the Jacobian or somesuch to get the deformation in an element.
@@ -36,6 +40,12 @@ FACES_OF_HEX = (
 )
 
 class PrimaryRankingComponent(typing.NamedTuple):
+    comp_name: str
+    elem_id: int
+    value: float
+
+
+class SecondaryRankingComponent(typing.NamedTuple):
     comp_name: str
     elem_id: int
     value: float
@@ -77,7 +87,28 @@ def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingCom
         raise ValueError(nt_row)
 
 
-def _angles_of_element(node_to_pos: typing.Dict[design.PolarIndex, base.XYZ], elem_id, elem_connection) -> PrimaryRankingComponent:
+def get_primary_ranking_element_distortion(nt_rows_node_pos, old_design: design.StentDesign) -> typing.Iterable[PrimaryRankingComponent]:
+
+    node_num_to_indices = {iNode: idx for iNode, idx in design.generate_node_indices(old_design.design_space)}
+    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.design_space)}
+
+
+    node_to_pos = {
+        row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in nt_rows_node_pos
+    }
+
+    for elem_idx in old_design.active_elements:
+        elem_num = elem_indices_to_num[elem_idx]
+        elem_connection = design.get_c3d8_connection(old_design.design_space, elem_idx)
+        yield PrimaryRankingComponent(
+            comp_name="InternalAngle",
+            elem_id=elem_num,
+            value=_max_delta_angle_of_element(node_to_pos, elem_connection)
+        )
+
+    pass
+
+def _max_delta_angle_of_element(node_to_pos: typing.Dict[int, base.XYZ], elem_connection) -> float:
 
     corner_points_numpy = {
         iNode: numpy.array(node_to_pos[iNode]) for iNode in elem_connection
@@ -109,16 +140,38 @@ def _angles_of_element(node_to_pos: typing.Dict[design.PolarIndex, base.XYZ], el
             angle_off_by = abs(angle-numpy.pi/2)
             angles_delta.append(angle_off_by)
 
-    return PrimaryRankingComponent(
-        comp_name="InternalAngle",
-        elem_id=elem_id,
-        value=max(angles_delta)
-    )
+    return max(angles_delta)
 
 
+def get_secondary_ranking_sum_of_norm(list_of_lists: typing.List[typing.List[PrimaryRankingComponent]]) -> typing.Iterable[SecondaryRankingComponent]:
+    """Just normalises the ranking components to the mean, and adds each one up."""
 
-def get_primary_ranking_element_distortion(nt_rows, old_design: design.StentDesign) -> typing.Iterable[PrimaryRankingComponent]:
-    pass
+    elem_effort = collections.Counter()
+    names = []
+    for one_list in list_of_lists:
+        names.append(one_list[0].comp_name)
+        vals = [prim_rank.value for prim_rank in one_list]
+        ave = numpy.mean(vals)
+        for prim_rank in one_list:
+
+            if ave != 0.0:
+                normed = prim_rank.value / ave
+
+            elif prim_rank.value == 0:
+                normed = 0.0
+
+            else:
+                raise ZeroDivisionError(prim_rank.value, ave)
+
+            elem_effort[prim_rank.elem_id] += normed
+
+    sec_name = "NormSum[" + "+".join(names) + "]"
+    for elem_id, sec_rank_val in elem_effort.items():
+        yield SecondaryRankingComponent(
+            comp_name=sec_name,
+            elem_id=elem_id,
+            value=sec_rank_val / len(names),
+        )
 
 
 def get_relevant_measure(nt_row):
@@ -247,8 +300,7 @@ def display_design_flat(design_space: design.PolarIndex, data: T_index_to_val):
     plt.show()
 
 
-def make_new_generation(old_design: design.StentDesign, db_fn: str) -> design.StentDesign:
-
+def make_new_generation(old_design: design.StentDesign, db_fn: str, title_if_plotting: str = '') -> design.StentDesign:
 
     # Get the old data.
     with datastore.Datastore(db_fn) as data:
@@ -260,35 +312,54 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str) -> design.St
 
         peeq_rows = list(data.get_all_rows_at_frame(db_defs.ElementPEEQ, one_frame))
         stress_rows = list(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))
+        pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
+
+    pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in pos_rows}
+
+    # Compute the primary and overall ranking components
+
+    all_ranks = []
+
+    # Element-based effort functions
+    for db_data in [peeq_rows, stress_rows]:
+        all_ranks.append(list(get_primary_ranking_components(db_data)))
+
+    # Node position pased effort functions
+    eff_funcs = [get_primary_ranking_element_distortion, ]
+    for one_func in eff_funcs:
+        all_ranks.append(list(one_func(pos_rows, old_design)))
+
+    sec_rank = list(get_secondary_ranking_sum_of_norm(all_ranks))
+    all_ranks.append(sec_rank)
+
+    if MAKE_PLOTS:
+        for one_rank in all_ranks:
+            display.render_status(old_design, pos_lookup, one_rank, title_if_plotting)
 
 
-        # Order by relevant quantity. Best elements (highly stressed) come first.
-        peeq_rows.sort(key=get_relevant_measure, reverse=True)
-        stress_rows.sort(key=get_relevant_measure, reverse=True)
-
-        list_of_lists = [peeq_rows, stress_rows]
-
-        overall_rank = get_element_efforts(*list_of_lists)
-
-        # Overall ranking, unweighted.
-
-        #overall_rank = get_overall_ranking(*list_of_lists)
-
-
-        overall_score_update(*list_of_lists)
-
+    overall_rank = {one.elem_id: one.value for one in sec_rank}
 
     # Get the element number (1234) to idx (5, 6, 7) mapping.
     elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(old_design.design_space)}
 
-
     unsmoothed = {elem_num_to_indices[iElem]: val for iElem, val in overall_rank.items()}
     smoothed = gaussian_smooth(old_design.design_space, unsmoothed)
 
+    if MAKE_PLOTS:
+        # Dress the smoothed value up as a primary ranking component to display
+        elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.design_space)}
+        smoothed_rank_comps = []
+        for elem_idx, value in smoothed.items():
+            one_sec = SecondaryRankingComponent(
+                comp_name=sec_rank[0].comp_name + " Smoothed",
+                elem_id=elem_indices_to_num[elem_idx],
+                value=value)
+            smoothed_rank_comps.append(one_sec)
+
+        display.render_status(old_design, pos_lookup, smoothed_rank_comps, title_if_plotting)
 
     new_elems = get_top_n_elements(smoothed, len(old_design.active_elements))
     return design.StentDesign(design_space=old_design.design_space, active_elements=frozenset(new_elems))
-
 
     # Old stuff
     bottom_tail = get_keys_of_tail(smoothed, Tail.bottom, 10.0)
@@ -305,14 +376,13 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str) -> design.St
 
 
 def make_plot_tests():
-    db_fn = r"C:\TEMP\aba\opt-5\It-000000.db"
-
+    # Bad import - just for testing
     from stent_opt import make_stent
-    from stent_opt.struct_opt import display
+
+    db_fn = r"C:\TEMP\aba\opt-5\It-000000.db"
 
     stent_params = make_stent.basic_stent_params
     old_design = make_stent.make_initial_design(stent_params)
-
 
     with datastore.Datastore(db_fn) as data:
         all_frames = list(data.get_all_frames())
@@ -323,10 +393,28 @@ def make_plot_tests():
         stress_rows = list(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))
         pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
 
-    prim_rank_comps = list(get_primary_ranking_components(stress_rows))
-
     pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in pos_rows}
-    display.render_status(old_design, pos_lookup, prim_rank_comps)
+
+    # Node position pased effort functions
+    eff_funcs = [get_primary_ranking_element_distortion, ]
+
+    all_ranks = []
+    for one_func in eff_funcs:
+        all_ranks.append(list(one_func(pos_rows, old_design)))
+
+    # Element-based effort functions
+    for db_data in [peeq_rows, stress_rows]:
+        all_ranks.append(list(get_primary_ranking_components(db_data)))
+
+    sec_rank = list(get_secondary_ranking_sum_of_norm(all_ranks))
+    all_ranks.append(sec_rank)
+
+
+    for one_rank in all_ranks:
+        display.render_status(old_design, pos_lookup, one_rank, "Testing")
+
+
+
 
 
 

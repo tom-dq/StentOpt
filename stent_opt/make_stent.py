@@ -53,6 +53,11 @@ class Balloon(typing.NamedTuple):
     divs: PolarIndex
 
 
+class Cylinder(typing.NamedTuple):
+    initial_radius_ratio: float
+    final_radius_ratio: float
+    divs: PolarIndex
+
 class StentParams(typing.NamedTuple):
     angle: float
     divs: PolarIndex
@@ -60,14 +65,14 @@ class StentParams(typing.NamedTuple):
     r_max: float
     length: float
     balloon: typing.Optional[Balloon]
-
+    cylinder: typing.Optional[Cylinder]
 
 
 
 dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
-        R=3,
+        R=2,
         Th=31,
         Z=150,
     ),
@@ -84,6 +89,15 @@ dylan_r10n1_params = StentParams(
             Z=30,
         ),
     ),
+    cylinder=Cylinder(
+        initial_radius_ratio=0.85,
+        final_radius_ratio=3.0,
+        divs=PolarIndex(
+            R=1,
+            Th=20,
+            Z=30,
+        ),
+    )
 )
 
 basic_stent_params = dylan_r10n1_params._replace(balloon=None)
@@ -638,7 +652,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=2', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', 'cpus=12', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -659,6 +673,9 @@ def run_model(inp_fn):
             # No problem if it's already gone in the meantime...
             pass
 
+    if ret_code:
+        raise subprocess.SubprocessError(ret_code)
+
     os.chdir(old_working_dir)
 
 
@@ -667,16 +684,20 @@ def perform_extraction(odb_fn, out_db_fn):
     os.chdir(working_dir_extract)
     args = ["abaqus.bat", "cae", "noGui=odb_extract.py", "--", str(odb_fn), str(out_db_fn)]
 
-    proc = subprocess.Popen(args)
+    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     ret_code = proc.wait()
-    print(ret_code)
+    if ret_code:
+        raise subprocess.SubprocessError(ret_code)
+
 
 
 def do_opt():
-    working_dir = pathlib.Path(r"C:\Temp\aba\opt-5")
+    working_dir = pathlib.Path(r"C:\Temp\aba\opt-9")
+
+    os.makedirs(working_dir, exist_ok=False)
 
     done = False
-    for i in range(10):
+    for i in range(100):
         inp_fn = working_dir / f'It-{str(i).rjust(6, "0")}.inp'
         odb_fn = inp_fn.with_suffix(".odb")
 
@@ -684,7 +705,7 @@ def do_opt():
             design = make_initial_design(basic_stent_params)
 
         else:
-            design = make_new_generation(old_design, db_fn)
+            design = make_new_generation(old_design, db_fn, title_if_plotting=f"Iteration {i}")
 
             num_new = len(design.active_elements - old_design.active_elements)
             num_removed = len(old_design.active_elements - design.active_elements)
@@ -702,6 +723,8 @@ def do_opt():
 
         if done:
             break
+
+
 
 
 
