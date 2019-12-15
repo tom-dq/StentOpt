@@ -134,16 +134,18 @@ def plot_history(hist_fn):
 
         this_col = all_colours.pop(0)
 
+
         plt.plot(x_axis, y_max, color=this_col, linestyle='--', label=f"{metric_name} Max")
         plt.plot(x_axis, y_mean, color=this_col, label=f"{metric_name} Mean")
 
     plt.gcf().set_size_inches(12, 9)
+    plt.gca().set_yscale('log')
 
     plt.legend()
     plt.show()
 
 if __name__ == "__main__":
-    plot_history(r"C:\Temp\aba\opt-27\History - Copy.db")
+    plot_history(r"C:\Temp\aba\opt-42\History.db")
 
 
 

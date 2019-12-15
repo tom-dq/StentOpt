@@ -35,7 +35,7 @@ MAKE_PLOTS = True
 T_index_to_val = typing.Dict[design.PolarIndex, float]
 def gaussian_smooth(design_space: design.PolarIndex, unsmoothed: T_index_to_val) -> T_index_to_val:
 
-    GAUSSIAN_SIGMA = 1.2  # Was 0.5
+    GAUSSIAN_SIGMA = 2.0  # Was 0.5
 
     # Make a 3D array
     design_space_elements = design.node_to_elem_design_space(design_space)
@@ -80,14 +80,15 @@ def get_keys_of_tail(data: T_index_to_val, tail: Tail, percentile: float) -> typ
     return {key for key, val in data.items() if comp_op(val, cutoff)}
 
 
-def get_top_n_elements(data: T_index_to_val, n_elems: int) -> typing.Set[design.PolarIndex]:
+def get_top_n_elements(data: T_index_to_val, tail: Tail, n_elems: int) -> typing.Set[design.PolarIndex]:
     """Gets the top however many elements"""
 
     def sort_key(index_val):
         return index_val[1]
 
 
-    sorted_data = sorted(data.items(), key=sort_key, reverse=True)
+    rev = True if tail == Tail.top else False
+    sorted_data = sorted(data.items(), key=sort_key, reverse=rev)
     top_n = {idx for idx, val in sorted_data[0:n_elems]}
     return top_n
 
@@ -162,7 +163,6 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str, history_db, 
     overall_rank = {one.elem_id: one.value for one in sec_rank}
 
 
-
     unsmoothed = {elem_num_to_indices[iElem]: val for iElem, val in overall_rank.items()}
     smoothed = gaussian_smooth(old_design.design_space, unsmoothed)
 
@@ -179,8 +179,22 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str, history_db, 
 
         display.render_status(old_design, pos_lookup, smoothed_rank_comps, title_if_plotting)
 
-    new_elems = get_top_n_elements(smoothed, len(old_design.active_elements))
-    return design.StentDesign(design_space=old_design.design_space, active_elements=frozenset(new_elems))
+
+    # Only change over 10% of the elements, say.
+    changeover_num_max = max(1, len(old_design.active_elements)//4)
+
+    top_new_potential_elems = get_top_n_elements(smoothed, Tail.top, changeover_num_max)
+    actual_new_elems = top_new_potential_elems - old_design.active_elements
+    num_new = len(actual_new_elems)
+
+    # Remove however many we added.
+    existing_elems_only_smoothed_rank = {idx: val for idx,val in smoothed.items() if idx in old_design.active_elements}
+    to_go = get_top_n_elements(existing_elems_only_smoothed_rank, Tail.bottom, num_new)
+
+    new_active_elems = (old_design.active_elements | top_new_potential_elems) - to_go
+
+    #new_elems = get_top_n_elements(smoothed, len(old_design.active_elements))
+    return design.StentDesign(design_space=old_design.design_space, active_elements=frozenset(new_active_elems))
 
 
 def make_plot_tests():

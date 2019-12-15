@@ -112,8 +112,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=2,
-        Th=91,  # 31
-        Z=360,  # 120
+        Th=100,  # 31
+        Z=400,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -134,7 +134,7 @@ dylan_r10n1_params = StentParams(
         overshoot_ratio=0.1,
         divs=PolarIndex(
             R=1,
-            Th=46,
+            Th=51,
             Z=2,
         ),
     )
@@ -833,7 +833,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=6', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', 'cpus=8', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -873,7 +873,7 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt():
-    working_dir = pathlib.Path(r"C:\Temp\aba\opt-28")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-43")
     history_db = working_dir / "History.db"
 
     os.makedirs(working_dir, exist_ok=False)
