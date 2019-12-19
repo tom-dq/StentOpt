@@ -17,6 +17,8 @@ from stent_opt.abaqus_model import interaction, node, boundary_condition, sectio
 from stent_opt.struct_opt.design import PolarIndex, StentDesign, node_from_index, generate_node_indices, generate_elem_indices, get_c3d8_connection
 from stent_opt.struct_opt.generation import make_new_generation
 
+from stent_opt.struct_opt import history
+
 working_dir_orig = os.getcwd()
 working_dir_extract = os.path.join(working_dir_orig, "odb_interface")
 
@@ -112,8 +114,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=2,
-        Th=100,  # 31
-        Z=400,  # 120
+        Th=10,  # 31
+        Z=40,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -525,7 +527,7 @@ def _apply_loads_enforced_disp(stent_params: StentParams, model: main.AbaqusMode
     final_radius = stent_params.r_min * stent_params.cylinder.final_radius_ratio
     dr = final_radius - init_radius
 
-    total_time = 3.0
+    total_time = .3  # TODO! Back to 3.0
 
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
@@ -810,6 +812,16 @@ def make_initial_design(stent_params: StentParams) -> StentDesign:
     )
 
 
+def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snapshot) -> StentDesign:
+    elem_num_to_idx = {iElem: idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs)}
+    active_elements_idx = {elem_num_to_idx[iElem] for iElem in snapshot.active_elements}
+
+    return StentDesign(
+        design_space=stent_params.divs,
+        active_elements=frozenset(active_elements_idx),
+    )
+
+
 def make_stent_model(stent_params: StentParams, stent_design: StentDesign, fn_inp: str):
     model = make_a_stent(stent_params, stent_design)
     create_surfaces(stent_params, model)
@@ -833,7 +845,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=8', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', 'cpus=1', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -872,34 +884,71 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 
-def do_opt():
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-43")
+def do_opt(stent_params: StentParams):
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-54")
     history_db = working_dir / "History.db"
 
-    os.makedirs(working_dir, exist_ok=False)
+    os.makedirs(working_dir, exist_ok=True)
+
+    def make_fn(ext: str, iter_num: int):
+        """e.g., iter_num=123 and ext=".inp" """
+        intermediary = working_dir / f'It-{str(iter_num).rjust(6, "0")}.XXX'
+        return intermediary.with_suffix(ext)
+
+    # If we've already started, use the most recent snapshot in the history.
+    with history.History(history_db) as hist:
+        hist.set_design_space(stent_params.divs)
+        restart_i = hist.max_saved_iteration_num()
+
+    start_from_scratch = restart_i is None
+
+    if start_from_scratch:
+        # Do the initial setup from a first model.
+        starting_i = 0
+        fn_inp = make_fn(".inp", starting_i)
+        current_design = make_initial_design(stent_params)
+        make_stent_model(stent_params, current_design, fn_inp)
+        run_model(fn_inp)
+        perform_extraction(make_fn(".odb", starting_i), make_fn(".db", starting_i))
+
+        with history.History(history_db) as hist:
+            elem_indices_to_num = {idx: iElem for iElem, idx in generate_elem_indices(stent_params.divs)}
+            active_elem_nums = (elem_indices_to_num[idx] for idx in current_design.active_elements)
+            snapshot = history.Snapshot(
+                iteration_num=starting_i,
+                filename=str(fn_inp),
+                active_elements=frozenset(active_elem_nums))
+
+            hist.add_snapshot(snapshot)
+
+        main_loop_start_i = 1
+    else:
+        print(f"Restarting from {restart_i}")
+        main_loop_start_i = restart_i
 
     done = False
-    for i in range(1000):
-        inp_fn = working_dir / f'It-{str(i).rjust(6, "0")}.inp'
-        odb_fn = inp_fn.with_suffix(".odb")
+    with history.History(history_db) as hist:
+        old_design = hist.get_most_recent_design()
 
-        if i == 0:
-            design = make_initial_design(basic_stent_params)
+    for i_current in range(main_loop_start_i, 1000):
+        i_prev = i_current - 1
+        fn_inp = make_fn(".inp", i_current)
+        fn_db_prev = make_fn(".db", i_prev)
+        fn_odb = make_fn(".odb", i_current)
 
-        else:
-            design = make_new_generation(old_design, db_fn, history_db, i, inp_fn)
+        design = make_new_generation(fn_db_prev, history_db, i_current, fn_inp)
 
-            num_new = len(design.active_elements - old_design.active_elements)
-            num_removed = len(old_design.active_elements - design.active_elements)
-            print(f"Added: {num_new}\tRemoved: {num_removed}.")
-            if design == old_design:
-                done = True
+        num_new = len(design.active_elements - old_design.active_elements)
+        num_removed = len(old_design.active_elements - design.active_elements)
+        print(f"Added: {num_new}\tRemoved: {num_removed}.")
+        if design == old_design and (i_current != main_loop_start_i):
+            done = True
 
-        make_stent_model(basic_stent_params, design, inp_fn)
-        run_model(inp_fn)
-        db_fn = inp_fn.with_suffix(".db")
-        perform_extraction(odb_fn, db_fn)
+        make_stent_model(stent_params, design, fn_inp)
+        run_model(fn_inp)
 
+        fn_db_current = make_fn(".db", i_current)
+        perform_extraction(fn_odb, fn_db_current)
 
         old_design = design
 
@@ -908,8 +957,6 @@ def do_opt():
 
 
 
-
-
 if __name__ == "__main__":
-    do_opt()
+    do_opt(basic_stent_params)
 

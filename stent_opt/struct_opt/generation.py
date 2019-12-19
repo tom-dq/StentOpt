@@ -106,12 +106,23 @@ def display_design_flat(design_space: design.PolarIndex, data: T_index_to_val):
     plt.show()
 
 
-def make_new_generation(old_design: design.StentDesign, db_fn: str, history_db, iteration_num: int, inp_fn) -> design.StentDesign:
-    title_if_plotting = f"Iteration {iteration_num}"
+def make_new_generation(db_fn: str, history_db, iter_n: int, inp_fn) -> design.StentDesign:
+    iter_n_min_1 = iter_n - 1  # Previous iteration number.
+    title_if_plotting = f"Iteration {iter_n}"
+
+    with history.History(history_db) as hist:
+        design_space = hist.get_design_space()
 
     # Go between num (1234) and idx (5, 6, 7)...
-    elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(old_design.design_space)}
-    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.design_space)}
+    elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(design_space)}
+    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(design_space)}
+
+    with history.History(history_db) as hist:
+        snapshot_n_min_1 = hist.get_snapshot(iter_n_min_1)
+        design_n_min_1 = design.StentDesign(
+            design_space=design_space,
+            active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements))
+        )
 
     # Get the old data.
     with datastore.Datastore(db_fn) as data:
@@ -131,7 +142,7 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str, history_db, 
     all_ranks = [
         list(score.get_primary_ranking_components(peeq_rows)),                    # Elem result based scores
         list(score.get_primary_ranking_components(stress_rows)),
-        list(score.get_primary_ranking_element_distortion(pos_rows, old_design)), # Node position based scores
+        list(score.get_primary_ranking_element_distortion(pos_rows, design_n_min_1)), # Node position based scores
     ]
 
     # Compute a secondary rank from all the first ones.
@@ -140,31 +151,25 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str, history_db, 
 
     # Log the history
     with history.History(history_db) as hist:
-        snapshot = history.Snapshot(
-            iteration_num=iteration_num,
-            filename=str(inp_fn),
-            active_elements=frozenset(elem_indices_to_num[idx] for idx in old_design.active_elements) )
-
         status_checks = (history.StatusCheck(
-            iteration_num=iteration_num,
+            iteration_num=iter_n_min_1,
             elem_num=rank_comp.elem_id,
             metric_name=rank_comp.comp_name,
             metric_val=rank_comp.value) for rank_comp_list in all_ranks for rank_comp in rank_comp_list)
 
-        hist.add_snapshot(snapshot)
         hist.add_many_status_checks(status_checks)
 
 
     if MAKE_PLOTS:
         stress_rank = list(score.get_primary_ranking_components(stress_rows))
         for plot_rank in [stress_rank, sec_rank]:
-            display.render_status(old_design, pos_lookup, plot_rank, title_if_plotting)
+            display.render_status(design_n_min_1, pos_lookup, plot_rank, title_if_plotting)
 
     overall_rank = {one.elem_id: one.value for one in sec_rank}
 
 
     unsmoothed = {elem_num_to_indices[iElem]: val for iElem, val in overall_rank.items()}
-    smoothed = gaussian_smooth(old_design.design_space, unsmoothed)
+    smoothed = gaussian_smooth(design_n_min_1.design_space, unsmoothed)
 
     if MAKE_PLOTS and False:  # Turn this off for now.
         # Dress the smoothed value up as a primary ranking component to display
@@ -177,24 +182,35 @@ def make_new_generation(old_design: design.StentDesign, db_fn: str, history_db, 
                 value=value)
             smoothed_rank_comps.append(one_sec)
 
-        display.render_status(old_design, pos_lookup, smoothed_rank_comps, title_if_plotting)
+        display.render_status(design_n_min_1, pos_lookup, smoothed_rank_comps, title_if_plotting)
 
 
     # Only change over 10% of the elements, say.
-    changeover_num_max = max(1, len(old_design.active_elements)//4)
+    changeover_num_max = max(1, len(design_n_min_1.active_elements)//4)
 
     top_new_potential_elems = get_top_n_elements(smoothed, Tail.top, changeover_num_max)
-    actual_new_elems = top_new_potential_elems - old_design.active_elements
+    actual_new_elems = top_new_potential_elems - design_n_min_1.active_elements
     num_new = len(actual_new_elems)
 
     # Remove however many we added.
-    existing_elems_only_smoothed_rank = {idx: val for idx,val in smoothed.items() if idx in old_design.active_elements}
+    existing_elems_only_smoothed_rank = {idx: val for idx,val in smoothed.items() if idx in design_n_min_1.active_elements}
     to_go = get_top_n_elements(existing_elems_only_smoothed_rank, Tail.bottom, num_new)
 
-    new_active_elems = (old_design.active_elements | top_new_potential_elems) - to_go
+    new_active_elems = (design_n_min_1.active_elements | top_new_potential_elems) - to_go
+
+    # Save the latest design snapshot
+    # Log the history
+    new_active_elem_nums = frozenset(elem_indices_to_num[idx] for idx in new_active_elems)
+    with history.History(history_db) as hist:
+        snapshot = history.Snapshot(
+            iteration_num=iter_n,
+            filename=str(inp_fn),
+            active_elements=new_active_elem_nums)
+
+        hist.add_snapshot(snapshot)
 
     #new_elems = get_top_n_elements(smoothed, len(old_design.active_elements))
-    return design.StentDesign(design_space=old_design.design_space, active_elements=frozenset(new_active_elems))
+    return design.StentDesign(design_space=design_n_min_1.design_space, active_elements=frozenset(new_active_elems))
 
 
 def make_plot_tests():

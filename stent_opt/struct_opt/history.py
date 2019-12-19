@@ -6,6 +6,8 @@ import statistics
 import collections
 import matplotlib.pyplot as plt
 
+from stent_opt.struct_opt import design
+
 class Snapshot(typing.NamedTuple):
     iteration_num: int
     filename: str
@@ -42,9 +44,16 @@ metric_name TEXT,
 metric_val REAL
 )"""
 
+_make_design_space_table = """CREATE TABLE IF NOT EXISTS PolarIndex(
+R INTEGER,
+Th INTEGER,
+Z INTEGER)"""
+
+
 _make_tables = [
     _make_snapshot_table,
     _make_status_check_table,
+    _make_design_space_table,
 ]
 
 class History:
@@ -89,10 +98,91 @@ class History:
             db_forms = (Snapshot(*row) for row in rows)
             yield from (one_db_form.from_db() for one_db_form in db_forms)
 
+    def set_design_space(self, design_space: design.PolarIndex):
+        """Sets the design space. If there is already one in there and it matches, that's a no-op."""
+
+        existing_design_space = self.get_design_space()
+        if not existing_design_space:
+            # Can add it right away.
+            with self.connection:
+                ins_string = self._generate_insert_string_nt_class(design.PolarIndex)
+                self.connection.execute(ins_string, design_space)
+
+        else:
+            if design_space == existing_design_space:
+                pass
+
+            else:
+                raise ValueError(f"New design space {design_space} conflicts with the old one {existing_design_space}.")
+
+    def get_design_space(self) -> typing.Optional[design.PolarIndex]:
+        with self.connection:
+            rows = list(self.connection.execute("SELECT * FROM PolarIndex"))
+            if len(rows) == 0:
+                return None
+
+            elif len(rows) == 1:
+                row = rows[0]
+                return design.PolarIndex(*row)
+
+            else:
+                raise ValueError(len(rows))
+
+    def max_saved_iteration_num(self) -> int:
+        with self.connection:
+            rows = self.connection.execute("SELECT iteration_num FROM Snapshot ORDER BY iteration_num DESC LIMIT 1")
+            l_rows = list(rows)
+
+        if len(l_rows) == 0:
+            return None
+
+        else:
+            return l_rows[0][0]
+
+    def _single_snapshot_row(self, rows) -> typing.Optional[Snapshot]:
+        l_rows = list(rows)
+        if len(l_rows) == 0:
+            return None
+
+        else:
+            # There can be multiple snapshots because of restarts, etc. But they should be the same.
+            final_form = {Snapshot(*row).from_db() for row in rows}
+
+            if len(final_form) > 1:
+                raise ValueError("More than one different Snapshot.")
+
+            return final_form.pop()
+
+    def get_snapshot(self, i: int) -> Snapshot:
+        with self.connection:
+            rows = list(self.connection.execute("SELECT * FROM Snapshot WHERE iteration_num = ?", (i,)))
+            to_return = self._single_snapshot_row(rows)
+
+        if not to_return:
+            raise ValueError(f"Snapshot {i} not found.")
+
+        return to_return
+
+    def get_most_recent_snapshot(self) -> typing.Optional[Snapshot]:
+        with self.connection:
+            rows = list(self.connection.execute("SELECT * FROM Snapshot ORDER BY iteration_num DESC LIMIT 1"))
+            return self._single_snapshot_row(rows)
+
+    def get_most_recent_design(self) -> typing.Optional[design.StentDesign]:
+        maybe_snapshot = self.get_most_recent_snapshot()
+        if maybe_snapshot:
+            design_space = self.get_design_space()
+            elem_num_to_idx = {iElem: idx for iElem, idx in design.generate_elem_indices(design_space)}
+            return design.StentDesign(
+                design_space=design_space,
+                active_elements=frozenset( (elem_num_to_idx[iElem] for iElem in maybe_snapshot.active_elements)),
+            )
+
     def get_status_checks(self) -> typing.Iterable[StatusCheck]:
         with self.connection:
             rows = self.connection.execute("SELECT * FROM StatusCheck ORDER BY iteration_num")
             yield from (StatusCheck(*row) for row in rows)
+
 
 
 
@@ -145,7 +235,7 @@ def plot_history(hist_fn):
     plt.show()
 
 if __name__ == "__main__":
-    plot_history(r"C:\Temp\aba\opt-42\History.db")
+    plot_history(r"E:\Simulations\StentOpt\aba-43\HistoryC.db")
 
 
 
