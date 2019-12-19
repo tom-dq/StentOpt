@@ -114,8 +114,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=2,
-        Th=10,  # 31
-        Z=40,  # 120
+        Th=100,  # 31
+        Z=800,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -762,7 +762,7 @@ def ___include_elem_decider_cavities() -> typing.Callable:
     return check_elem
 
 
-def make_initial_design(stent_params: StentParams) -> StentDesign:
+def make_initial_design_dylan(stent_params: StentParams) -> StentDesign:
     """Makes in initial design (where elements are to be located) based on one of Dylan's early stents."""
     long_strut_width = 0.2
     crossbar_width = 0.25
@@ -811,6 +811,100 @@ def make_initial_design(stent_params: StentParams) -> StentDesign:
         active_elements=frozenset(included_elements)
     )
 
+def make_initial_design_curve(stent_params: StentParams) -> StentDesign:
+    """Simple sin wave"""
+
+    width = 0.05
+    span_ratio = 0.25
+
+    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
+
+    nodes_polar = {
+        iNode: n_p for iNode, n_p in enumerate(generate_nodes_stent_polar(stent_params=stent_params), start=1)
+    }
+
+    def elem_cent_polar(e: element.Element) -> base.RThZ:
+        node_pos = [nodes_polar[iNode] for iNode in e.connection]
+        ave_node_pos = sum(node_pos) / len(node_pos)
+        return ave_node_pos
+
+    # Discretise line (with a bit of overshoot)
+    n_points = 30
+    th_points = [ i / (n_points-1) * stent_params.angle for i in range(-2, n_points+2)]
+    z_mid = 0.5 * stent_params.length
+    z_amp = span_ratio * stent_params.length / 2
+    line_z_th_points = [base.RThZ(
+        r=nominal_radius,
+        theta_deg=th,
+        z=z_mid + z_amp * math.sin(2 * math.pi * th / stent_params.angle)).to_xyz()
+        for th in th_points
+    ]
+
+    def _dist(x1, y1, x2, y2, x3, y3):  # x3,y3 is the point
+        px = x2 - x1
+        py = y2 - y1
+
+        norm = px * px + py * py
+
+        u = ((x3 - x1) * px + (y3 - y1) * py) / float(norm)
+
+        if u > 1:
+            u = 1
+        elif u < 0:
+            u = 0
+
+        x = x1 + u * px
+        y = y1 + u * py
+
+        dx = x - x3
+        dy = y - y3
+
+        # Note: If the actual distance does not matter,
+        # if you only want to compare what this function
+        # returns to other results of this function, you
+        # can just return the squared distance instead
+        # (i.e. remove the sqrt) to gain a little performance
+
+        dist = (dx * dx + dy * dy) ** .5
+
+        return dist
+
+    def point_line_dist(p1: base.XYZ, p2: base.XYZ, x0: base.RThZ):
+        # https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line#Line_defined_by_two_points
+
+        # Put everything at the nominal radius
+        x0_xyz = x0._replace(r=nominal_radius).to_xyz()
+
+        return _dist(p1.x, p1.y, p2.x, p2.y, x0_xyz.x, x0_xyz.y)
+
+        num = abs(
+            (p2.y - p1.y) * x0_xyz.x -
+            (p2.x - p1.x) * x0_xyz.y +
+            p2.x * p1.y -
+            p2.y * p1.x
+        )
+        den = math.sqrt((p2.y - p1.y) ** 2 + (p2.x - p1.x) ** 2)
+        return num / den
+
+
+    def check_elem(e: element.Element) -> bool:
+        this_elem_cent = elem_cent_polar(e)
+
+        def all_dists():
+            for p1, p2 in _pairwise(line_z_th_points):
+                yield point_line_dist(p1, p2, this_elem_cent)
+
+        return min(all_dists()) <= (0.5 * width)
+
+    included_elements = (idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs) if check_elem(e))
+    return StentDesign(
+        design_space=stent_params.divs,
+        active_elements=frozenset(included_elements)
+    )
+
+
+
+make_initial_design = make_initial_design_curve
 
 def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snapshot) -> StentDesign:
     elem_num_to_idx = {iElem: idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs)}
@@ -845,7 +939,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=1', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', 'cpus=4', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -885,7 +979,7 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt(stent_params: StentParams):
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-54")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-70")
     history_db = working_dir / "History.db"
 
     os.makedirs(working_dir, exist_ok=True)
