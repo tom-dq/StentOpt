@@ -235,7 +235,7 @@ def plot_history(hist_fn):
     plt.show()
 
 if __name__ == "__main__":
-    plot_history(r"E:\Simulations\StentOpt\aba-43\HistoryC.db")
+    plot_history(r"E:\Simulations\StentOpt\aba-70\History.db")
 
 
 
