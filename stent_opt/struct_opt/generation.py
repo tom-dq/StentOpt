@@ -7,6 +7,7 @@ import numpy
 import scipy.ndimage
 import matplotlib.pyplot as plt
 
+import stent_opt.struct_opt.design
 from stent_opt.odb_interface import datastore, db_defs
 from stent_opt.struct_opt import design
 from stent_opt.abaqus_model import base
@@ -219,8 +220,8 @@ def make_plot_tests():
 
     db_fn = r"C:\TEMP\aba\opt-5\It-000000.db"
 
-    stent_params = make_stent.basic_stent_params
-    old_design = make_stent.make_initial_design(stent_params)
+    stent_params = stent_opt.struct_opt.design.basic_stent_params
+    old_design = stent_opt.struct_opt.design.make_initial_design(stent_params)
 
     with datastore.Datastore(db_fn) as data:
         all_frames = list(data.get_all_frames())

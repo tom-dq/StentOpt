@@ -1,12 +1,10 @@
 import itertools
-import math
 import os
 import pathlib
 import subprocess
 import typing
 import collections
 import statistics
-import enum
 
 import psutil
 
@@ -14,7 +12,10 @@ from stent_opt.abaqus_model import base, amplitude, step, element, part, materia
 from stent_opt.abaqus_model import instance, main, surface, load, interaction_property
 from stent_opt.abaqus_model import interaction, node, boundary_condition, section
 
-from stent_opt.struct_opt.design import PolarIndex, StentDesign, node_from_index, generate_node_indices, generate_elem_indices, get_c3d8_connection
+from stent_opt.struct_opt.design import StentDesign, generate_elem_indices, GlobalPartNames, GlobalSurfNames, \
+    GlobalNodeSetNames, Actuation, \
+    StentParams, basic_stent_params, generate_nodes_stent_polar, generate_nodes_inner_cyl, generate_nodes_balloon_polar, \
+    generate_brick_elements_all, generate_plate_elements_all, gen_active_pairs, make_initial_design
 from stent_opt.struct_opt.generation import make_new_generation
 
 from stent_opt.struct_opt import history
@@ -28,290 +29,6 @@ try:
 except KeyError:
     pass
 
-
-class GlobalPartNames:
-    STENT = "Stent"
-    BALLOON = "Balloon"
-    CYL_INNER = "CylInner"
-
-
-class GlobalSurfNames:
-    INNER_SURFACE = "InAll"
-    INNER_BOTTOM_HALF = "InLowHalf"
-    INNER_MIN_RADIUS = "InMinR"
-    BALLOON_INNER = "BalInner"
-    CYL_INNER = "CylInner"
-
-
-class GlobalNodeSetNames(enum.Enum):
-    BalloonTheta0 = enum.auto()
-    BalloonThetaMax = enum.auto()
-    BalloonZ0 = enum.auto()
-    BalloonZMax = enum.auto()
-    RigidCyl = enum.auto()
-
-
-class Actuation(enum.Enum):
-    direct_pressure = enum.auto()
-    rigid_cylinder = enum.auto()
-    balloon = enum.auto()
-
-
-class Balloon(typing.NamedTuple):
-    inner_radius_ratio: float
-    overshoot_ratio: float
-    foldover_param: float
-    divs: PolarIndex
-
-
-class Cylinder(typing.NamedTuple):
-    initial_radius_ratio: float
-    final_radius_ratio: float
-    overshoot_ratio: float
-    divs: PolarIndex
-
-
-class StentParams(typing.NamedTuple):
-    angle: float
-    divs: PolarIndex
-    r_min: float
-    r_max: float
-    length: float
-    balloon: typing.Optional[Balloon]
-    cylinder: typing.Optional[Cylinder]
-
-    @property
-    def actuation(self) -> Actuation:
-        has_balloon = bool(self.balloon)
-        has_cyl = bool(self.cylinder)
-
-        if has_balloon and has_cyl:
-            raise ValueError("Both Cyl and Balloon?")
-
-        if has_balloon:
-            return Actuation.balloon
-
-        elif has_cyl:
-            return Actuation.rigid_cylinder
-
-        else:
-            return Actuation.direct_pressure
-
-
-    @property
-    def actuation_surface_ratio(self) -> typing.Optional[float]:
-        if self.actuation == Actuation.rigid_cylinder:
-            return self.r_min * self.cylinder.initial_radius_ratio
-
-        elif self.actuation == Actuation.balloon:
-            return self.r_min * self.balloon.inner_radius_ratio
-
-        else:
-            return None
-
-
-dylan_r10n1_params = StentParams(
-    angle=60,
-    divs=PolarIndex(
-        R=2,
-        Th=31,  # 31
-        Z=120,  # 120
-    ),
-    r_min=0.65,
-    r_max=0.75,
-    length=11.0,
-    balloon=Balloon(
-        inner_radius_ratio=0.85,
-        overshoot_ratio=0.05,
-        foldover_param=0.4,
-        divs=PolarIndex(
-            R=1,
-            Th=20,
-            Z=30,
-        ),
-    ),
-    cylinder=Cylinder(
-        initial_radius_ratio=0.6,
-        final_radius_ratio=3.0,
-        overshoot_ratio=0.1,
-        divs=PolarIndex(
-            R=1,
-            Th=51,
-            Z=2,
-        ),
-    )
-)
-
-basic_stent_params = dylan_r10n1_params._replace(balloon=None)
-def _pairwise(iterable):
-    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
-    a, b = itertools.tee(iterable)
-    next(b, None)
-    return zip(a, b)
-
-
-def _gen_ordinates(n, low, high):
-    vals = [ low + (high - low) * (i/(n-1)) for i in range(n)]
-    return vals
-
-
-def generate_nodes_stent_polar(stent_params: StentParams) -> typing.Dict[int, base.RThZ]:
-
-    def gen_nodes():
-        r_vals = _gen_ordinates(stent_params.divs.R, stent_params.r_min, stent_params.r_max)
-        th_vals = _gen_ordinates(stent_params.divs.Th, 0.0, stent_params.angle)
-        z_vals = _gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
-
-        for iNode, (r, th, z) in enumerate(itertools.product(r_vals, th_vals, z_vals), start=1):
-            polar_coord = base.RThZ(r, th, z)
-            yield iNode, polar_coord
-
-    return {iNode: n_p for iNode, n_p in gen_nodes()}
-
-
-def generate_nodes_inner_cyl(stent_params: StentParams) -> typing.Dict[int, base.RThZ]:
-    if stent_params.cylinder.divs.R != 1:
-        raise ValueError(stent_params.cylinder.divs.R)
-
-    def gen_nodes():
-        theta_half_overshoot = 0.5 * stent_params.angle * stent_params.cylinder.overshoot_ratio
-        z_half_overshoot = 0.5 * stent_params.length * stent_params.cylinder.overshoot_ratio
-
-        r_val = stent_params.actuation_surface_ratio
-        th_vals = _gen_ordinates(stent_params.cylinder.divs.Th, -theta_half_overshoot, stent_params.angle+theta_half_overshoot)
-        z_vals = _gen_ordinates(stent_params.cylinder.divs.Z, -z_half_overshoot, stent_params.length+z_half_overshoot)
-
-        for iNode, (th, z) in enumerate(itertools.product(th_vals, z_vals), start=1):
-            polar_coord = base.RThZ(r_val, th, z)
-            yield iNode, polar_coord
-
-    return {iNode: n_p for iNode, n_p in gen_nodes()}
-
-
-def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
-    typing.Tuple[base.RThZ, typing.Set[GlobalNodeSetNames]]]:
-
-    # Theta values fall into one of a few potential segments.
-    RATIO_A = 0.05
-    RATIO_B = 0.15
-    RATIO_HEIGHT = 0.1
-
-    # Zero-to-one to radius-ratio
-    theta_mapping_unit = [
-        (0.0, 0.0),
-        (RATIO_A, 0.0),
-        (RATIO_A + RATIO_B + stent_params.balloon.foldover_param, RATIO_HEIGHT * stent_params.balloon.foldover_param),
-        (1.0 - RATIO_A - RATIO_B - stent_params.balloon.foldover_param, -1 * RATIO_HEIGHT * stent_params.balloon.foldover_param),
-        (1.0 - RATIO_A, 0.0),
-        (1.0, 0.0),
-    ]
-
-    nominal_r = stent_params.actuation_surface_ratio
-    theta_half_overshoot = 0.5 * stent_params.angle * stent_params.balloon.overshoot_ratio
-    theta_total_span = stent_params.angle + 2*theta_half_overshoot
-    theta_mapping = [
-        ( -theta_half_overshoot + th*theta_total_span, nominal_r * (1.0+rat)) for th, rat in theta_mapping_unit
-    ]
-
-    # Segments are bounded by endpoints in polar coords
-    polar_points = [base.RThZ(r=r, theta_deg=theta, z=0.0) for theta, r in theta_mapping]
-    segments = [(p1, p2) for p1, p2 in _pairwise(polar_points)]
-
-    # Try to get the nodal spacing more or less even.
-    segment_lengths = [abs(p1.to_xyz()-p2.to_xyz()) for p1, p2 in segments]
-    total_length = sum(segment_lengths)
-    nominal_theta_spacing = total_length / stent_params.balloon.divs.Th
-
-    r_th_points = []
-
-    # Might need to adjust some of the numbers of points to match the spacing requirements.
-    planned_num_points = {}
-
-    for idx, (p1, p2) in enumerate(segments):
-        this_length = abs(p1.to_xyz()-p2.to_xyz())
-        planned_num_points[idx] = round(this_length/nominal_theta_spacing)
-
-    # The plus one is because the balloon spacing is based on the element, not node indices
-    out_by_num_points = (sum(planned_num_points.values()) + 1) - stent_params.balloon.divs.Th
-
-    if out_by_num_points == 0:
-        pass
-
-    elif abs(out_by_num_points) == 1:
-        # Change the middle one
-        planned_num_points[2] -= out_by_num_points
-
-    elif abs(out_by_num_points) == 2:
-        # Change the two either side
-        adjustment = out_by_num_points // 2
-        planned_num_points[1] -= adjustment
-        planned_num_points[2] -= adjustment
-
-    elif abs(out_by_num_points) == 3:
-        # Change the two either side and the middle
-        adjustment = out_by_num_points // 3
-        planned_num_points[1] -= adjustment
-        planned_num_points[2] -= adjustment
-        planned_num_points[3] -= adjustment
-
-    else:
-        raise ValueError(f"Need to adjust {abs(out_by_num_points)} points?")
-
-    for idx, (p1, p2) in enumerate(segments):
-        diff = p2-p1
-
-        num_points = planned_num_points[idx]
-        for one_int_point in range(num_points):
-            r_th_points.append(p1 + (one_int_point/num_points * diff))
-
-    # Add on the final point
-    r_th_points.append(polar_points[-1])
-
-    if len(r_th_points) != stent_params.balloon.divs.Th:
-        raise ValueError("Didn't satisfy the spacing requirements.")
-
-    z_overshoot = 0.5 * stent_params.length * (stent_params.balloon.overshoot_ratio)
-    z_vals = _gen_ordinates(stent_params.balloon.divs.Z, -z_overshoot, stent_params.length+z_overshoot)
-    for (idx_r, r_th), (idx_z, z) in itertools.product(enumerate(r_th_points), enumerate(z_vals)):
-        boundary_set = set()
-        if idx_r == 0: boundary_set.add(GlobalNodeSetNames.BalloonTheta0)
-        if idx_r == len(r_th_points) - 1: boundary_set.add(GlobalNodeSetNames.BalloonThetaMax)
-        if idx_z == 0: boundary_set.add(GlobalNodeSetNames.BalloonZ0)
-        if idx_z == len(z_vals) - 1: boundary_set.add(GlobalNodeSetNames.BalloonZMax)
-
-        this_point = r_th._replace(z=z)
-        yield this_point, boundary_set
-
-
-def generate_brick_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
-    for iElem, one_elem_idx in generate_elem_indices(divs):
-        yield one_elem_idx, iElem, element.Element(
-            name=element.ElemType.C3D8R,
-            connection=get_c3d8_connection(divs, one_elem_idx),
-        )
-
-def generate_plate_elements_all(divs: PolarIndex, elem_type: element.ElemType) -> typing.Iterable[typing.Tuple[int, element.Element]]:
-
-    if divs.R != 1:
-        raise ValueError(divs)
-
-    def get_iNode(iR, iTh, iZ):
-        return node_from_index(divs, iR, iTh, iZ)
-
-    divs_one_extra_thickness = divs._replace(R=divs.R+1)
-
-    for iElem, i in generate_elem_indices(divs_one_extra_thickness):
-        connection = [
-            get_iNode(i.R, i.Th, i.Z),
-            get_iNode(i.R, i.Th+1, i.Z),
-            get_iNode(i.R, i.Th+1, i.Z+1),
-            get_iNode(i.R, i.Th, i.Z+1),
-        ]
-
-        yield iElem, element.Element(
-            name=elem_type,
-            connection=tuple(connection),
-        )
 
 def make_a_stent(stent_params: StentParams, stent_design: StentDesign):
 
@@ -614,15 +331,18 @@ def add_interaction(stent_params: StentParams, model: main.AbaqusModel):
     if stent_params.actuation != Actuation.direct_pressure:
 
         if stent_params.actuation == Actuation.balloon:
-            inner_surf = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).surfaces[GlobalSurfNames.BALLOON_INNER]
+            inner_surf = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).surfaces[
+                GlobalSurfNames.BALLOON_INNER]
 
         elif stent_params.actuation == Actuation.rigid_cylinder:
-            inner_surf = model.get_only_instance_base_part_name(GlobalPartNames.CYL_INNER).surfaces[GlobalSurfNames.CYL_INNER]
+            inner_surf = model.get_only_instance_base_part_name(GlobalPartNames.CYL_INNER).surfaces[
+                GlobalSurfNames.CYL_INNER]
 
         else:
             raise ValueError(stent_params.actuation)
 
-        outer_surf = model.get_only_instance_base_part_name(GlobalPartNames.STENT).surfaces[GlobalSurfNames.INNER_SURFACE]
+        outer_surf = model.get_only_instance_base_part_name(GlobalPartNames.STENT).surfaces[
+            GlobalSurfNames.INNER_SURFACE]
 
 
         int_prop = interaction_property.SurfaceInteraction(
@@ -648,28 +368,6 @@ def add_interaction(stent_params: StentParams, model: main.AbaqusModel):
 
         model.interactions.add(one_int_general)
 
-
-def gen_active_pairs(stent_params: StentParams, active_node_nums):
-    nodes_on_bound = {
-        iNode: i for iNode, i in generate_node_indices(stent_params.divs)
-        if (i.Th == 0 or i.Th == stent_params.divs.Th - 1) and iNode in active_node_nums
-    }
-
-    pairs = collections.defaultdict(set)
-    for iNode, i in nodes_on_bound.items():
-        key = (i.R, i.Z)
-        pairs[key].add(iNode)
-
-    for pair_of_nodes in pairs.values():
-        if len(pair_of_nodes) == 1:
-            pass  # Only have elements on one side.
-
-        elif len(pair_of_nodes) == 2:
-            #if all(iNode in stent_part.nodes for iNode in pair_of_nodes):
-            yield tuple(pair_of_nodes)
-
-        else:
-            raise ValueError(pair_of_nodes)
 
 def apply_boundaries(stent_params: StentParams, model: main.AbaqusModel):
     """Find the node pairs and couple them, and apply sym conditions."""
@@ -760,145 +458,6 @@ def ___include_elem_decider_cavities() -> typing.Callable:
 
     return check_elem
 
-
-def make_initial_design_dylan(stent_params: StentParams) -> StentDesign:
-    """Makes in initial design (where elements are to be located) based on one of Dylan's early stents."""
-    long_strut_width = 0.2
-    crossbar_width = 0.25
-
-    long_strut_angs = [0.25, 0.75]
-    long_strut_cents = [ratio * stent_params.angle for ratio in long_strut_angs]
-
-    theta_struts_h1 = [0.25* stent_params.length, 0.75 * stent_params.length]
-    theta_struts_h2 = [0.0, 0.5 * stent_params.length, stent_params.length]
-
-    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
-
-    nodes_polar = generate_nodes_stent_polar(stent_params=stent_params)
-
-    def elem_cent_polar(e: element.Element) -> base.RThZ:
-        node_pos = [nodes_polar[iNode] for iNode in e.connection]
-        ave_node_pos = sum(node_pos) / len(node_pos)
-        return ave_node_pos
-
-
-    def check_elem(e: element.Element) -> bool:
-        this_elem_cent = elem_cent_polar(e)
-
-        # Check if on the long struts first
-        long_strut_dist_ang = [abs(this_elem_cent.theta_deg - one_ang) for one_ang in long_strut_cents]
-        linear_distance = math.radians(min(long_strut_dist_ang)) * nominal_radius
-        if linear_distance <= 0.5 * long_strut_width:
-            return True
-
-        # If not, check if on the cross bars.
-        in_first_half = long_strut_cents[0] < this_elem_cent.theta_deg <= long_strut_cents[1]
-        theta_struts = theta_struts_h1 if in_first_half else theta_struts_h2
-
-        theta_strut_dist = [abs(this_elem_cent.z - one_z) for one_z in theta_struts]
-        if min(theta_strut_dist) <= 0.5 * crossbar_width:
-            return True
-
-        return False
-
-    included_elements = (idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs) if check_elem(e))
-    return StentDesign(
-        design_space=stent_params.divs,
-        active_elements=frozenset(included_elements)
-    )
-
-def make_initial_design_curve(stent_params: StentParams) -> StentDesign:
-    """Simple sin wave"""
-
-    width = 0.05
-    span_ratio = 0.25
-
-    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
-
-    nodes_polar = generate_nodes_stent_polar(stent_params=stent_params)
-
-    def elem_cent_polar(e: element.Element) -> base.RThZ:
-        node_pos = [nodes_polar[iNode] for iNode in e.connection]
-        ave_node_pos = sum(node_pos) / len(node_pos)
-        return ave_node_pos
-
-    # Discretise line (with a bit of overshoot)
-    n_points = 30
-    th_points = [ i / (n_points-1) * stent_params.angle for i in range(-2, n_points+2)]
-    z_mid = 0.5 * stent_params.length
-    z_amp = span_ratio * stent_params.length / 2
-    line_z_th_points = [base.RThZ(
-        r=nominal_radius,
-        theta_deg=th,
-        z=z_mid + z_amp * math.sin(2 * math.pi * th / stent_params.angle)).to_xyz()
-        for th in th_points
-    ]
-
-    def _dist(x1, y1, x2, y2, x3, y3):  # x3,y3 is the point
-        px = x2 - x1
-        py = y2 - y1
-
-        norm = px * px + py * py
-
-        u = ((x3 - x1) * px + (y3 - y1) * py) / float(norm)
-
-        if u > 1:
-            u = 1
-        elif u < 0:
-            u = 0
-
-        x = x1 + u * px
-        y = y1 + u * py
-
-        dx = x - x3
-        dy = y - y3
-
-        # Note: If the actual distance does not matter,
-        # if you only want to compare what this function
-        # returns to other results of this function, you
-        # can just return the squared distance instead
-        # (i.e. remove the sqrt) to gain a little performance
-
-        dist = (dx * dx + dy * dy) ** .5
-
-        return dist
-
-    def point_line_dist(p1: base.XYZ, p2: base.XYZ, x0: base.RThZ):
-        # https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line#Line_defined_by_two_points
-
-        # Put everything at the nominal radius
-        x0_xyz = x0._replace(r=nominal_radius).to_xyz()
-
-        return _dist(p1.x, p1.y, p2.x, p2.y, x0_xyz.x, x0_xyz.y)
-
-        num = abs(
-            (p2.y - p1.y) * x0_xyz.x -
-            (p2.x - p1.x) * x0_xyz.y +
-            p2.x * p1.y -
-            p2.y * p1.x
-        )
-        den = math.sqrt((p2.y - p1.y) ** 2 + (p2.x - p1.x) ** 2)
-        return num / den
-
-
-    def check_elem(e: element.Element) -> bool:
-        this_elem_cent = elem_cent_polar(e)
-
-        def all_dists():
-            for p1, p2 in _pairwise(line_z_th_points):
-                yield point_line_dist(p1, p2, this_elem_cent)
-
-        return min(all_dists()) <= (0.5 * width)
-
-    included_elements = (idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs) if check_elem(e))
-    return StentDesign(
-        design_space=stent_params.divs,
-        active_elements=frozenset(included_elements)
-    )
-
-
-
-make_initial_design = make_initial_design_curve
 
 def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snapshot) -> StentDesign:
     elem_num_to_idx = {iElem: idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs)}
@@ -1046,5 +605,8 @@ def do_opt(stent_params: StentParams):
 
 
 if __name__ == "__main__":
-    do_opt(basic_stent_params)
+    for a, b in basic_stent_params.to_db_strings():
+        print(a, b)
+
+    # do_opt(basic_stent_params)
 

@@ -5,9 +5,8 @@ import itertools
 import networkx
 
 from stent_opt.struct_opt import design
-from stent_opt import make_stent
 
-def element_nums_to_nodes_within(stent_params: make_stent.StentParams, distance: float, stent_design: design.StentDesign):
+def element_nums_to_nodes_within(stent_params: design.StentParams, distance: float, stent_design: design.StentDesign):
     """Gets elem -> list_of_nodes within some connectivity threshold."""
 
     elem_num_to_idx = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_design.design_space)}
@@ -17,7 +16,7 @@ def element_nums_to_nodes_within(stent_params: make_stent.StentParams, distance:
     active_nodes = set()
     node_hops = dict()
 
-    node_positions = make_stent.generate_nodes_stent_polar(stent_params)
+    node_positions = design.generate_nodes_stent_polar(stent_params)
 
     for node_list in elem_idx_to_nodes.values():
 
@@ -36,7 +35,7 @@ def element_nums_to_nodes_within(stent_params: make_stent.StentParams, distance:
         graph.add_edge(n1, n2, weight=d_xyz)
 
     # Add in the over-the-reflected-boundary nodes with zero weight.
-    for n1, n2 in make_stent.gen_active_pairs(stent_params, active_nodes):
+    for n1, n2 in design.gen_active_pairs(stent_params, active_nodes):
         graph.add_edge(n1, n2, weight=0.0)
 
     # Get the node-to-nodes_within_radius
@@ -56,8 +55,8 @@ def element_nums_to_nodes_within(stent_params: make_stent.StentParams, distance:
 
 
 if __name__ == "__main__":
-    stent_params = make_stent.basic_stent_params
-    stent_design = make_stent.make_initial_design(stent_params)
+    stent_params = design.basic_stent_params
+    stent_design = design.make_initial_design(stent_params)
 
     aaa = element_nums_to_nodes_within(stent_params, 0.2, stent_design)
     for k, v in aaa.items():
