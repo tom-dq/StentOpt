@@ -532,7 +532,7 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt(stent_params: StentParams):
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-70")
+    working_dir = pathlib.Path(r"C:\TEMP\aba\aba-71")
     history_db = working_dir / "History.db"
 
     os.makedirs(working_dir, exist_ok=True)
@@ -545,6 +545,7 @@ def do_opt(stent_params: StentParams):
     # If we've already started, use the most recent snapshot in the history.
     with history.History(history_db) as hist:
         hist.set_design_space(stent_params.divs)
+        hist.set_stent_params(stent_params)
         restart_i = hist.max_saved_iteration_num()
 
     start_from_scratch = restart_i is None
@@ -605,14 +606,5 @@ def do_opt(stent_params: StentParams):
 
 
 if __name__ == "__main__":
-    bits = []
-    for a, b in basic_stent_params.to_db_strings():
-        print(a, b)
-        bits.append( (a, b))
-
-    reconstituted_stent_params = StentParams.from_db_strings(bits)
-
-    print(reconstituted_stent_params)
-    print(reconstituted_stent_params == basic_stent_params)
-    # do_opt(basic_stent_params)
+    do_opt(basic_stent_params)
 

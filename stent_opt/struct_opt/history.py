@@ -31,6 +31,11 @@ class StatusCheck(typing.NamedTuple):
     metric_val: float
 
 
+class ParamKeyValue(typing.NamedTuple):
+    param_name: str
+    param_value: typing.Optional[str]
+
+
 _make_snapshot_table = """CREATE TABLE IF NOT EXISTS Snapshot(
 iteration_num INTEGER,
 filename TEXT,
@@ -50,10 +55,15 @@ Th INTEGER,
 Z INTEGER)"""
 
 
+_make_parameters_table_ = """CREATE TABLE IF NOT EXISTS ParamKeyValue(
+param_name TEXT UNIQUE,
+param_value TEXT)"""
+
 _make_tables = [
     _make_snapshot_table,
     _make_status_check_table,
     _make_design_space_table,
+    _make_parameters_table_,
 ]
 
 class History:
@@ -127,6 +137,22 @@ class History:
 
             else:
                 raise ValueError(len(rows))
+
+    def set_stent_params(self, stent_params: design.StentParams):
+        """Save the model parameters"""
+        data_rows = stent_params.to_db_strings()
+        ins_string = self._generate_insert_string_nt_class(ParamKeyValue)
+        with self.connection:
+            self.connection.executemany(ins_string, data_rows)
+
+    def get_stent_params(self) -> design.StentParams:
+        """Get the model parameters"""
+        with self.connection:
+            rows = self.connection.execute("SELECT * FROM ParamKeyValue")
+            l_rows = list(rows)
+
+        return design.StentParams.from_db_strings(l_rows)
+
 
     def max_saved_iteration_num(self) -> int:
         with self.connection:
