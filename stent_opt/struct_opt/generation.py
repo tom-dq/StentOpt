@@ -1,3 +1,4 @@
+import pathlib
 import typing
 import enum
 import operator
@@ -220,7 +221,11 @@ def make_plot_tests():
 
     db_fn = r"E:\Simulations\StentOpt\aba-72\It-000000.db"
 
-    stent_params = stent_opt.struct_opt.design.basic_stent_params
+    db_history = pathlib.Path(db_fn).with_name("History.db")
+    with history.History(db_history) as hist:
+        stent_params = hist.get_stent_params()
+
+    # stent_params = stent_opt.struct_opt.design.basic_stent_params
     old_design = stent_opt.struct_opt.design.make_initial_design(stent_params)
 
     with datastore.Datastore(db_fn) as data:

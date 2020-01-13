@@ -1,4 +1,5 @@
 import collections
+import statistics
 import typing
 
 import numpy
@@ -59,9 +60,7 @@ def get_primary_ranking_element_distortion(old_design: design.StentDesign, nt_ro
 
     elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.stent_params.divs)}
 
-    node_to_pos = {
-        row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in nt_rows_node_pos
-    }
+    node_to_pos = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in nt_rows_node_pos}
 
     for elem_idx in old_design.active_elements:
         elem_num = elem_indices_to_num[elem_idx]
@@ -79,8 +78,35 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
     STENCIL_LENGTH = 0.2  # mm
 
     elem_to_nodes_in_range = graph_connection.element_nums_to_nodes_within(old_design.stent_params, STENCIL_LENGTH, old_design)
+    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.stent_params.divs) if idx in old_design.active_elements}
 
-    print(elem_to_nodes_in_range)
+    node_to_pos_deformed = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in nt_rows_node_pos}
+
+    node_to_pos_original = {
+        iNode: r_th_z.to_xyz() for iNode, r_th_z in
+        design.generate_nodes_stent_polar(stent_params=old_design.stent_params).items() if
+        iNode in node_to_pos_deformed
+    }
+
+    node_num_to_contribs = collections.defaultdict(list)
+    for elem_idx, node_num_set in elem_to_nodes_in_range.items():
+        orig = {iNode: xyz for iNode, xyz in node_to_pos_original.items() if iNode in node_num_set}
+        deformed = {iNode: xyz for iNode, xyz in node_to_pos_deformed.items() if iNode in node_num_set}
+        this_val = deformation_grad.nodal_deformation(STENCIL_LENGTH, orig, deformed)
+        for node_num in node_num_set:
+            node_num_to_contribs[node_num].append(this_val)
+
+    node_num_to_overall_ave = {node_num: statistics.mean(data) for node_num, data in node_num_to_contribs.items()}
+
+    elem_idx_to_nodes = {idx: design.get_c3d8_connection(old_design.stent_params.divs, idx) for idx in elem_indices_to_num}
+
+    for elem_idx, elem_num in elem_indices_to_num.items():
+        nodal_vals = [node_num_to_overall_ave[node_num] for node_num in elem_idx_to_nodes[elem_idx]]
+        yield PrimaryRankingComponent(
+            comp_name="LocalDeformation",
+            elem_id=elem_num,
+            value=statistics.mean(nodal_vals),
+        )
 
 
 def _max_delta_angle_of_element(node_to_pos: typing.Dict[int, base.XYZ], elem_connection) -> float:

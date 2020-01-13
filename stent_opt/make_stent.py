@@ -533,7 +533,7 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt(stent_params: StentParams):
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-72")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-73")
     history_db = working_dir / "History.db"
 
     os.makedirs(working_dir, exist_ok=True)
