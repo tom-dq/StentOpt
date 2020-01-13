@@ -114,8 +114,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=2,
-        Th=100,  # 31
-        Z=800,  # 120
+        Th=31,  # 31
+        Z=120,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -143,7 +143,6 @@ dylan_r10n1_params = StentParams(
 )
 
 basic_stent_params = dylan_r10n1_params._replace(balloon=None)
-
 def _pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2, s3), ..."
     a, b = itertools.tee(iterable)
@@ -155,32 +154,38 @@ def _gen_ordinates(n, low, high):
     vals = [ low + (high - low) * (i/(n-1)) for i in range(n)]
     return vals
 
-def generate_nodes_stent_polar(stent_params: StentParams) -> typing.Iterable[base.RThZ]:
+
+def generate_nodes_stent_polar(stent_params: StentParams) -> typing.Dict[int, base.RThZ]:
+
+    def gen_nodes():
+        r_vals = _gen_ordinates(stent_params.divs.R, stent_params.r_min, stent_params.r_max)
+        th_vals = _gen_ordinates(stent_params.divs.Th, 0.0, stent_params.angle)
+        z_vals = _gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
+
+        for iNode, (r, th, z) in enumerate(itertools.product(r_vals, th_vals, z_vals), start=1):
+            polar_coord = base.RThZ(r, th, z)
+            yield iNode, polar_coord
+
+    return {iNode: n_p for iNode, n_p in gen_nodes()}
 
 
-    r_vals = _gen_ordinates(stent_params.divs.R, stent_params.r_min, stent_params.r_max)
-    th_vals = _gen_ordinates(stent_params.divs.Th, 0.0, stent_params.angle)
-    z_vals = _gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
-
-    for r, th, z in itertools.product(r_vals, th_vals, z_vals):
-        polar_coord = base.RThZ(r, th, z)
-        yield polar_coord
-
-
-def generate_nodes_inner_cyl(stent_params: StentParams) -> typing.Iterable[base.RThZ]:
+def generate_nodes_inner_cyl(stent_params: StentParams) -> typing.Dict[int, base.RThZ]:
     if stent_params.cylinder.divs.R != 1:
         raise ValueError(stent_params.cylinder.divs.R)
 
-    theta_half_overshoot = 0.5 * stent_params.angle * stent_params.cylinder.overshoot_ratio
-    z_half_overshoot = 0.5 * stent_params.length * stent_params.cylinder.overshoot_ratio
+    def gen_nodes():
+        theta_half_overshoot = 0.5 * stent_params.angle * stent_params.cylinder.overshoot_ratio
+        z_half_overshoot = 0.5 * stent_params.length * stent_params.cylinder.overshoot_ratio
 
-    r_val = stent_params.actuation_surface_ratio
-    th_vals = _gen_ordinates(stent_params.cylinder.divs.Th, -theta_half_overshoot, stent_params.angle+theta_half_overshoot)
-    z_vals = _gen_ordinates(stent_params.cylinder.divs.Z, -z_half_overshoot, stent_params.length+z_half_overshoot)
+        r_val = stent_params.actuation_surface_ratio
+        th_vals = _gen_ordinates(stent_params.cylinder.divs.Th, -theta_half_overshoot, stent_params.angle+theta_half_overshoot)
+        z_vals = _gen_ordinates(stent_params.cylinder.divs.Z, -z_half_overshoot, stent_params.length+z_half_overshoot)
 
-    for th, z in itertools.product(th_vals, z_vals):
-        polar_coord = base.RThZ(r_val, th, z)
-        yield polar_coord
+        for iNode, (th, z) in enumerate(itertools.product(th_vals, z_vals), start=1):
+            polar_coord = base.RThZ(r_val, th, z)
+            yield iNode, polar_coord
+
+    return {iNode: n_p for iNode, n_p in gen_nodes()}
 
 
 def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
@@ -336,9 +341,7 @@ def make_a_stent(stent_params: StentParams, stent_design: StentDesign):
             common_section=common_section,
         )
 
-        nodes_polar = {
-            iNode: n_p for iNode, n_p in enumerate(generate_nodes_stent_polar(stent_params=stent_params), start=1)
-        }
+        nodes_polar = generate_nodes_stent_polar(stent_params=stent_params)
 
         for iNode, one_node_polar in nodes_polar.items():
             stent_part.add_node_validated(iNode, one_node_polar.to_xyz())
@@ -415,9 +418,7 @@ def make_a_stent(stent_params: StentParams, stent_design: StentDesign):
             common_section=common_section_cyl,
         )
 
-        nodes_polar = {
-            iNode: n_p for iNode, n_p in enumerate(generate_nodes_inner_cyl(stent_params=stent_params), start=1)
-        }
+        nodes_polar = generate_nodes_inner_cyl(stent_params=stent_params)
 
         elems_all = {iElem: e for iElem, e in generate_plate_elements_all(divs=stent_params.cylinder.divs, elem_type=element.ElemType.SFM3D4R)}
 
@@ -648,6 +649,28 @@ def add_interaction(stent_params: StentParams, model: main.AbaqusModel):
         model.interactions.add(one_int_general)
 
 
+def gen_active_pairs(stent_params: StentParams, active_node_nums):
+    nodes_on_bound = {
+        iNode: i for iNode, i in generate_node_indices(stent_params.divs)
+        if (i.Th == 0 or i.Th == stent_params.divs.Th - 1) and iNode in active_node_nums
+    }
+
+    pairs = collections.defaultdict(set)
+    for iNode, i in nodes_on_bound.items():
+        key = (i.R, i.Z)
+        pairs[key].add(iNode)
+
+    for pair_of_nodes in pairs.values():
+        if len(pair_of_nodes) == 1:
+            pass  # Only have elements on one side.
+
+        elif len(pair_of_nodes) == 2:
+            #if all(iNode in stent_part.nodes for iNode in pair_of_nodes):
+            yield tuple(pair_of_nodes)
+
+        else:
+            raise ValueError(pair_of_nodes)
+
 def apply_boundaries(stent_params: StentParams, model: main.AbaqusModel):
     """Find the node pairs and couple them, and apply sym conditions."""
 
@@ -663,31 +686,7 @@ def apply_boundaries(stent_params: StentParams, model: main.AbaqusModel):
     if not uncoupled_nodes_in_part:
         raise ValueError()
 
-    def gen_active_pairs():
-        nodes_on_bound = {
-            iNode: i for iNode, i in generate_node_indices(stent_params.divs)
-            if (i.Th == 0 or i.Th == stent_params.divs.Th-1) and iNode in uncoupled_nodes_in_part
-        }
-
-        pairs = collections.defaultdict(set)
-        for iNode, i in nodes_on_bound.items():
-
-            key = (i.R, i.Z)
-            pairs[key].add(iNode)
-
-        for pair_of_nodes in pairs.values():
-            if len(pair_of_nodes) == 1:
-                pass  # Only have elements on one side.
-
-            elif len(pair_of_nodes) == 2:
-                if all(iNode in stent_part.nodes for iNode in pair_of_nodes):
-                    yield tuple(pair_of_nodes)
-
-            else:
-                raise ValueError(pair_of_nodes)
-
-
-    for n1, n2 in gen_active_pairs():
+    for n1, n2 in gen_active_pairs(stent_params, uncoupled_nodes_in_part):
         stent_instance.add_node_couple(n1, n2, False)
         uncoupled_nodes_in_part.remove(n1)
         uncoupled_nodes_in_part.remove(n2)
@@ -775,10 +774,7 @@ def make_initial_design_dylan(stent_params: StentParams) -> StentDesign:
 
     nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
 
-    nodes_polar = {
-        iNode: n_p for iNode, n_p in enumerate(generate_nodes_stent_polar(stent_params=stent_params), start=1)
-    }
-
+    nodes_polar = generate_nodes_stent_polar(stent_params=stent_params)
 
     def elem_cent_polar(e: element.Element) -> base.RThZ:
         node_pos = [nodes_polar[iNode] for iNode in e.connection]
@@ -819,9 +815,7 @@ def make_initial_design_curve(stent_params: StentParams) -> StentDesign:
 
     nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
 
-    nodes_polar = {
-        iNode: n_p for iNode, n_p in enumerate(generate_nodes_stent_polar(stent_params=stent_params), start=1)
-    }
+    nodes_polar = generate_nodes_stent_polar(stent_params=stent_params)
 
     def elem_cent_polar(e: element.Element) -> base.RThZ:
         node_pos = [nodes_polar[iNode] for iNode in e.connection]

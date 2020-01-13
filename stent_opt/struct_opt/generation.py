@@ -142,7 +142,7 @@ def make_new_generation(db_fn: str, history_db, iter_n: int, inp_fn) -> design.S
     all_ranks = [
         list(score.get_primary_ranking_components(peeq_rows)),                    # Elem result based scores
         list(score.get_primary_ranking_components(stress_rows)),
-        list(score.get_primary_ranking_element_distortion(pos_rows, design_n_min_1)), # Node position based scores
+        list(score.get_primary_ranking_element_distortion(design_n_min_1, pos_rows)), # Node position based scores
     ]
 
     # Compute a secondary rank from all the first ones.

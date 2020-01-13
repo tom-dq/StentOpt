@@ -5,7 +5,7 @@ import numpy
 
 from stent_opt.abaqus_model import base
 from stent_opt.odb_interface import db_defs
-from stent_opt.struct_opt import design, deformation_grad
+from stent_opt.struct_opt import design, deformation_grad, graph_connection
 
 FACES_OF_HEX = (
     (0, 1, 2, 3),
@@ -55,7 +55,7 @@ def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingCom
         raise ValueError(nt_row)
 
 
-def get_primary_ranking_element_distortion(nt_rows_node_pos, old_design: design.StentDesign) -> typing.Iterable[PrimaryRankingComponent]:
+def get_primary_ranking_element_distortion(old_design: design.StentDesign, nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
 
     elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.design_space)}
 
@@ -73,10 +73,14 @@ def get_primary_ranking_element_distortion(nt_rows_node_pos, old_design: design.
         )
 
 
-def get_primary_ranking_macro_deformation(nt_rows_node_pos, old_design: design.StentDesign) -> typing.Iterable[PrimaryRankingComponent]:
+def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets the local-ish deformation within a given number of elements, by removing the rigid body rotation/translation."""
 
     STENCIL_LENGTH = 0.2  # mm
+
+    # TODO - figure out the best way of storing all the design info (like the dimensions) in something like the "design space".
+    
+    elem_to_nodes_in_range = graph_connection.element_nums_to_nodes_within(stent_params, STENCIL_LENGTH, old_design)
 
 
 
