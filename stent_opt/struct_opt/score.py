@@ -57,7 +57,7 @@ def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingCom
 
 def get_primary_ranking_element_distortion(old_design: design.StentDesign, nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
 
-    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.design_space)}
+    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.stent_params.divs)}
 
     node_to_pos = {
         row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in nt_rows_node_pos
@@ -65,7 +65,7 @@ def get_primary_ranking_element_distortion(old_design: design.StentDesign, nt_ro
 
     for elem_idx in old_design.active_elements:
         elem_num = elem_indices_to_num[elem_idx]
-        elem_connection = design.get_c3d8_connection(old_design.design_space, elem_idx)
+        elem_connection = design.get_c3d8_connection(old_design.stent_params.divs, elem_idx)
         yield PrimaryRankingComponent(
             comp_name="InternalAngle",
             elem_id=elem_num,
@@ -78,9 +78,7 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
 
     STENCIL_LENGTH = 0.2  # mm
 
-    # TODO - figure out the best way of storing all the design info (like the dimensions) in something like the "design space".
-    
-    elem_to_nodes_in_range = graph_connection.element_nums_to_nodes_within(stent_params, STENCIL_LENGTH, old_design)
+    elem_to_nodes_in_range = graph_connection.element_nums_to_nodes_within(old_design.stent_params, STENCIL_LENGTH, old_design)
 
 
 

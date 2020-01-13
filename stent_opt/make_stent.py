@@ -30,9 +30,10 @@ except KeyError:
     pass
 
 
-def make_a_stent(stent_params: StentParams, stent_design: StentDesign):
+def make_a_stent(stent_design: StentDesign):
 
     model = main.AbaqusModel("StentModel")
+    stent_params = stent_design.stent_params
 
     def make_stent_part():
 
@@ -464,17 +465,17 @@ def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snaps
     active_elements_idx = {elem_num_to_idx[iElem] for iElem in snapshot.active_elements}
 
     return StentDesign(
-        design_space=stent_params.divs,
+        stent_params=stent_params,
         active_elements=frozenset(active_elements_idx),
     )
 
 
-def make_stent_model(stent_params: StentParams, stent_design: StentDesign, fn_inp: str):
-    model = make_a_stent(stent_params, stent_design)
-    create_surfaces(stent_params, model)
-    apply_loads(stent_params, model)
-    add_interaction(stent_params, model)
-    apply_boundaries(stent_params, model)
+def make_stent_model(stent_design: StentDesign, fn_inp: str):
+    model = make_a_stent(stent_design)
+    create_surfaces(stent_design.stent_params, model)
+    apply_loads(stent_design.stent_params, model)
+    add_interaction(stent_design.stent_params, model)
+    apply_boundaries(stent_design.stent_params, model)
     write_model(model, fn_inp)
 
 
@@ -555,7 +556,7 @@ def do_opt(stent_params: StentParams):
         starting_i = 0
         fn_inp = make_fn(".inp", starting_i)
         current_design = make_initial_design(stent_params)
-        make_stent_model(stent_params, current_design, fn_inp)
+        make_stent_model(current_design, fn_inp)
         run_model(fn_inp)
         perform_extraction(make_fn(".odb", starting_i), make_fn(".db", starting_i))
 
@@ -592,7 +593,7 @@ def do_opt(stent_params: StentParams):
         if design == old_design and (i_current != main_loop_start_i):
             done = True
 
-        make_stent_model(stent_params, design, fn_inp)
+        make_stent_model(design, fn_inp)
         run_model(fn_inp)
 
         fn_db_current = make_fn(".db", i_current)

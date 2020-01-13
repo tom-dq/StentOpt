@@ -121,7 +121,7 @@ def make_new_generation(db_fn: str, history_db, iter_n: int, inp_fn) -> design.S
     with history.History(history_db) as hist:
         snapshot_n_min_1 = hist.get_snapshot(iter_n_min_1)
         design_n_min_1 = design.StentDesign(
-            design_space=stent_params.divs,
+            stent_params=stent_params,
             active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements))
         )
 
@@ -211,7 +211,7 @@ def make_new_generation(db_fn: str, history_db, iter_n: int, inp_fn) -> design.S
         hist.add_snapshot(snapshot)
 
     #new_elems = get_top_n_elements(smoothed, len(old_design.active_elements))
-    return design.StentDesign(design_space=design_n_min_1.design_space, active_elements=frozenset(new_active_elems))
+    return design.StentDesign(stent_params=design_n_min_1.stent_params, active_elements=frozenset(new_active_elems))
 
 
 def make_plot_tests():

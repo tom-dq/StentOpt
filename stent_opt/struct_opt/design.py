@@ -97,8 +97,88 @@ class PolarIndex(typing.NamedTuple):
 
 
 
+class Actuation(enum.Enum):
+    direct_pressure = enum.auto()
+    rigid_cylinder = enum.auto()
+    balloon = enum.auto()
+
+
+class Balloon(typing.NamedTuple):
+    inner_radius_ratio: float
+    overshoot_ratio: float
+    foldover_param: float
+    divs: PolarIndex
+
+    def to_db_strings(self):
+        yield from _nt_to_db_strings(self)
+
+    @classmethod
+    def from_db_strings(cls, data):
+        return _nt_from_db_strings(cls, data)
+
+
+class Cylinder(typing.NamedTuple):
+    initial_radius_ratio: float
+    final_radius_ratio: float
+    overshoot_ratio: float
+    divs: PolarIndex
+
+    def to_db_strings(self):
+        yield from _nt_to_db_strings(self)
+
+    @classmethod
+    def from_db_strings(cls, data):
+        return _nt_from_db_strings(cls, data)
+
+
+class StentParams(typing.NamedTuple):
+    angle: float
+    divs: PolarIndex
+    r_min: float
+    r_max: float
+    length: float
+    balloon: typing.Optional[Balloon]
+    cylinder: typing.Optional[Cylinder]
+
+    def to_db_strings(self):
+        yield from _nt_to_db_strings(self)
+
+    @classmethod
+    def from_db_strings(cls, data):
+        return _nt_from_db_strings(cls, data)
+
+    @property
+    def actuation(self) -> Actuation:
+        has_balloon = bool(self.balloon)
+        has_cyl = bool(self.cylinder)
+
+        if has_balloon and has_cyl:
+            raise ValueError("Both Cyl and Balloon?")
+
+        if has_balloon:
+            return Actuation.balloon
+
+        elif has_cyl:
+            return Actuation.rigid_cylinder
+
+        else:
+            return Actuation.direct_pressure
+
+
+    @property
+    def actuation_surface_ratio(self) -> typing.Optional[float]:
+        if self.actuation == Actuation.rigid_cylinder:
+            return self.r_min * self.cylinder.initial_radius_ratio
+
+        elif self.actuation == Actuation.balloon:
+            return self.r_min * self.balloon.inner_radius_ratio
+
+        else:
+            return None
+
+
 class StentDesign(typing.NamedTuple):
-    design_space: PolarIndex
+    stent_params: StentParams
     active_elements: typing.FrozenSet[PolarIndex]
 
 
@@ -176,90 +256,6 @@ class GlobalNodeSetNames(enum.Enum):
     RigidCyl = enum.auto()
 
 
-class Actuation(enum.Enum):
-    direct_pressure = enum.auto()
-    rigid_cylinder = enum.auto()
-    balloon = enum.auto()
-
-
-
-
-
-
-
-
-class Balloon(typing.NamedTuple):
-    inner_radius_ratio: float
-    overshoot_ratio: float
-    foldover_param: float
-    divs: PolarIndex
-
-    def to_db_strings(self):
-        yield from _nt_to_db_strings(self)
-
-    @classmethod
-    def from_db_strings(cls, data):
-        return _nt_from_db_strings(cls, data)
-
-
-class Cylinder(typing.NamedTuple):
-    initial_radius_ratio: float
-    final_radius_ratio: float
-    overshoot_ratio: float
-    divs: PolarIndex
-
-    def to_db_strings(self):
-        yield from _nt_to_db_strings(self)
-
-    @classmethod
-    def from_db_strings(cls, data):
-        return _nt_from_db_strings(cls, data)
-
-
-class StentParams(typing.NamedTuple):
-    angle: float
-    divs: PolarIndex
-    r_min: float
-    r_max: float
-    length: float
-    balloon: typing.Optional[Balloon]
-    cylinder: typing.Optional[Cylinder]
-
-    def to_db_strings(self):
-        yield from _nt_to_db_strings(self)
-
-    @classmethod
-    def from_db_strings(cls, data):
-        return _nt_from_db_strings(cls, data)
-
-    @property
-    def actuation(self) -> Actuation:
-        has_balloon = bool(self.balloon)
-        has_cyl = bool(self.cylinder)
-
-        if has_balloon and has_cyl:
-            raise ValueError("Both Cyl and Balloon?")
-
-        if has_balloon:
-            return Actuation.balloon
-
-        elif has_cyl:
-            return Actuation.rigid_cylinder
-
-        else:
-            return Actuation.direct_pressure
-
-
-    @property
-    def actuation_surface_ratio(self) -> typing.Optional[float]:
-        if self.actuation == Actuation.rigid_cylinder:
-            return self.r_min * self.cylinder.initial_radius_ratio
-
-        elif self.actuation == Actuation.balloon:
-            return self.r_min * self.balloon.inner_radius_ratio
-
-        else:
-            return None
 
 
 
@@ -535,7 +531,7 @@ def make_initial_design_dylan(stent_params: StentParams) -> StentDesign:
 
     included_elements = (idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs) if check_elem(e))
     return StentDesign(
-        design_space=stent_params.divs,
+        stent_params=stent_params,
         active_elements=frozenset(included_elements)
     )
 
@@ -625,7 +621,7 @@ def make_initial_design_curve(stent_params: StentParams) -> StentDesign:
 
     included_elements = (idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs) if check_elem(e))
     return StentDesign(
-        design_space=stent_params.divs,
+        stent_params=stent_params,
         active_elements=frozenset(included_elements)
     )
 

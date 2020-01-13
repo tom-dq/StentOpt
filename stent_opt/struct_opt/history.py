@@ -170,7 +170,7 @@ class History:
             design_space = stent_params.divs
             elem_num_to_idx = {iElem: idx for iElem, idx in design.generate_elem_indices(design_space)}
             return design.StentDesign(
-                design_space=design_space,
+                stent_params=stent_params,
                 active_elements=frozenset( (elem_num_to_idx[iElem] for iElem in maybe_snapshot.active_elements)),
             )
 

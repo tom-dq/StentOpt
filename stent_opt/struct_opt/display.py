@@ -85,11 +85,11 @@ def render_status(
 
     # Get all the faces of the stent elements
     def faces_and_values():
-        elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_design.design_space)}
+        elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_design.stent_params.divs)}
         elem_lookup = {elem_num_to_indices[comp.elem_id]: comp.value for comp in components}
 
         for one_elem in stent_design.active_elements:
-            elem_connection = design.get_c3d8_connection(stent_design.design_space, one_elem)
+            elem_connection = design.get_c3d8_connection(stent_design.stent_params.divs, one_elem)
             for one_face_idx in stent_opt.struct_opt.score.FACES_OF_HEX:
                 global_node_nums = [elem_connection[i] for i in one_face_idx]
                 yield global_node_nums, elem_lookup[one_elem]

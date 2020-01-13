@@ -9,10 +9,10 @@ from stent_opt.struct_opt import design
 def element_nums_to_nodes_within(stent_params: design.StentParams, distance: float, stent_design: design.StentDesign):
     """Gets elem -> list_of_nodes within some connectivity threshold."""
 
-    elem_num_to_idx = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_design.design_space)}
+    elem_num_to_idx = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_design.stent_params.divs)}
 
     # Get the hop distance between individual nodes.
-    elem_idx_to_nodes = {idx: design.get_c3d8_connection(stent_design.design_space, idx) for idx in elem_num_to_idx.values()}
+    elem_idx_to_nodes = {idx: design.get_c3d8_connection(stent_design.stent_params.divs, idx) for idx in elem_num_to_idx.values()}
     active_nodes = set()
     node_hops = dict()
 
