@@ -80,6 +80,7 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
 
     elem_to_nodes_in_range = graph_connection.element_nums_to_nodes_within(old_design.stent_params, STENCIL_LENGTH, old_design)
 
+    print(elem_to_nodes_in_range)
 
 
 def _max_delta_angle_of_element(node_to_pos: typing.Dict[int, base.XYZ], elem_connection) -> float:

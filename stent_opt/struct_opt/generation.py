@@ -218,7 +218,7 @@ def make_plot_tests():
     # Bad import - just for testing
     from stent_opt import make_stent
 
-    db_fn = r"C:\TEMP\aba\opt-5\It-000000.db"
+    db_fn = r"E:\Simulations\StentOpt\aba-72\It-000000.db"
 
     stent_params = stent_opt.struct_opt.design.basic_stent_params
     old_design = stent_opt.struct_opt.design.make_initial_design(stent_params)
@@ -235,11 +235,11 @@ def make_plot_tests():
     pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in pos_rows}
 
     # Node position pased effort functions
-    eff_funcs = [score.get_primary_ranking_element_distortion, ]
+    eff_funcs = [score.get_primary_ranking_macro_deformation, score.get_primary_ranking_element_distortion, ]
 
     all_ranks = []
     for one_func in eff_funcs:
-        all_ranks.append(list(one_func(pos_rows, old_design)))
+        all_ranks.append(list(one_func(old_design, pos_rows)))
 
     # Element-based effort functions
     for db_data in [peeq_rows, stress_rows]:
