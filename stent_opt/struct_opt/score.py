@@ -5,7 +5,7 @@ import numpy
 
 from stent_opt.abaqus_model import base
 from stent_opt.odb_interface import db_defs
-from stent_opt.struct_opt import design
+from stent_opt.struct_opt import design, deformation_grad
 
 FACES_OF_HEX = (
     (0, 1, 2, 3),
@@ -71,6 +71,13 @@ def get_primary_ranking_element_distortion(nt_rows_node_pos, old_design: design.
             elem_id=elem_num,
             value=_max_delta_angle_of_element(node_to_pos, elem_connection)
         )
+
+
+def get_primary_ranking_macro_deformation(nt_rows_node_pos, old_design: design.StentDesign) -> typing.Iterable[PrimaryRankingComponent]:
+    """Gets the local-ish deformation within a given number of elements, by removing the rigid body rotation/translation."""
+
+    STENCIL_LENGTH = 0.2  # mm
+
 
 
 def _max_delta_angle_of_element(node_to_pos: typing.Dict[int, base.XYZ], elem_connection) -> float:
