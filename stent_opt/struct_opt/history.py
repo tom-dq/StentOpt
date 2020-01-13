@@ -108,36 +108,6 @@ class History:
             db_forms = (Snapshot(*row) for row in rows)
             yield from (one_db_form.from_db() for one_db_form in db_forms)
 
-    def set_design_space(self, design_space: design.PolarIndex):
-        """Sets the design space. If there is already one in there and it matches, that's a no-op."""
-
-        existing_design_space = self.get_design_space()
-        if not existing_design_space:
-            # Can add it right away.
-            with self.connection:
-                ins_string = self._generate_insert_string_nt_class(design.PolarIndex)
-                self.connection.execute(ins_string, design_space)
-
-        else:
-            if design_space == existing_design_space:
-                pass
-
-            else:
-                raise ValueError(f"New design space {design_space} conflicts with the old one {existing_design_space}.")
-
-    def get_design_space(self) -> typing.Optional[design.PolarIndex]:
-        with self.connection:
-            rows = list(self.connection.execute("SELECT * FROM PolarIndex"))
-            if len(rows) == 0:
-                return None
-
-            elif len(rows) == 1:
-                row = rows[0]
-                return design.PolarIndex(*row)
-
-            else:
-                raise ValueError(len(rows))
-
     def set_stent_params(self, stent_params: design.StentParams):
         """Save the model parameters"""
         data_rows = stent_params.to_db_strings()
@@ -152,7 +122,6 @@ class History:
             l_rows = list(rows)
 
         return design.StentParams.from_db_strings(l_rows)
-
 
     def max_saved_iteration_num(self) -> int:
         with self.connection:
@@ -197,7 +166,8 @@ class History:
     def get_most_recent_design(self) -> typing.Optional[design.StentDesign]:
         maybe_snapshot = self.get_most_recent_snapshot()
         if maybe_snapshot:
-            design_space = self.get_design_space()
+            stent_params = self.get_stent_params()
+            design_space = stent_params.divs
             elem_num_to_idx = {iElem: idx for iElem, idx in design.generate_elem_indices(design_space)}
             return design.StentDesign(
                 design_space=design_space,

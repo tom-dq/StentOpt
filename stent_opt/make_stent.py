@@ -532,7 +532,7 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt(stent_params: StentParams):
-    working_dir = pathlib.Path(r"C:\TEMP\aba\aba-71")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-72")
     history_db = working_dir / "History.db"
 
     os.makedirs(working_dir, exist_ok=True)
@@ -544,7 +544,7 @@ def do_opt(stent_params: StentParams):
 
     # If we've already started, use the most recent snapshot in the history.
     with history.History(history_db) as hist:
-        hist.set_design_space(stent_params.divs)
+        # hist.set_design_space(stent_params.divs)
         hist.set_stent_params(stent_params)
         restart_i = hist.max_saved_iteration_num()
 

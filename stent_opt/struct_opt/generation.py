@@ -112,16 +112,16 @@ def make_new_generation(db_fn: str, history_db, iter_n: int, inp_fn) -> design.S
     title_if_plotting = f"Iteration {iter_n}"
 
     with history.History(history_db) as hist:
-        design_space = hist.get_design_space()
+        stent_params = hist.get_stent_params()
 
     # Go between num (1234) and idx (5, 6, 7)...
-    elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(design_space)}
-    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(design_space)}
+    elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
+    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
 
     with history.History(history_db) as hist:
         snapshot_n_min_1 = hist.get_snapshot(iter_n_min_1)
         design_n_min_1 = design.StentDesign(
-            design_space=design_space,
+            design_space=stent_params.divs,
             active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements))
         )
 
