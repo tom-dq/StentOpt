@@ -605,8 +605,14 @@ def do_opt(stent_params: StentParams):
 
 
 if __name__ == "__main__":
+    bits = []
     for a, b in basic_stent_params.to_db_strings():
         print(a, b)
+        bits.append( (a, b))
 
+    reconstituted_stent_params = StentParams.from_db_strings(bits)
+
+    print(reconstituted_stent_params)
+    print(reconstituted_stent_params == basic_stent_params)
     # do_opt(basic_stent_params)
 
