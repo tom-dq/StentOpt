@@ -72,6 +72,39 @@ def get_primary_ranking_element_distortion(old_design: design.StentDesign, nt_ro
         )
 
 
+def _transform_patch_over_boundary(stent_design: design.StentDesign, node_dict_xyz):
+
+    node_dict_r_th_z = {node_key: xyz.to_r_th_z() for node_key, xyz in node_dict_xyz.items()}
+
+    half_angle = stent_design.stent_params.angle / 2
+
+    def span(node_dict_polar):
+        theta_vals = [r_th_z.theta_deg for r_th_z in node_dict_polar.values()]
+        return max(theta_vals) - min(theta_vals)
+
+    span_orig = span(node_dict_r_th_z)
+    if span_orig < half_angle:
+        return node_dict_xyz
+
+    # Actually have to rotate some of the angles
+    def maybe_rotated(r_th_z: base.RThZ) -> base.RThZ:
+        if r_th_z.theta_deg > half_angle:
+            return r_th_z._replace(theta_deg=r_th_z.theta_deg - stent_design.stent_params.angle)
+
+        else:
+            return r_th_z
+
+    rotated_node_dict = {node_key: maybe_rotated(r_th_z) for node_key, r_th_z in node_dict_r_th_z.items()}
+    span_rotated = span(rotated_node_dict)
+
+    if span_rotated < half_angle:
+        rotated_in_xyz = {node_key: r_th_z.to_xyz() for node_key, r_th_z in rotated_node_dict.items()}
+        return rotated_in_xyz
+
+    raise ValueError(f"Could not find an rotation under {half_angle} degrees - original was {span_orig}, rotated was {span_rotated}.")
+
+
+
 def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets the local-ish deformation within a given number of elements, by removing the rigid body rotation/translation."""
 
@@ -88,10 +121,19 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
         iNode in node_to_pos_deformed
     }
 
+    def prepare_node_patch(node_dict_xyz, patch_node_nums):
+        raw = {iNode: xyz for iNode, xyz in node_dict_xyz.items() if iNode in patch_node_nums}
+        return _transform_patch_over_boundary(old_design, raw)
+
     node_num_to_contribs = collections.defaultdict(list)
     for elem_idx, node_num_set in elem_to_nodes_in_range.items():
-        orig = {iNode: xyz for iNode, xyz in node_to_pos_original.items() if iNode in node_num_set}
-        deformed = {iNode: xyz for iNode, xyz in node_to_pos_deformed.items() if iNode in node_num_set}
+        TEMP_elem_num = elem_indices_to_num[elem_idx]
+        if TEMP_elem_num == 2836:
+            print(TEMP_elem_num)
+
+        orig = prepare_node_patch(node_to_pos_original, node_num_set)
+        deformed = prepare_node_patch(node_to_pos_deformed, node_num_set)
+
         this_val = deformation_grad.nodal_deformation(STENCIL_LENGTH, orig, deformed)
         for node_num in node_num_set:
             node_num_to_contribs[node_num].append(this_val)

@@ -73,6 +73,15 @@ class XYZ(typing.NamedTuple):
     y: float
     z: float
 
+    def to_r_th_z(self) -> "RThZ":
+        r = math.sqrt( self.x**2 + self.z**2 )
+        th_rad = math.atan2(self.x, self.z)
+        return RThZ(
+            r=r,
+            theta_deg=math.degrees(th_rad),
+            z=self.y,
+        )
+
     def __add__(self, other):
         return _operator_dot(operator.add, self, other)
 
@@ -281,8 +290,13 @@ def quoted_if_necessary(s: str) -> str:
 
 
 if __name__ == "__main__":
-    a1 = RThZ(r=2.3, theta_deg=34.1, z=5.6)
+    a1 = RThZ(r=2.3, theta_deg=234.1, z=5.6)
     a2 = RThZ(r=1, theta_deg=2, z=3)
+
+    print(a1)
+    print(a1.to_xyz())
+    print(a1.to_xyz().to_r_th_z())
+
     print(a1)
     print(a1+a2)
 

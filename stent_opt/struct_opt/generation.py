@@ -221,7 +221,7 @@ def make_plot_tests():
     # Bad import - just for testing
     from stent_opt import make_stent
 
-    db_fn = r"E:\Simulations\StentOpt\aba-72\It-000000.db"
+    db_fn = r"E:\Simulations\StentOpt\aba-92\It-000000.db"
 
     db_history = pathlib.Path(db_fn).with_name("History.db")
     with history.History(db_history) as hist:
