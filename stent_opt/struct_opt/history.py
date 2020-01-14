@@ -49,12 +49,6 @@ metric_name TEXT,
 metric_val REAL
 )"""
 
-_make_design_space_table = """CREATE TABLE IF NOT EXISTS PolarIndex(
-R INTEGER,
-Th INTEGER,
-Z INTEGER)"""
-
-
 _make_parameters_table_ = """CREATE TABLE IF NOT EXISTS ParamKeyValue(
 param_name TEXT UNIQUE,
 param_value TEXT)"""
@@ -62,7 +56,6 @@ param_value TEXT)"""
 _make_tables = [
     _make_snapshot_table,
     _make_status_check_table,
-    _make_design_space_table,
     _make_parameters_table_,
 ]
 
