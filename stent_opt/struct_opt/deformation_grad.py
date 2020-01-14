@@ -62,10 +62,12 @@ def _get_rigid_motion(p_orig: numpy.array, q_deformed: numpy.array) -> RigidMoti
     # Step 4 - SVD
     u, s, vh = numpy.linalg.svd(S, full_matrices=True)
 
-    middle_bit = numpy.eye(d)
-    det_vut = numpy.linalg.det(vh @ u.T)
-    middle_bit[d-1, d-1] = det_vut
-    R = vh @ middle_bit @ u.T
+    # Change from published algorithm - don't do the determinant stuff (so, never flipping).
+    # middle_bit = numpy.eye(d)
+    # det_vut = numpy.linalg.det(vh @ u.T)
+    # middle_bit[d-1, d-1] = det_vut
+    # R = vh @ middle_bit @ u.T
+    R = vh @ u.T
 
     t = q_bar - R @ p_bar
 
