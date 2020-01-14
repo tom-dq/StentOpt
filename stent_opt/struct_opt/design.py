@@ -256,16 +256,12 @@ class GlobalNodeSetNames(enum.Enum):
     RigidCyl = enum.auto()
 
 
-
-
-
-
 dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=2,
-        Th=31,  # 31
-        Z=120,  # 120
+        Th=61,  # 31
+        Z=600,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -536,13 +532,7 @@ def make_initial_design_dylan(stent_params: StentParams) -> StentDesign:
     )
 
 
-def make_initial_design_curve(stent_params: StentParams) -> StentDesign:
-    """Simple sin wave"""
-
-    width = 0.05
-    span_ratio = 0.25
-
-    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
+def _make_design_from_line_segments(stent_params: StentParams, line_z_th_points: typing.List[base.XYZ], width: float, nominal_radius: float) -> StentDesign:
 
     nodes_polar = generate_nodes_stent_polar(stent_params=stent_params)
 
@@ -551,17 +541,7 @@ def make_initial_design_curve(stent_params: StentParams) -> StentDesign:
         ave_node_pos = sum(node_pos) / len(node_pos)
         return ave_node_pos
 
-    # Discretise line (with a bit of overshoot)
-    n_points = 30
-    th_points = [ i / (n_points-1) * stent_params.angle for i in range(-2, n_points+2)]
-    z_mid = 0.5 * stent_params.length
-    z_amp = span_ratio * stent_params.length / 2
-    line_z_th_points = [base.RThZ(
-        r=nominal_radius,
-        theta_deg=th,
-        z=z_mid + z_amp * math.sin(2 * math.pi * th / stent_params.angle)).to_xyz()
-        for th in th_points
-    ]
+
 
     def _dist(x1, y1, x2, y2, x3, y3):  # x3,y3 is the point
         px = x2 - x1
@@ -626,4 +606,56 @@ def make_initial_design_curve(stent_params: StentParams) -> StentDesign:
     )
 
 
-make_initial_design = make_initial_design_curve
+def make_initial_design_curve(stent_params: StentParams) -> StentDesign:
+    """Simple sin wave"""
+
+    width = 0.05
+    span_ratio = 0.25
+    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
+
+    # Discretise line (with a bit of overshoot)
+    n_points = 30
+    th_points = [ i / (n_points-1) * stent_params.angle for i in range(-2, n_points+2)]
+    z_mid = 0.5 * stent_params.length
+    z_amp = span_ratio * stent_params.length / 2
+    line_z_th_points = [base.RThZ(
+        r=nominal_radius,
+        theta_deg=th,
+        z=z_mid + z_amp * math.sin(2 * math.pi * th / stent_params.angle)).to_xyz()
+        for th in th_points
+    ]
+
+    return _make_design_from_line_segments(stent_params, line_z_th_points, width, nominal_radius)
+
+
+def make_initial_design_sharp(stent_params: StentParams) -> StentDesign:
+    """Make a sharp corner."""
+
+    width = 0.05
+    span_ratio = 0.5
+    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
+    n_points_half = 15
+
+    # Make an ellipse with no elegance at all.
+    theta_quarter_circle = [i * math.pi/(2*(n_points_half-1)) for i in range(n_points_half)]
+    quarter_circle_points = [base.RThZ(r=nominal_radius, theta_deg=math.sin(th_param), z=math.cos(th_param)) for th_param in theta_quarter_circle]
+
+    z_amp = span_ratio * stent_params.length
+    th_amp = 0.5 * stent_params.angle
+
+    scaled_points = [base.RThZ(r=p.r, theta_deg=p.theta_deg * th_amp, z=p.z * z_amp) for p in quarter_circle_points]
+
+    z_cent = 0.5 * (stent_params.length-z_amp)
+
+    offset = base.RThZ(r=0.0, theta_deg=0.0, z=z_cent)
+    offset_points = [p + offset for p in scaled_points]
+    reflected_points = [base.RThZ(r=p.r, theta_deg=stent_params.angle-p.theta_deg, z=p.z) for p in reversed(offset_points[:-1])]
+    all_points = offset_points + reflected_points
+
+    xyz_point = [p.to_xyz() for p in all_points]
+    return _make_design_from_line_segments(stent_params, xyz_point, width, nominal_radius)
+
+
+
+
+make_initial_design = make_initial_design_sharp

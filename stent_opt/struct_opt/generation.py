@@ -145,6 +145,7 @@ def make_new_generation(db_fn: str, history_db, iter_n: int, inp_fn) -> design.S
         list(score.get_primary_ranking_components(peeq_rows)),                    # Elem result based scores
         list(score.get_primary_ranking_components(stress_rows)),
         list(score.get_primary_ranking_element_distortion(design_n_min_1, pos_rows)), # Node position based scores
+        list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows)),
     ]
 
     # Compute a secondary rank from all the first ones.
@@ -163,15 +164,16 @@ def make_new_generation(db_fn: str, history_db, iter_n: int, inp_fn) -> design.S
 
 
     if MAKE_PLOTS:
-        stress_rank = list(score.get_primary_ranking_components(stress_rows))
-        for plot_rank in [stress_rank, sec_rank]:
+        #stress_rank = list(score.get_primary_ranking_components(stress_rows))
+        local_def_rank = list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows))
+        for plot_rank in [local_def_rank, sec_rank]:
             display.render_status(design_n_min_1, pos_lookup, plot_rank, title_if_plotting)
 
     overall_rank = {one.elem_id: one.value for one in sec_rank}
 
 
     unsmoothed = {elem_num_to_indices[iElem]: val for iElem, val in overall_rank.items()}
-    smoothed = gaussian_smooth(design_n_min_1.design_space, unsmoothed)
+    smoothed = gaussian_smooth(design_n_min_1.stent_params.divs, unsmoothed)
 
     if MAKE_PLOTS and False:  # Turn this off for now.
         # Dress the smoothed value up as a primary ranking component to display
