@@ -152,8 +152,12 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
     first_grad_track = max(0, final_grad_track-n_gradient_tracking)
     grad_track_steps = range(first_grad_track, final_grad_track)
 
+    print(f"Iter {iter_n}, grad track = {list(grad_track_steps)}")
     recent_gradient_input_data = get_gradient_input_data(working_dir, grad_track_steps)
     vicinity_ranking = list(score.get_primary_ranking_local_stress_gradient(recent_gradient_input_data, statistics.mean))
+    for idx, x in enumerate(vicinity_ranking):
+        print(idx, x, sep='\t')
+
     all_ranks.append(vicinity_ranking)
 
     with history.History(history_db) as hist:
@@ -265,22 +269,35 @@ def make_plot_tests():
     # Bad import - just for testing
     from stent_opt import make_stent
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-92")
-    db_fn = history.make_fn_in_dir(working_dir, ".db", 0)
+    history_iters = [0, 1]
+    last_iter = history_iters[-1]
+
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-98")
+    db_fn = history.make_fn_in_dir(working_dir, ".db", last_iter)
     db_history = history.make_history_db(working_dir)
 
     all_ranks = []
 
     # Gradient tracking test
-    recent_gradient_input_data = get_gradient_input_data(working_dir, [0,1,2])
+    recent_gradient_input_data = list(get_gradient_input_data(working_dir, history_iters))
+
+
     vicinity_ranking = list(score.get_primary_ranking_local_stress_gradient(recent_gradient_input_data, statistics.mean))
+    for idx, x in enumerate(vicinity_ranking):
+        print(idx, x, sep='\t')
+
+
+    # TODO - make the vicinity stuff look right!!
+
     all_ranks.append(vicinity_ranking)
 
     with history.History(db_history) as hist:
         stent_params = hist.get_stent_params()
+        old_snapshot = hist.get_snapshot(last_iter)
+        old_design = design.make_design_from_snapshot(stent_params, old_snapshot)
 
     # stent_params = design.basic_stent_params
-    old_design = design.make_initial_design(stent_params)
+    # old_design = design.make_initial_design(stent_params)
 
     with datastore.Datastore(db_fn) as data:
         all_frames = list(data.get_all_frames())
@@ -315,9 +332,9 @@ def make_plot_tests():
 
 
 def track_history_checks_test():
-    working_dir = r"E:\Simulations\StentOpt\aba-92"
+    working_dir = r"E:\Simulations\StentOpt\aba-98"
 
-    old_data = get_gradient_input_data(working_dir, [0,1,2])
+    old_data = get_gradient_input_data(working_dir, [0,1])
     for x in old_data:
         print(x)
 
