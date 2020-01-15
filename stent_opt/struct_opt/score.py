@@ -1,4 +1,5 @@
 import collections
+import itertools
 import statistics
 import typing
 
@@ -28,6 +29,27 @@ class SecondaryRankingComponent(typing.NamedTuple):
     comp_name: str
     elem_id: int
     value: float
+
+
+class GradientInputData(typing.NamedTuple):
+    """Used to encapsulate the design at a particular iteration."""
+    iteration_num: int
+    stent_design: design.StentDesign
+    element_ranking_components: typing.Dict[int, PrimaryRankingComponent]
+
+
+class GradientDataPoint(typing.NamedTuple):
+    """Used to determine the trend lines for vicinity stress/strain/whatever as elements are turning on and off."""
+    elem_id: int
+    iteration_num: int
+    vicinity_ranking: float
+    contributions: int
+    element_activation: float  # 0.0 === Void, 1.0 === Solid.
+
+
+class LineOfBestFit(typing.NamedTuple):
+    m: float
+    c: float
 
 
 def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
@@ -104,13 +126,102 @@ def _transform_patch_over_boundary(stent_design: design.StentDesign, node_dict_x
     raise ValueError(f"Could not find an rotation under {half_angle} degrees - original was {span_orig}, rotated was {span_rotated}.")
 
 
+def get_line_of_best_fit(x_vals, y_vals) -> LineOfBestFit:
+    """Solves y = mx + c given x and y"""
+    # https://docs.scipy.org/doc/numpy/reference/generated/numpy.linalg.lstsq.html
+
+    x = numpy.array(x_vals)
+    y = numpy.array(y_vals)
+
+    A = numpy.vstack([x, numpy.ones(len(x))]).T
+    m, c = numpy.linalg.lstsq(A, y, rcond=None)[0]
+
+    return LineOfBestFit(m=float(m), c=float(c))
+
+
+def get_primary_ranking_local_stress_gradient(
+        recent_gradient_input_data: typing.Iterable[GradientInputData],
+        region_reducer: typing.Callable[[typing.Iterable[float]], float],  # e.g., max or statistics.mean.
+        ) -> typing.Iterable[PrimaryRankingComponent]:
+    """Determine how the local stress is correlated with the a particular element being active or inactive."""
+
+    recent_gradient_input_data = list(recent_gradient_input_data)
+
+    # Global lookup for all elements - the divisions will not change.
+    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(recent_gradient_input_data[0].stent_design.stent_params.divs)}
+    elem_num_to_index = {iElem: idx for idx, iElem in elem_indices_to_num.items()}
+
+    # For each element, get the local mean or local max stress based on the adjacent elements within some connectivity
+    # radius. This needs to be based on the total connectivity of all the which have been included in any considered
+    # analysis, not just the current one, so voids can be correctly considered.
+
+    all_active_element_nums_sets = (set(one_snapshot.element_ranking_components.keys()) for one_snapshot in recent_gradient_input_data)
+    all_active_element_nums = set.union(*all_active_element_nums_sets)
+    all_active_element_idxs = {elem_num_to_index[iElem] for iElem in all_active_element_nums}
+    stent_design_all_elems_active = recent_gradient_input_data[0].stent_design._replace(active_elements=frozenset(all_active_element_idxs))
+
+    STENCIL_LENGTH = 0.1  # mm
+    elem_to_elems_in_range = graph_connection.element_idx_to_elems_within(STENCIL_LENGTH, stent_design_all_elems_active)
+    elem_num_to_region_elem_nums = {
+        elem_indices_to_num[elem_idx]: [elem_indices_to_num[one_elem_idx] for one_elem_idx in many_elem_idxs]
+        for elem_idx, many_elem_idxs
+        in elem_to_elems_in_range.items()
+    }
+
+    # Get the maximum or average stress, for each element, within a radius, at each historical snapshot.
+    gradient_datapoints = []
+    for one_snapshot, (elem_num, region_elem_nums) in itertools.product(recent_gradient_input_data, elem_num_to_region_elem_nums.items()):
+        raw_values = [one_snapshot.element_ranking_components[one_elem_num].value for one_elem_num in region_elem_nums if one_elem_num in one_snapshot.element_ranking_components]
+
+        if raw_values:
+            # Sometimes we will have a void element which is surrounded by more void elements. Needless to say, we can't get any data from that!
+            vicinity_ranking = region_reducer(raw_values)
+            elem_is_active = elem_num in one_snapshot.element_ranking_components
+            one_gradient_point = GradientDataPoint(
+                elem_id=elem_num,
+                iteration_num=one_snapshot.iteration_num,
+                vicinity_ranking=vicinity_ranking,
+                contributions=len(raw_values),
+                element_activation=1.0 if elem_is_active else 0.0,
+            )
+            gradient_datapoints.append(one_gradient_point)
+
+    gradient_datapoints.sort()
+
+    def get_elem_num(one_gradient_point):
+        return one_gradient_point.elem_id
+
+    for elem_num, iterable_of_datapoints in itertools.groupby(gradient_datapoints, get_elem_num):
+        status_vals = []
+        response_vals = []
+        for dp in iterable_of_datapoints:
+
+            status_vals.append(dp.element_activation)
+            response_vals.append(dp.vicinity_ranking)
+
+            can_make_line = len(set(status_vals)) > 1
+            if can_make_line:
+                line_of_best_fit = get_line_of_best_fit(status_vals, response_vals)
+                grad = line_of_best_fit.m
+
+            else:
+                grad = 0.0
+
+            yield PrimaryRankingComponent(
+                comp_name="RegionGradient",
+                elem_id=elem_num,
+                value=grad
+            )
+
+    # TODO - include the "authority"
+
 
 def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets the local-ish deformation within a given number of elements, by removing the rigid body rotation/translation."""
 
     STENCIL_LENGTH = 0.2  # mm
 
-    elem_to_nodes_in_range = graph_connection.element_nums_to_nodes_within(old_design.stent_params, STENCIL_LENGTH, old_design)
+    elem_to_nodes_in_range = graph_connection.element_idx_to_nodes_within(STENCIL_LENGTH, old_design)
     elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.stent_params.divs) if idx in old_design.active_elements}
 
     node_to_pos_deformed = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in nt_rows_node_pos}

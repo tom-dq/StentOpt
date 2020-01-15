@@ -134,7 +134,7 @@ def nodal_deformation(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMa
         raise ValueError("Looks like Tom got an index/axis wrong someplace...")
 
 
-    DEBUG_MAKE_PLOT = True
+    DEBUG_MAKE_PLOT = False
     if DEBUG_MAKE_PLOT:
         _DEBUG_plot_rigid(p_orig, p_with_rigid, q_deformed)
 

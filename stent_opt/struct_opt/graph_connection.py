@@ -1,14 +1,28 @@
 """Simple graph for determining the connectivity between nodes, based on the elements they are connected to."""
-
+import collections
 import itertools
+import enum
 
 import networkx
 
 from stent_opt.struct_opt import design
 
-def element_nums_to_nodes_within(stent_params: design.StentParams, distance: float, stent_design: design.StentDesign):
-    """Gets elem -> set_of_nodes within some connectivity threshold."""
+class _Entity(enum.Enum):
+    node = enum.auto()
+    elem = enum.auto()
 
+
+def element_idx_to_nodes_within(distance: float, stent_design: design.StentDesign):
+    """Gets elem -> set_of_nodes within some connectivity threshold."""
+    return _element_idx_to_something_within(_Entity.node, distance, stent_design)
+
+
+def element_idx_to_elems_within(distance: float, stent_design: design.StentDesign):
+    """Gets elem -> set_of_elements within some connectivity threshold."""
+    return _element_idx_to_something_within(_Entity.elem, distance, stent_design)
+
+
+def _element_idx_to_something_within(entity: _Entity, distance: float, stent_design: design.StentDesign):
     elem_num_to_idx = {
         iElem: idx for iElem, idx in
         design.generate_elem_indices(stent_design.stent_params.divs) if
@@ -19,7 +33,7 @@ def element_nums_to_nodes_within(stent_params: design.StentParams, distance: flo
     active_nodes = set()
     node_hops = dict()
 
-    node_positions = design.generate_nodes_stent_polar(stent_params)
+    node_positions = design.generate_nodes_stent_polar(stent_design.stent_params)
 
     for node_list in elem_idx_to_nodes.values():
 
@@ -38,7 +52,7 @@ def element_nums_to_nodes_within(stent_params: design.StentParams, distance: flo
         graph.add_edge(n1, n2, weight=d_xyz)
 
     # Add in the over-the-reflected-boundary nodes with zero weight.
-    for n1, n2 in design.gen_active_pairs(stent_params, active_nodes):
+    for n1, n2 in design.gen_active_pairs(stent_design.stent_params, active_nodes):
         graph.add_edge(n1, n2, weight=0.0)
 
     # Get the node-to-nodes_within_radius
@@ -47,21 +61,39 @@ def element_nums_to_nodes_within(stent_params: design.StentParams, distance: flo
         node_to_dist = networkx.single_source_dijkstra_path_length(graph, iNode, cutoff=distance)
         node_to_nodes_within_radius[iNode] = set(node_to_dist.keys())
 
-    # Get the elements within the range.
+    # Get the nodes within the range.
     elem_idx_to_nodes_in_range = {}
     for elem_idx, node_connection in elem_idx_to_nodes.items():
         all_sets_of_nodes = [node_to_nodes_within_radius[iNode] for iNode in node_connection]
         all_nodes_in_range = set.union(*all_sets_of_nodes)
         elem_idx_to_nodes_in_range[elem_idx] = all_nodes_in_range
 
-    return elem_idx_to_nodes_in_range
+    if entity == _Entity.node:
+        return elem_idx_to_nodes_in_range
+
+    elif entity == _Entity.elem:
+        # Get the elements within the range.
+        node_to_elem_idx = collections.defaultdict(set)
+        for elem_idx, node_connection in elem_idx_to_nodes.items():
+            for node in node_connection:
+                node_to_elem_idx[node].add(elem_idx)
+
+        elem_idx_to_elem_idx = collections.defaultdict(set)
+        for elem_idx, all_nodes_in_range in elem_idx_to_nodes_in_range.items():
+            all_elem_idxs_sets = [node_to_elem_idx[node] for node in all_nodes_in_range]
+            elem_idx_to_elem_idx[elem_idx] = set.union(*all_elem_idxs_sets)
+
+        return elem_idx_to_elem_idx
+
+    else:
+        raise ValueError(entity)
 
 
 if __name__ == "__main__":
     stent_params = design.basic_stent_params
     stent_design = design.make_initial_design(stent_params)
 
-    aaa = element_nums_to_nodes_within(stent_params, 0.2, stent_design)
+    aaa = element_idx_to_nodes_within(0.2, stent_design)
     for k, v in aaa.items():
         print(k, v)
 

@@ -460,16 +460,6 @@ def ___include_elem_decider_cavities() -> typing.Callable:
     return check_elem
 
 
-def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snapshot) -> StentDesign:
-    elem_num_to_idx = {iElem: idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs)}
-    active_elements_idx = {elem_num_to_idx[iElem] for iElem in snapshot.active_elements}
-
-    return StentDesign(
-        stent_params=stent_params,
-        active_elements=frozenset(active_elements_idx),
-    )
-
-
 def make_stent_model(stent_design: StentDesign, fn_inp: str):
     model = make_a_stent(stent_design)
     create_surfaces(stent_design.stent_params, model)
@@ -531,20 +521,14 @@ def perform_extraction(odb_fn, out_db_fn):
         raise subprocess.SubprocessError(ret_code)
 
 
-
 def do_opt(stent_params: StentParams):
     working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-92")
-    history_db = working_dir / "History.db"
+    history_db_fn = history.make_history_db(working_dir)
 
     os.makedirs(working_dir, exist_ok=True)
 
-    def make_fn(ext: str, iter_num: int):
-        """e.g., iter_num=123 and ext=".inp" """
-        intermediary = working_dir / f'It-{str(iter_num).rjust(6, "0")}.XXX'
-        return intermediary.with_suffix(ext)
-
     # If we've already started, use the most recent snapshot in the history.
-    with history.History(history_db) as hist:
+    with history.History(history_db_fn) as hist:
         # hist.set_design_space(stent_params.divs)
         hist.set_stent_params(stent_params)
         restart_i = hist.max_saved_iteration_num()
@@ -554,13 +538,13 @@ def do_opt(stent_params: StentParams):
     if start_from_scratch:
         # Do the initial setup from a first model.
         starting_i = 0
-        fn_inp = make_fn(".inp", starting_i)
+        fn_inp = history.make_fn_in_dir(working_dir, ".inp", starting_i)
         current_design = make_initial_design(stent_params)
         make_stent_model(current_design, fn_inp)
         run_model(fn_inp)
-        perform_extraction(make_fn(".odb", starting_i), make_fn(".db", starting_i))
+        perform_extraction(history.make_fn_in_dir(working_dir, ".odb", starting_i), history.make_fn_in_dir(working_dir, ".db", starting_i))
 
-        with history.History(history_db) as hist:
+        with history.History(history_db_fn) as hist:
             elem_indices_to_num = {idx: iElem for iElem, idx in generate_elem_indices(stent_params.divs)}
             active_elem_nums = (elem_indices_to_num[idx] for idx in current_design.active_elements)
             snapshot = history.Snapshot(
@@ -576,16 +560,16 @@ def do_opt(stent_params: StentParams):
         main_loop_start_i = restart_i
 
     done = False
-    with history.History(history_db) as hist:
+    with history.History(history_db_fn) as hist:
         old_design = hist.get_most_recent_design()
 
     for i_current in range(main_loop_start_i, 1000):
         i_prev = i_current - 1
-        fn_inp = make_fn(".inp", i_current)
-        fn_db_prev = make_fn(".db", i_prev)
-        fn_odb = make_fn(".odb", i_current)
+        fn_inp = history.make_fn_in_dir(working_dir, ".inp", i_current)
+        fn_db_prev = history.make_fn_in_dir(working_dir, ".db", i_prev)
+        fn_odb = history.make_fn_in_dir(working_dir, ".odb", i_current)
 
-        design = make_new_generation(fn_db_prev, history_db, i_current, fn_inp)
+        design = make_new_generation(fn_db_prev, history_db_fn, i_current, fn_inp)
 
         num_new = len(design.active_elements - old_design.active_elements)
         num_removed = len(old_design.active_elements - design.active_elements)
@@ -596,7 +580,7 @@ def do_opt(stent_params: StentParams):
         make_stent_model(design, fn_inp)
         run_model(fn_inp)
 
-        fn_db_current = make_fn(".db", i_current)
+        fn_db_current = history.make_fn_in_dir(working_dir, ".db", i_current)
         perform_extraction(fn_odb, fn_db_current)
 
         old_design = design

@@ -1,5 +1,6 @@
 # Keeps track of how the optimisation has been going.
 import itertools
+import pathlib
 import sqlite3
 import typing
 import statistics
@@ -101,14 +102,14 @@ class History:
             db_forms = (Snapshot(*row) for row in rows)
             yield from (one_db_form.from_db() for one_db_form in db_forms)
 
-    def set_stent_params(self, stent_params: design.StentParams):
+    def set_stent_params(self, stent_params: "design.StentParams"):
         """Save the model parameters"""
         data_rows = stent_params.to_db_strings()
         ins_string = self._generate_insert_string_nt_class(ParamKeyValue)
         with self.connection:
             self.connection.executemany(ins_string, data_rows)
 
-    def get_stent_params(self) -> design.StentParams:
+    def get_stent_params(self) -> "design.StentParams":
         """Get the model parameters"""
         with self.connection:
             rows = self.connection.execute("SELECT * FROM ParamKeyValue")
@@ -156,7 +157,7 @@ class History:
             rows = list(self.connection.execute("SELECT * FROM Snapshot ORDER BY iteration_num DESC LIMIT 1"))
             return self._single_snapshot_row(rows)
 
-    def get_most_recent_design(self) -> typing.Optional[design.StentDesign]:
+    def get_most_recent_design(self) -> typing.Optional["design.StentDesign"]:
         maybe_snapshot = self.get_most_recent_snapshot()
         if maybe_snapshot:
             stent_params = self.get_stent_params()
@@ -223,20 +224,17 @@ def plot_history(hist_fn):
     plt.legend()
     plt.show()
 
+
+def make_fn_in_dir(working_dir: pathlib.Path, ext: str, iter_num: int):
+    """e.g., iter_num=123 and ext=".inp" """
+    intermediary = working_dir / f'It-{str(iter_num).rjust(6, "0")}.XXX'
+    return intermediary.with_suffix(ext)
+
+def make_history_db(working_dir: pathlib.Path) -> pathlib.Path:
+    return working_dir / "History.db"
+
+
 if __name__ == "__main__":
     plot_history(r"E:\Simulations\StentOpt\aba-70\History.db")
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

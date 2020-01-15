@@ -1,4 +1,5 @@
 import pathlib
+import statistics
 import typing
 import enum
 import operator
@@ -8,7 +9,6 @@ import numpy
 import scipy.ndimage
 import matplotlib.pyplot as plt
 
-import stent_opt.struct_opt.design
 from stent_opt.odb_interface import datastore, db_defs
 from stent_opt.struct_opt import design
 from stent_opt.abaqus_model import base
@@ -32,6 +32,34 @@ MAKE_PLOTS = True
 
 
 # Zero based node indexes from Figure 28.1.1–1 in the Abaqus manual
+
+
+def get_gradient_input_data(working_dir, iteration_nums: typing.Iterable[int]) -> typing.Iterable[score.GradientInputData]:
+    working_dir = pathlib.Path(working_dir)
+    history_db_fn = history.make_history_db(working_dir)
+
+
+    with history.History(history_db_fn) as hist:
+        stent_params = hist.get_stent_params()
+
+        for iter_num in iteration_nums:
+            output_db_fn = history.make_fn_in_dir(working_dir, ".db", iter_num)
+
+            snapshot = hist.get_snapshot(iter_num)
+
+            with datastore.Datastore(output_db_fn) as data:
+                all_frames = list(data.get_all_frames())
+                good_frames = [f for f in all_frames if f.instance_name == "STENT-1"]
+                one_frame = good_frames.pop()
+
+                stress_rows = list(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))
+                stress_ranking_components = list(score.get_primary_ranking_components(stress_rows))
+                element_ranking_components = {one_comp.elem_id: one_comp for one_comp in stress_ranking_components}
+                yield score.GradientInputData(
+                    iteration_num=iter_num,
+                    stent_design=design.make_design_from_snapshot(stent_params, snapshot),
+                    element_ranking_components=element_ranking_components,
+                )
 
 
 T_index_to_val = typing.Dict[design.PolarIndex, float]
@@ -221,14 +249,22 @@ def make_plot_tests():
     # Bad import - just for testing
     from stent_opt import make_stent
 
-    db_fn = r"E:\Simulations\StentOpt\aba-92\It-000000.db"
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-92")
+    db_fn = history.make_fn_in_dir(working_dir, ".db", 0)
+    db_history = history.make_history_db(working_dir)
 
-    db_history = pathlib.Path(db_fn).with_name("History.db")
+    all_ranks = []
+
+    # Gradient tracking test
+    recent_gradient_input_data = get_gradient_input_data(working_dir, [0,1,2])
+    vicinity_ranking = list(score.get_primary_ranking_local_stress_gradient(recent_gradient_input_data, statistics.mean))
+    all_ranks.append(vicinity_ranking)
+
     with history.History(db_history) as hist:
         stent_params = hist.get_stent_params()
 
-    # stent_params = stent_opt.struct_opt.design.basic_stent_params
-    old_design = stent_opt.struct_opt.design.make_initial_design(stent_params)
+    # stent_params = design.basic_stent_params
+    old_design = design.make_initial_design(stent_params)
 
     with datastore.Datastore(db_fn) as data:
         all_frames = list(data.get_all_frames())
@@ -244,13 +280,14 @@ def make_plot_tests():
     # Node position pased effort functions
     eff_funcs = [score.get_primary_ranking_macro_deformation, score.get_primary_ranking_element_distortion, ]
 
-    all_ranks = []
     for one_func in eff_funcs:
         all_ranks.append(list(one_func(old_design, pos_rows)))
 
     # Element-based effort functions
     for db_data in [peeq_rows, stress_rows]:
         all_ranks.append(list(score.get_primary_ranking_components(db_data)))
+
+
 
     sec_rank = list(score.get_secondary_ranking_sum_of_norm(all_ranks))
     all_ranks.append(sec_rank)
@@ -261,9 +298,28 @@ def make_plot_tests():
 
 
 
+def track_history_checks_test():
+    working_dir = r"E:\Simulations\StentOpt\aba-92"
+
+    old_data = get_gradient_input_data(working_dir, [0,1,2])
+    for x in old_data:
+        print(x)
+
+
 
 
 
 
 if __name__ == '__main__':
     make_plot_tests()
+
+
+
+
+
+
+
+
+
+
+

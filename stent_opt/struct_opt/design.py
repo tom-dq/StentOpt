@@ -9,6 +9,9 @@ from stent_opt.abaqus_model import base, element
 
 
 # Convert to and from database string formats.
+from stent_opt.struct_opt import history
+
+
 def _nt_to_db_strings(nt_instance) -> typing.Iterable[typing.Tuple[str, typing.Optional[str]]]:
     """(key, value) pairs which can go into a database"""
     for key, val in nt_instance._asdict().items():
@@ -659,3 +662,13 @@ def make_initial_design_sharp(stent_params: StentParams) -> StentDesign:
 
 
 make_initial_design = make_initial_design_sharp
+
+
+def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snapshot) -> StentDesign:
+    elem_num_to_idx = {iElem: idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs)}
+    active_elements_idx = {elem_num_to_idx[iElem] for iElem in snapshot.active_elements}
+
+    return StentDesign(
+        stent_params=stent_params,
+        active_elements=frozenset(active_elements_idx),
+    )
