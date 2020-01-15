@@ -304,11 +304,19 @@ def get_secondary_ranking_sum_of_norm(list_of_lists: typing.List[typing.List[Pri
     for one_list in list_of_lists:
         names.append(one_list[0].comp_name)
         vals = [prim_rank.value for prim_rank in one_list]
+
+        # Shift to the zero-to-one range.
+        min_val = min(vals)
+        max_val = max(vals)
+        span = max_val - min_val
+
+        can_divide = span != 0.0
+
         ave = numpy.mean(vals)
         for prim_rank in one_list:
 
-            if ave != 0.0:
-                normed = prim_rank.value / ave
+            if can_divide:
+                normed = (prim_rank.value - min_val) / span
 
             elif prim_rank.value == 0:
                 normed = 0.0

@@ -16,7 +16,7 @@ from stent_opt.struct_opt.design import StentDesign, generate_elem_indices, Glob
     GlobalNodeSetNames, Actuation, \
     StentParams, basic_stent_params, generate_nodes_stent_polar, generate_nodes_inner_cyl, generate_nodes_balloon_polar, \
     generate_brick_elements_all, generate_plate_elements_all, gen_active_pairs, make_initial_design
-from stent_opt.struct_opt.generation import make_new_generation
+from stent_opt.struct_opt import generation
 
 from stent_opt.struct_opt import history
 
@@ -522,7 +522,7 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt(stent_params: StentParams):
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-92")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-95")
     history_db_fn = history.make_history_db(working_dir)
 
     os.makedirs(working_dir, exist_ok=True)
@@ -564,12 +564,10 @@ def do_opt(stent_params: StentParams):
         old_design = hist.get_most_recent_design()
 
     for i_current in range(main_loop_start_i, 1000):
-        i_prev = i_current - 1
         fn_inp = history.make_fn_in_dir(working_dir, ".inp", i_current)
-        fn_db_prev = history.make_fn_in_dir(working_dir, ".db", i_prev)
         fn_odb = history.make_fn_in_dir(working_dir, ".odb", i_current)
 
-        design = make_new_generation(fn_db_prev, history_db_fn, i_current, fn_inp)
+        design = generation.make_new_generation(working_dir, i_current)
 
         num_new = len(design.active_elements - old_design.active_elements)
         num_removed = len(old_design.active_elements - design.active_elements)

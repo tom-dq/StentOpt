@@ -136,9 +136,25 @@ def display_design_flat(design_space: design.PolarIndex, data: T_index_to_val):
     plt.show()
 
 
-def make_new_generation(db_fn: str, history_db, iter_n: int, inp_fn) -> design.StentDesign:
+def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentDesign:
     iter_n_min_1 = iter_n - 1  # Previous iteration number.
     title_if_plotting = f"Iteration {iter_n}"
+
+    db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_n-1)
+    history_db = history.make_history_db(working_dir)
+    inp_fn = history.make_fn_in_dir(working_dir, ".inp", iter_n)
+
+    all_ranks = []
+
+    # Gradient tracking
+    n_gradient_tracking = 5
+    final_grad_track = iter_n
+    first_grad_track = max(0, final_grad_track-n_gradient_tracking)
+    grad_track_steps = range(first_grad_track, final_grad_track)
+
+    recent_gradient_input_data = get_gradient_input_data(working_dir, grad_track_steps)
+    vicinity_ranking = list(score.get_primary_ranking_local_stress_gradient(recent_gradient_input_data, statistics.mean))
+    all_ranks.append(vicinity_ranking)
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -155,7 +171,7 @@ def make_new_generation(db_fn: str, history_db, iter_n: int, inp_fn) -> design.S
         )
 
     # Get the old data.
-    with datastore.Datastore(db_fn) as data:
+    with datastore.Datastore(db_fn_prev) as data:
 
         all_frames = list(data.get_all_frames())
 
@@ -169,12 +185,12 @@ def make_new_generation(db_fn: str, history_db, iter_n: int, inp_fn) -> design.S
     pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in pos_rows}
 
     # Compute the primary and overall ranking components
-    all_ranks = [
+    all_ranks.extend([
         list(score.get_primary_ranking_components(peeq_rows)),                    # Elem result based scores
         list(score.get_primary_ranking_components(stress_rows)),
         list(score.get_primary_ranking_element_distortion(design_n_min_1, pos_rows)), # Node position based scores
         list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows)),
-    ]
+    ])
 
     # Compute a secondary rank from all the first ones.
     sec_rank = list(score.get_secondary_ranking_sum_of_norm(all_ranks))
@@ -192,9 +208,9 @@ def make_new_generation(db_fn: str, history_db, iter_n: int, inp_fn) -> design.S
 
 
     if MAKE_PLOTS:
-        #stress_rank = list(score.get_primary_ranking_components(stress_rows))
-        local_def_rank = list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows))
-        for plot_rank in [local_def_rank, sec_rank]:
+        stress_rank = list(score.get_primary_ranking_components(stress_rows))
+        #local_def_rank = list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows))
+        for plot_rank in [vicinity_ranking, stress_rank, sec_rank]:
             display.render_status(design_n_min_1, pos_lookup, plot_rank, title_if_plotting)
 
     overall_rank = {one.elem_id: one.value for one in sec_rank}
