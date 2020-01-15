@@ -659,9 +659,26 @@ def make_initial_design_sharp(stent_params: StentParams) -> StentDesign:
     return _make_design_from_line_segments(stent_params, xyz_point, width, nominal_radius)
 
 
+def make_initial_straight_edge(stent_params: StentParams) -> StentDesign:
+    """Make a sharp corner with straight edges."""
+    width = 0.1
+    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
+
+    z_left = 0.3333333 * stent_params.length
+    z_right = 0.6666666 * stent_params.length
+    polar_points = [
+        base.RThZ(r=nominal_radius, theta_deg=0.0 * stent_params.angle, z=z_left),
+        base.RThZ(r=nominal_radius, theta_deg=0.1 * stent_params.angle, z=z_left),
+        base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=z_right),
+        base.RThZ(r=nominal_radius, theta_deg=0.9 * stent_params.angle, z=z_left),
+        base.RThZ(r=nominal_radius, theta_deg=1.0 * stent_params.angle, z=z_left),
+    ]
+    xyz_point = [p.to_xyz() for p in polar_points]
+    return _make_design_from_line_segments(stent_params, xyz_point, width, nominal_radius)
 
 
-make_initial_design = make_initial_design_sharp
+
+make_initial_design = make_initial_straight_edge
 
 
 def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snapshot) -> StentDesign:
