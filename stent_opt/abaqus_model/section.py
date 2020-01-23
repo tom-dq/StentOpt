@@ -17,11 +17,13 @@ class SectionBase:
 class SolidSection(SectionBase):
     name: str
     mat: material.MaterialBase
+    thickness: typing.Optional[float]
 
     def produce_inp_lines(self, elset: element.ElementSet) -> typing.Iterable[str]:
         yield f"** Section: {self.name}"
         yield f"*Solid Section, elset={elset.get_name(base.SetContext.part)}, material={self.mat.name}"
-
+        if self.thickness is not None:
+            yield base.abaqus_float(self.thickness) + ", "
 
 @dataclasses.dataclass(frozen=True)
 class MembraneSection(SectionBase):

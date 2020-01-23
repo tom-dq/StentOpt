@@ -104,6 +104,7 @@ class Actuation(enum.Enum):
     direct_pressure = enum.auto()
     rigid_cylinder = enum.auto()
     balloon = enum.auto()
+    enforced_displacement_plane = enum.auto()
 
 
 class Balloon(typing.NamedTuple):
@@ -140,6 +141,7 @@ class StentParams(typing.NamedTuple):
     r_min: float
     r_max: float
     length: float
+    stent_element_type: element.ElemType
     balloon: typing.Optional[Balloon]
     cylinder: typing.Optional[Cylinder]
 
@@ -154,6 +156,13 @@ class StentParams(typing.NamedTuple):
     def actuation(self) -> Actuation:
         has_balloon = bool(self.balloon)
         has_cyl = bool(self.cylinder)
+        is_2d = self.stent_element_dimensions == 2
+
+        if is_2d:
+            if has_balloon or has_cyl:
+                raise ValueError("2D but Cyl or Balloon?")
+
+            return Actuation.enforced_displacement_plane
 
         if has_balloon and has_cyl:
             raise ValueError("Both Cyl and Balloon?")
@@ -178,6 +187,29 @@ class StentParams(typing.NamedTuple):
 
         else:
             return None
+
+    @property
+    def stent_element_dimensions(self) -> int:
+        if self.stent_element_type == element.ElemType.C3D8R:
+            return 3
+
+        elif self.stent_element_type in (element.ElemType.CPS4R, element.ElemType.CPE4R):
+            return 2
+
+        else:
+            raise ValueError("Invalid element type for stent.", self.stent_element_type)
+
+    @property
+    def radial_thickness(self) -> float:
+        return self.r_max - self.r_min
+
+    @property
+    def radial_midplane_initial(self) -> float:
+        return 0.5 * (self.r_max + self.r_min)
+
+    @property
+    def theta_arc_initial(self):
+        return self.radial_midplane_initial * math.radians(self.angle)
 
 
 class StentDesign(typing.NamedTuple):
@@ -262,13 +294,14 @@ class GlobalNodeSetNames(enum.Enum):
 dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
-        R=2,
+        R=20,
         Th=31,  # 31
         Z=200,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
     length=11.0,
+    stent_element_type=element.ElemType.C3D8R,
     balloon=Balloon(
         inner_radius_ratio=0.85,
         overshoot_ratio=0.05,
@@ -318,6 +351,22 @@ def generate_nodes_stent_polar(stent_params: StentParams) -> typing.Dict[int, ba
 
     return {iNode: n_p for iNode, n_p in gen_nodes()}
 
+
+def generate_nodes_stent_planar(stent_params: StentParams) -> typing.Dict[int, base.XYZ]:
+    """Unwrap the stent into a 2D representation.
+    Long direction (Polar Z) goes to X.
+    Polar Theta goes to Y."""
+
+    def gen_nodes():
+        x_vals = _gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
+        y_vals = _gen_ordinates(stent_params.divs.Th, 0.0, stent_params.theta_arc_initial)
+        z_vals = _gen_ordinates(stent_params.divs.R, stent_params.radial_midplane_initial, stent_params.radial_midplane_initial)
+
+        for iNode, (x, y, z) in enumerate(itertools.product(x_vals, y_vals, z_vals), start=1):
+            xyz_coord = base.XYZ(x, y, z)
+            yield iNode, xyz_coord
+
+    return {iNode: n_p for iNode, n_p in gen_nodes()}
 
 def generate_nodes_inner_cyl(stent_params: StentParams) -> typing.Dict[int, base.RThZ]:
     if stent_params.cylinder.divs.R != 1:
@@ -441,7 +490,7 @@ def generate_brick_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tupl
         )
 
 
-def generate_plate_elements_all(divs: PolarIndex, elem_type: element.ElemType) -> typing.Iterable[typing.Tuple[int, element.Element]]:
+def generate_plate_elements_all(divs: PolarIndex, elem_type: element.ElemType) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
 
     if divs.R != 1:
         raise ValueError(divs)
@@ -459,7 +508,7 @@ def generate_plate_elements_all(divs: PolarIndex, elem_type: element.ElemType) -
             get_iNode(i.R, i.Th, i.Z+1),
         ]
 
-        yield iElem, element.Element(
+        yield i, iElem, element.Element(
             name=elem_type,
             connection=tuple(connection),
         )

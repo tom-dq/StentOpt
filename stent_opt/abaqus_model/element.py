@@ -11,6 +11,8 @@ class ElemType(enum.Enum):
     C3D8R = enum.auto()
     M3D4R = enum.auto()
     SFM3D4R = enum.auto()  # Computationally efficient for elements where everything is constrained.
+    CPS4R = enum.auto()     # Plane stress, reduced integration, hourglass control.
+    CPE4R = enum.auto()     # Plane strain, reduced integration, hourglass control.
 
 
 class Element(typing.NamedTuple):

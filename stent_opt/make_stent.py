@@ -12,10 +12,8 @@ from stent_opt.abaqus_model import base, amplitude, step, element, part, materia
 from stent_opt.abaqus_model import instance, main, surface, load, interaction_property
 from stent_opt.abaqus_model import interaction, node, boundary_condition, section
 
-from stent_opt.struct_opt.design import StentDesign, generate_elem_indices, GlobalPartNames, GlobalSurfNames, \
-    GlobalNodeSetNames, Actuation, \
-    StentParams, basic_stent_params, generate_nodes_stent_polar, generate_nodes_inner_cyl, generate_nodes_balloon_polar, \
-    generate_brick_elements_all, generate_plate_elements_all, gen_active_pairs, make_initial_design
+from stent_opt.struct_opt import design
+from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalSurfNames, GlobalNodeSetNames, Actuation, StentParams, basic_stent_params
 from stent_opt.struct_opt import generation
 
 from stent_opt.struct_opt import history
@@ -33,7 +31,25 @@ except KeyError:
 def make_a_stent(stent_design: StentDesign):
 
     model = main.AbaqusModel("StentModel")
-    stent_params = stent_design.stent_params
+
+    element_dimensions = stent_design.stent_params.stent_element_dimensions
+
+    # Potentially modify the parameters if it's 2D
+    if element_dimensions == 3:
+        stent_params = stent_design.stent_params
+        nodes_polar = design.generate_nodes_stent_polar(stent_params=stent_params)
+        section_thickness = None
+
+    elif element_dimensions == 2:
+        stent_params = stent_design.stent_params._replace(
+            divs=stent_design.stent_params.divs._replace(Z=1),
+        )
+
+        nodes_polar = design.generate_nodes_stent_planar(stent_params=stent_params)
+        section_thickness = stent_params.radial_thickness
+
+    else:
+        raise ValueError(stent_design.stent_params.stent_element_dimensions)
 
     def make_stent_part():
 
@@ -52,6 +68,7 @@ def make_a_stent(stent_design: StentDesign):
         common_section = section.SolidSection(
             name="SolidSteel",
             mat=steel,
+            thickness=section_thickness,
         )
 
         stent_part = part.Part(
@@ -59,12 +76,21 @@ def make_a_stent(stent_design: StentDesign):
             common_section=common_section,
         )
 
-        nodes_polar = generate_nodes_stent_polar(stent_params=stent_params)
-
+        # Make the nodes.
         for iNode, one_node_polar in nodes_polar.items():
             stent_part.add_node_validated(iNode, one_node_polar.to_xyz())
 
-        for idx, iElem, one_elem in generate_brick_elements_all(divs=stent_params.divs):
+        # Make the elements.
+        if element_dimensions == 3:
+            generate_elements_all = design.generate_brick_elements_all(divs=stent_params.divs)
+
+        elif element_dimensions == 2:
+            generate_elements_all = design.generate_plate_elements_all(divs=stent_params.divs, elem_type=stent_params.stent_element_type)
+
+        else:
+            raise ValueError(element_dimensions)
+
+        for idx, iElem, one_elem in generate_elements_all:
             if idx in stent_design.active_elements:
                 stent_part.add_element_validate(iElem, one_elem)
 
@@ -96,7 +122,7 @@ def make_a_stent(stent_design: StentDesign):
         # Make the nodes and keep track of the leading/trailing edges.
         nodes_polar = {}
         boundary_set_name_to_nodes = collections.defaultdict(set)
-        for iNode, (n_p, boundary_sets) in enumerate(generate_nodes_balloon_polar(stent_params=stent_params), start=1):
+        for iNode, (n_p, boundary_sets) in enumerate(design.generate_nodes_balloon_polar(stent_params=stent_params), start=1):
             nodes_polar[iNode] = n_p
             for boundary_set in boundary_sets:
                 boundary_set_name_to_nodes[boundary_set.name].add(iNode)
@@ -105,7 +131,7 @@ def make_a_stent(stent_design: StentDesign):
             one_node_set = node.NodeSet(balloon_part, node_set_name, frozenset(nodes))
             balloon_part.add_node_set(one_node_set)
 
-        elems_all = {iElem: e for iElem, e in generate_plate_elements_all(divs=stent_params.balloon.divs, elem_type=element.ElemType.M3D4R)}
+        elems_all = {iElem: e for idx, iElem, e in design.generate_plate_elements_all(divs=stent_params.balloon.divs, elem_type=element.ElemType.M3D4R)}
 
         for iNode, one_node_polar in nodes_polar.items():
             balloon_part.add_node_validated(iNode, one_node_polar.to_xyz())
@@ -136,9 +162,9 @@ def make_a_stent(stent_design: StentDesign):
             common_section=common_section_cyl,
         )
 
-        nodes_polar = generate_nodes_inner_cyl(stent_params=stent_params)
+        nodes_polar = design.generate_nodes_inner_cyl(stent_params=stent_params)
 
-        elems_all = {iElem: e for iElem, e in generate_plate_elements_all(divs=stent_params.cylinder.divs, elem_type=element.ElemType.SFM3D4R)}
+        elems_all = {iElem: e for idx, iElem, e in design.generate_plate_elements_all(divs=stent_params.cylinder.divs, elem_type=element.ElemType.SFM3D4R)}
 
         for iNode, one_node_polar in nodes_polar.items():
             cyl_inner_part.add_node_validated(iNode, one_node_polar.to_xyz())
@@ -168,10 +194,14 @@ def make_a_stent(stent_design: StentDesign):
 def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
     """Sets up the standard surfaces on the model."""
 
+    if stent_params.stent_element_dimensions == 2:
+        # Nothing to do in this case
+        return
+
     stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
     stent_part = stent_instance.base_part
 
-    elem_indexes_all = {iElem: i for iElem, i in generate_elem_indices(divs=stent_params.divs)}
+    elem_indexes_all = {iElem: i for iElem, i in design.generate_elem_indices(divs=stent_params.divs)}
     elem_indexes = {iElem: i for iElem, i in elem_indexes_all.items() if iElem in stent_part.elements}
 
     def create_elem_surface(one_instance: instance.Instance, elem_nums, name, one_surf: surface.SurfaceFace):
@@ -385,7 +415,7 @@ def apply_boundaries(stent_params: StentParams, model: main.AbaqusModel):
     if not uncoupled_nodes_in_part:
         raise ValueError()
 
-    for n1, n2 in gen_active_pairs(stent_params, uncoupled_nodes_in_part):
+    for n1, n2 in design.gen_active_pairs(stent_params, uncoupled_nodes_in_part):
         stent_instance.add_node_couple(n1, n2, False)
         uncoupled_nodes_in_part.remove(n1)
         uncoupled_nodes_in_part.remove(n2)
@@ -522,7 +552,7 @@ def perform_extraction(odb_fn, out_db_fn):
 
 
 def do_opt(stent_params: StentParams):
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-99")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-100-20Thick")
     history_db_fn = history.make_history_db(working_dir)
 
     os.makedirs(working_dir, exist_ok=True)
@@ -539,13 +569,13 @@ def do_opt(stent_params: StentParams):
         # Do the initial setup from a first model.
         starting_i = 0
         fn_inp = history.make_fn_in_dir(working_dir, ".inp", starting_i)
-        current_design = make_initial_design(stent_params)
+        current_design = design.make_initial_design(stent_params)
         make_stent_model(current_design, fn_inp)
         run_model(fn_inp)
         perform_extraction(history.make_fn_in_dir(working_dir, ".odb", starting_i), history.make_fn_in_dir(working_dir, ".db", starting_i))
 
         with history.History(history_db_fn) as hist:
-            elem_indices_to_num = {idx: iElem for iElem, idx in generate_elem_indices(stent_params.divs)}
+            elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
             active_elem_nums = (elem_indices_to_num[idx] for idx in current_design.active_elements)
             snapshot = history.Snapshot(
                 iteration_num=starting_i,

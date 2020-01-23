@@ -73,6 +73,9 @@ class XYZ(typing.NamedTuple):
     y: float
     z: float
 
+    def to_xyz(self) -> "XYZ":
+        return self
+
     def to_r_th_z(self) -> "RThZ":
         r = math.sqrt( self.x**2 + self.z**2 )
         th_rad = math.atan2(self.x, self.z)
