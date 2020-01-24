@@ -118,6 +118,13 @@ class RThZ(typing.NamedTuple):
         z = self.r * math.cos(ang_rad)
         return XYZ(x, y, z)
 
+    def to_planar_unrolled(self) -> XYZ:
+        return XYZ(
+            x=self.r * math.radians(self.theta_deg),
+            y=self.z,
+            z=self.r,
+        )
+
     def __add__(self, other):
         return _operator_dot(operator.add, self, other)
 

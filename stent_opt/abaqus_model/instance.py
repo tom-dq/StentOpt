@@ -38,9 +38,10 @@ class Instance:
         all_node_set = self.base_part.get_everything_set(base.SetType.node)
         yield all_node_set.get_name(base.SetContext.part)
 
-        # For now, hard code a cylindrical axis system along the Y axis
-        yield f"*Transform, nset={unique_name}, type=C"
-        yield " 0.,         10.,           0.,           0.,         15.,           0."
+        if self.base_part.transform_to_cyl:
+            # For now, hard code a cylindrical axis system along the Y axis
+            yield f"*Transform, nset={unique_name}, type=C"
+            yield " 0.,         10.,           0.,           0.,         15.,           0."
 
         for surf_name, surf in self.surfaces.items():
             yield from surf.produce_inp_lines()

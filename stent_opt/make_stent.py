@@ -2,6 +2,7 @@ import itertools
 import os
 import pathlib
 import subprocess
+import tempfile
 import typing
 import collections
 import statistics
@@ -33,20 +34,22 @@ def make_a_stent(stent_design: StentDesign):
     model = main.AbaqusModel("StentModel")
 
     element_dimensions = stent_design.stent_params.stent_element_dimensions
+    node_num_idx_pos = design.generate_nodes(stent_design.stent_params)
+    node_pos = {iNode: xyz for iNode, _, xyz in node_num_idx_pos}
 
     # Potentially modify the parameters if it's 2D
     if element_dimensions == 3:
         stent_params = stent_design.stent_params
-        nodes_polar = design.generate_nodes_stent_polar(stent_params=stent_params)
         section_thickness = None
+        transform_to_cyl = True
 
     elif element_dimensions == 2:
         stent_params = stent_design.stent_params._replace(
-            divs=stent_design.stent_params.divs._replace(Z=1),
+            divs=stent_design.stent_params.divs._replace(R=1),
         )
 
-        nodes_polar = design.generate_nodes_stent_planar(stent_params=stent_params)
         section_thickness = stent_params.radial_thickness
+        transform_to_cyl = False
 
     else:
         raise ValueError(stent_design.stent_params.stent_element_dimensions)
@@ -74,27 +77,44 @@ def make_a_stent(stent_design: StentDesign):
         stent_part = part.Part(
             name=GlobalPartNames.STENT,
             common_section=common_section,
+            transform_to_cyl=transform_to_cyl,
         )
 
         # Make the nodes.
-        for iNode, one_node_polar in nodes_polar.items():
+        for iNode, one_node_polar in node_pos.items():
             stent_part.add_node_validated(iNode, one_node_polar.to_xyz())
 
         # Make the elements.
-        if element_dimensions == 3:
-            generate_elements_all = design.generate_brick_elements_all(divs=stent_params.divs)
-
-        elif element_dimensions == 2:
-            generate_elements_all = design.generate_plate_elements_all(divs=stent_params.divs, elem_type=stent_params.stent_element_type)
-
-        else:
-            raise ValueError(element_dimensions)
-
-        for idx, iElem, one_elem in generate_elements_all:
+        for idx, iElem, one_elem in design.generate_stent_part_elements(stent_params):
             if idx in stent_design.active_elements:
                 stent_part.add_element_validate(iElem, one_elem)
 
         one_instance = instance.Instance(base_part=stent_part)
+
+        if element_dimensions == 2:
+            # Create the node sets on the boundary
+            used_node_nums = set()
+            for one_elem in stent_part.elements.values():
+                used_node_nums.update(one_elem.connection)
+
+            iNode_to_idx_active = {iNode: idx for iNode, idx, _ in node_num_idx_pos if iNode in used_node_nums}
+
+            # Z may not span the whole thing...
+            min_idx_z = min(idx.Z for idx in iNode_to_idx_active.values())
+
+            def get_boundary_node_set(node_idx: design.PolarIndex):
+                if node_idx.Th == 0: yield design.GlobalNodeSetNames.PlanarStentTheta0
+                if node_idx.Th == stent_params.divs.Th-1: yield design.GlobalNodeSetNames.PlanarStentThetaMax
+                if node_idx.Z == min_idx_z: yield design.GlobalNodeSetNames.PlanarStentZMin
+
+            boundary_set_name_to_nodes = collections.defaultdict(set)
+            for iNode, idx in iNode_to_idx_active.items():
+                for node_set in get_boundary_node_set(idx):
+                    boundary_set_name_to_nodes[node_set.name].add(iNode)
+
+            for node_set_name, nodes in boundary_set_name_to_nodes.items():
+                one_node_set = node.NodeSet(stent_part, node_set_name, frozenset(nodes))
+                stent_part.add_node_set(one_node_set)
 
         model.add_instance(one_instance)
 
@@ -117,6 +137,7 @@ def make_a_stent(stent_design: StentDesign):
         balloon_part = part.Part(
             name=GlobalPartNames.BALLOON,
             common_section=common_section_balloon,
+            transform_to_cyl=True,
         )
 
         # Make the nodes and keep track of the leading/trailing edges.
@@ -160,6 +181,7 @@ def make_a_stent(stent_design: StentDesign):
         cyl_inner_part = part.Part(
             name=GlobalPartNames.CYL_INNER,
             common_section=common_section_cyl,
+            transform_to_cyl=True,
         )
 
         nodes_polar = design.generate_nodes_inner_cyl(stent_params=stent_params)
@@ -262,18 +284,81 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
         create_elem_surface(instance_cyl, all_cyl_elements, GlobalSurfNames.CYL_INNER, surface.SurfaceFace.SNEG)
 
 
-
 def apply_loads(stent_params: StentParams, model: main.AbaqusModel):
     if stent_params.actuation == Actuation.rigid_cylinder:
-        _apply_loads_enforced_disp(stent_params, model)
+        _apply_loads_enforced_disp_rigid_cyl(stent_params, model)
+
+    elif stent_params.actuation == Actuation.enforced_displacement_plane:
+        _apply_loads_enforced_disp_2d_planar(stent_params, model)
 
     else:
         _apply_loads_pressure(stent_params, model)
 
 
-def _apply_loads_enforced_disp(stent_params: StentParams, model: main.AbaqusModel):
+def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.AbaqusModel):
+    t1 = 2.0
+    t2 = 0.5
+
+    step_expand = step.StepDynamicExplicit(
+        name=f"Expand",
+        final_time=t1,
+        bulk_visc_b1=0.06,
+        bulk_visc_b2=1.2,
+    )
+
+    step_release = step.StepDynamicExplicit(
+        name=f"Release",
+        final_time=t1+t2,
+        bulk_visc_b1=0.06,
+        bulk_visc_b2=1.2,
+    )
+
+    model.add_step(step_expand)
+    model.add_step(step_release)
+
+    # Maximum displacement
+    max_displacement = stent_params.theta_arc_initial * (stent_params.expansion_ratio - 1.0)
+
+    amp_data = (
+        amplitude.XY(0.0, 0.0),
+        amplitude.XY(t1, 1.0),
+    )
+    amp = amplitude.Amplitude("Amp-1", amp_data)
+
+    stent_part = model.get_only_instance_base_part_name(GlobalPartNames.STENT).base_part
+    expand_disp = boundary_condition.BoundaryDispRot(
+        name="ExpandDisp",
+        with_amplitude=amp,
+        components=(
+            boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentTheta0.name], dof=1, value=0.0),
+            boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentThetaMax.name], dof=1, value=max_displacement),
+        ),
+    )
+
+    let_go_disp = boundary_condition.BoundaryDispRot(
+        name="ReleaseDisp",
+        with_amplitude=amp,
+        components=(
+            boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentTheta0.name], dof=1, value=0.0),
+        ),
+    )
+
+    hold_base = boundary_condition.BoundaryDispRot(
+        name="HoldBase",
+        with_amplitude=None,
+        components=(
+            boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentZMin.name], dof=2, value=0.0),
+        ),
+    )
+
+    model.add_load_specific_steps([step_expand], expand_disp)
+    model.add_load_specific_steps([step_release], let_go_disp)
+    model.add_load_specific_steps([step_expand, step_release], hold_base)
+
+
+def _apply_loads_enforced_disp_rigid_cyl(stent_params: StentParams, model: main.AbaqusModel):
     init_radius = stent_params.actuation_surface_ratio
-    final_radius = stent_params.r_min * stent_params.cylinder.final_radius_ratio
+    final_radius = stent_params.r_min * stent_params.expansion_ratio
     dr = final_radius - init_radius
 
     total_time = .3  # TODO! Back to 3.0
@@ -357,9 +442,8 @@ def _apply_loads_pressure(stent_params: StentParams, model: main.AbaqusModel):
 def add_interaction(stent_params: StentParams, model: main.AbaqusModel):
     """Simple interaction between the balloon/cyl and the stent."""
 
-
-
-    if stent_params.actuation != Actuation.direct_pressure:
+    NO_INTERACTION = (Actuation.direct_pressure, Actuation.enforced_displacement_plane)
+    if stent_params.actuation not in NO_INTERACTION:
 
         if stent_params.actuation == Actuation.balloon:
             inner_surf = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).surfaces[
@@ -389,7 +473,6 @@ def add_interaction(stent_params: StentParams, model: main.AbaqusModel):
             )
         )
 
-
         one_int_specified = interaction.ContactPair(
             name="Interaction",
             int_property=int_prop,
@@ -401,6 +484,17 @@ def add_interaction(stent_params: StentParams, model: main.AbaqusModel):
 
 
 def apply_boundaries(stent_params: StentParams, model: main.AbaqusModel):
+    if stent_params.stent_element_dimensions == 2:
+        pass
+
+    elif stent_params.stent_element_dimensions == 3:
+        _apply_boundaries_3d(stent_params, model)
+
+    else:
+        raise ValueError(stent_params.stent_element_dimensions)
+
+
+def _apply_boundaries_3d(stent_params: StentParams, model: main.AbaqusModel):
     """Find the node pairs and couple them, and apply sym conditions."""
 
     # Stent has coupled boundaries
@@ -551,8 +645,8 @@ def perform_extraction(odb_fn, out_db_fn):
         raise subprocess.SubprocessError(ret_code)
 
 
-def do_opt(stent_params: StentParams):
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-100-20Thick")
+def do_opt(stent_params: StentParams, in_path):
+    working_dir = pathlib.Path(in_path)
     history_db_fn = history.make_history_db(working_dir)
 
     os.makedirs(working_dir, exist_ok=True)
@@ -571,7 +665,9 @@ def do_opt(stent_params: StentParams):
         fn_inp = history.make_fn_in_dir(working_dir, ".inp", starting_i)
         current_design = design.make_initial_design(stent_params)
         make_stent_model(current_design, fn_inp)
+
         run_model(fn_inp)
+        raise Exception("Doneskiis!")
         perform_extraction(history.make_fn_in_dir(working_dir, ".odb", starting_i), history.make_fn_in_dir(working_dir, ".db", starting_i))
 
         with history.History(history_db_fn) as hist:
@@ -597,27 +693,44 @@ def do_opt(stent_params: StentParams):
         fn_inp = history.make_fn_in_dir(working_dir, ".inp", i_current)
         fn_odb = history.make_fn_in_dir(working_dir, ".odb", i_current)
 
-        design = generation.make_new_generation(working_dir, i_current)
+        new_design = generation.make_new_generation(working_dir, i_current)
 
-        num_new = len(design.active_elements - old_design.active_elements)
-        num_removed = len(old_design.active_elements - design.active_elements)
+        num_new = len(new_design.active_elements - old_design.active_elements)
+        num_removed = len(old_design.active_elements - new_design.active_elements)
         print(f"Added: {num_new}\tRemoved: {num_removed}.")
         if design == old_design and (i_current != main_loop_start_i):
             done = True
 
-        make_stent_model(design, fn_inp)
+        make_stent_model(new_design, fn_inp)
         run_model(fn_inp)
 
         fn_db_current = history.make_fn_in_dir(working_dir, ".db", i_current)
         perform_extraction(fn_odb, fn_db_current)
 
-        old_design = design
+        old_design = new_design
 
         if done:
             break
 
+def _get_next_free_dir(base_dir):
+    def idea(i):
+        return f"AA-{i}"
+
+    existing_stuff = set(os.listdir(base_dir))
+
+    def is_already_there(f):
+        return f in existing_stuff
+
+    all_proposals = (idea(x) for x in itertools.count())
+    good_proposals = itertools.dropwhile(is_already_there, all_proposals)
+    one_good_propsal = next(good_proposals)
+    return os.path.join(base_dir, one_good_propsal)
 
 
 if __name__ == "__main__":
-    do_opt(basic_stent_params)
+    #with tempfile.TemporaryDirectory() as temp_dir:
+
+    working_dir = _get_next_free_dir(r"E:\Simulations\StentOpt")
+
+    do_opt(basic_stent_params, str(working_dir))
 

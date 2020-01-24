@@ -112,11 +112,11 @@ def render_status(
 
     bg_col = BACKGROUND_COLOUR_TRACKER.get_colour(comp_type)
 
-    _show(f"{title_prefix} {comp_type}", poly_list, bg_col)
+    show_polygons(f"{title_prefix} {comp_type}", poly_list, bg_col)
 
 
 
-def _show(title, poly_list, bg_col):
+def show_polygons(title, poly_list, bg_col):
 
     ax = a3.Axes3D(pl.figure(figsize=(10.5, 7)))
     fig = ax.figure

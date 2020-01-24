@@ -104,7 +104,7 @@ class History:
 
     def set_stent_params(self, stent_params: "design.StentParams"):
         """Save the model parameters"""
-        data_rows = stent_params.to_db_strings()
+        data_rows = list(stent_params.to_db_strings())
         ins_string = self._generate_insert_string_nt_class(ParamKeyValue)
         with self.connection:
             self.connection.executemany(ins_string, data_rows)
@@ -234,7 +234,19 @@ def make_history_db(working_dir: pathlib.Path) -> pathlib.Path:
     return working_dir / "History.db"
 
 
+def history_write_read_test():
+    with History(r"c:\temp\aaa23.db") as history:
+        orig_stent_params = design.basic_stent_params
+        history.set_stent_params(orig_stent_params)
+        recreated_stent_params = history.get_stent_params()
+
+        print(orig_stent_params == recreated_stent_params)
+
+
 if __name__ == "__main__":
+    history_write_read_test()
+
+if False:
     plot_history(r"E:\Simulations\StentOpt\aba-70\History.db")
 
 

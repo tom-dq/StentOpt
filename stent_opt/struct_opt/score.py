@@ -228,7 +228,7 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
 
     node_to_pos_original = {
         iNode: r_th_z.to_xyz() for iNode, r_th_z in
-        design.generate_nodes_stent_polar(stent_params=old_design.stent_params).items() if
+        design.get_node_num_to_pos(stent_params=old_design.stent_params).items() if
         iNode in node_to_pos_deformed
     }
 

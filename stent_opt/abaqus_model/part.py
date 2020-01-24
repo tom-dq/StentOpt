@@ -10,11 +10,13 @@ class Part:
     elements: element.Elements
     node_sets: typing.Dict[str, "node.NodeSet"]
     element_sets: typing.Dict[str, "element.ElementSet"]
+    transform_to_cyl: bool
     _EVERYTHING_NAME = "Everything"
 
-    def __init__(self, name: str, common_section: section.SectionBase):
+    def __init__(self, name: str, common_section: section.SectionBase, transform_to_cyl: bool):
         self.name = name
         self.common_section = common_section
+        self.transform_to_cyl = transform_to_cyl
         self.nodes = node.Nodes()
         self.elements = element.Elements()
         self.node_sets = dict()

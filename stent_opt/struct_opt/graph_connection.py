@@ -33,7 +33,7 @@ def _element_idx_to_something_within(entity: _Entity, distance: float, stent_des
     active_nodes = set()
     node_hops = dict()
 
-    node_positions = design.generate_nodes_stent_polar(stent_design.stent_params)
+    node_positions = design.get_node_num_to_pos(stent_design.stent_params)
 
     for node_list in elem_idx_to_nodes.values():
 

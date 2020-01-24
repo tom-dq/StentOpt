@@ -11,11 +11,29 @@ from stent_opt.abaqus_model import base, element
 # Convert to and from database string formats.
 from stent_opt.struct_opt import history
 
+# These can be serialised an deserialsed
+_enum_types = [
+    element.ElemType,
+]
+
+
+def _get_type_ignoring_nones(some_type):
+    if getattr(some_type, "__origin__", None) is typing.Union:
+        non_none_args = [t for t in some_type.__args__ if t != type(None)]
+
+    else:
+        non_none_args = [some_type]
+
+    if len(non_none_args) != 1:
+        raise ValueError(some_type)
+
+    return non_none_args[0]
 
 def _nt_to_db_strings(nt_instance) -> typing.Iterable[typing.Tuple[str, typing.Optional[str]]]:
     """(key, value) pairs which can go into a database"""
     for key, val in nt_instance._asdict().items():
-        this_item_type = nt_instance._field_types[key]
+        this_item_type = _get_type_ignoring_nones(nt_instance._field_types[key])
+        matched_enum_types = [et for et in _enum_types if isinstance(val, et)]
         if this_item_type in (int, float):
             yield key, str(val)
 
@@ -27,6 +45,11 @@ def _nt_to_db_strings(nt_instance) -> typing.Iterable[typing.Tuple[str, typing.O
             # Delegate to the lower level
             for sub_key, sub_val in val.to_db_strings():
                 yield f"{key}.{sub_key}", sub_val
+
+        elif len(matched_enum_types) == 1:
+            # Enums can also be stored - just use the name and we can figure out the type again later on.
+            enum_type = matched_enum_types[0]
+            yield key, val.name
 
         else:
             raise TypeError(f"Don't known what to make of {key}: {val} type {this_item_type}.")
@@ -50,17 +73,7 @@ def _nt_from_db_strings(nt_class, data):
         else:
             return None, one_data
 
-    def get_type_ignoring_nones(some_type):
-        if getattr(some_type, "__origin__", None) is typing.Union:
-            non_none_args = [t for t in some_type.__args__ if t != type(None)]
 
-        else:
-            non_none_args = [some_type]
-
-        if len(non_none_args) != 1:
-            raise ValueError(some_type)
-
-        return non_none_args[0]
 
     working_data = {}
     for prefix, data_sublist in itertools.groupby(sorted(data), key=get_prefix):
@@ -69,16 +82,22 @@ def _nt_from_db_strings(nt_class, data):
             without_prefix_data = [remove_prefix(one_data) for one_data in data_sublist]
 
             nt_subclass = nt_class._field_types[prefix]
-            single_type = get_type_ignoring_nones(nt_subclass)
+            single_type = _get_type_ignoring_nones(nt_subclass)
+
+            # Is a sub-branch namedtuple
             working_data[prefix] = single_type.from_db_strings(without_prefix_data)
 
         else:
             # Should be able to create it directly.
             for name, value in data_sublist:
-                base_type = nt_class._field_types[name]
+                base_type = _get_type_ignoring_nones(nt_class._field_types[name])
 
                 if value is None:
                     working_data[name] = None
+
+                elif base_type in _enum_types:
+                    # Is an enum, lookup from the dictionary.
+                    working_data[name] = base_type[value]
 
                 else:
                     working_data[name] = base_type(value)
@@ -123,7 +142,6 @@ class Balloon(typing.NamedTuple):
 
 class Cylinder(typing.NamedTuple):
     initial_radius_ratio: float
-    final_radius_ratio: float
     overshoot_ratio: float
     divs: PolarIndex
 
@@ -144,6 +162,7 @@ class StentParams(typing.NamedTuple):
     stent_element_type: element.ElemType
     balloon: typing.Optional[Balloon]
     cylinder: typing.Optional[Cylinder]
+    expansion_ratio: typing.Optional[float]
 
     def to_db_strings(self):
         yield from _nt_to_db_strings(self)
@@ -289,19 +308,22 @@ class GlobalNodeSetNames(enum.Enum):
     BalloonZ0 = enum.auto()
     BalloonZMax = enum.auto()
     RigidCyl = enum.auto()
+    PlanarStentTheta0 = enum.auto()
+    PlanarStentThetaMax = enum.auto()
+    PlanarStentZMin = enum.auto()
 
 
 dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
-        R=20,
-        Th=31,  # 31
-        Z=200,  # 120
+        R=1,
+        Th=50,  # 31
+        Z=250,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
     length=11.0,
-    stent_element_type=element.ElemType.C3D8R,
+    stent_element_type=element.ElemType.CPS4R,
     balloon=Balloon(
         inner_radius_ratio=0.85,
         overshoot_ratio=0.05,
@@ -314,16 +336,17 @@ dylan_r10n1_params = StentParams(
     ),
     cylinder=Cylinder(
         initial_radius_ratio=0.6,
-        final_radius_ratio=3.0,
         overshoot_ratio=0.1,
         divs=PolarIndex(
             R=1,
             Th=51,
             Z=2,
         ),
-    )
+    ),
+    expansion_ratio=3.0,
 )
-basic_stent_params = dylan_r10n1_params._replace(balloon=None)
+
+basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
 
 
 def _pairwise(iterable):
@@ -334,39 +357,70 @@ def _pairwise(iterable):
 
 
 def _gen_ordinates(n, low, high):
-    vals = [ low + (high - low) * (i/(n-1)) for i in range(n)]
-    return vals
+    if n == 1:
+        if math.isclose(low, high):
+            return [low]
+
+        else:
+            raise ValueError(low, high)
+
+    else:
+        vals = [ low + (high - low) * (i/(n-1)) for i in range(n)]
+        return vals
 
 
-def generate_nodes_stent_polar(stent_params: StentParams) -> typing.Dict[int, base.RThZ]:
+def generate_nodes(stent_params: StentParams) -> typing.List[typing.Tuple[int, PolarIndex, typing.Union[base.XYZ, base.RThZ]]]:
+    if stent_params.stent_element_dimensions == 2:
+        return list(_generate_nodes_stent_planar(stent_params))
 
-    def gen_nodes():
-        r_vals = _gen_ordinates(stent_params.divs.R, stent_params.r_min, stent_params.r_max)
-        th_vals = _gen_ordinates(stent_params.divs.Th, 0.0, stent_params.angle)
-        z_vals = _gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
+    elif stent_params.stent_element_dimensions == 3:
+        return list(_generate_nodes_stent_polar(stent_params))
 
-        for iNode, (r, th, z) in enumerate(itertools.product(r_vals, th_vals, z_vals), start=1):
-            polar_coord = base.RThZ(r, th, z)
-            yield iNode, polar_coord
-
-    return {iNode: n_p for iNode, n_p in gen_nodes()}
+    else:
+        raise ValueError(stent_params.stent_element_dimensions)
 
 
-def generate_nodes_stent_planar(stent_params: StentParams) -> typing.Dict[int, base.XYZ]:
+def get_node_num_to_pos(stent_params) -> typing.Dict[int, typing.Union[base.XYZ, base.RThZ]]:
+    return {iNode: pos for iNode, _, pos in generate_nodes(stent_params)}
+
+
+def _generate_nodes_stent_polar(stent_params: StentParams) -> typing.Iterable[typing.Tuple[int, PolarIndex, base.RThZ]]:
+    r_vals = _gen_ordinates(stent_params.divs.R, stent_params.r_min, stent_params.r_max)
+    th_vals = _gen_ordinates(stent_params.divs.Th, 0.0, stent_params.angle)
+    z_vals = _gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
+
+    for iNode, ((iR, r), (iTh, th), (iZ, z)) in enumerate(itertools.product(
+            enumerate(r_vals),
+            enumerate(th_vals),
+            enumerate(z_vals)
+    ), start=1):
+        polar_index = PolarIndex(R=iR, Th=iTh, Z=iZ)
+        polar_coord = base.RThZ(r, th, z)
+        yield iNode, polar_index, polar_coord
+
+
+def _generate_nodes_stent_planar(stent_params: StentParams) -> typing.Iterable[typing.Tuple[int, PolarIndex, base.XYZ]]:
     """Unwrap the stent into a 2D representation.
-    Long direction (Polar Z) goes to X.
-    Polar Theta goes to Y."""
+    Polar      Cartesian
+    R      <->    Z
+    Theta  <->    X
+    Z      <->    Y
+    """
 
-    def gen_nodes():
-        x_vals = _gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
-        y_vals = _gen_ordinates(stent_params.divs.Th, 0.0, stent_params.theta_arc_initial)
-        z_vals = _gen_ordinates(stent_params.divs.R, stent_params.radial_midplane_initial, stent_params.radial_midplane_initial)
+    x_vals = _gen_ordinates(stent_params.divs.Th, 0.0, stent_params.theta_arc_initial)
+    y_vals = _gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
+    z_vals = _gen_ordinates(stent_params.divs.R, stent_params.radial_midplane_initial, stent_params.radial_midplane_initial)
 
-        for iNode, (x, y, z) in enumerate(itertools.product(x_vals, y_vals, z_vals), start=1):
-            xyz_coord = base.XYZ(x, y, z)
-            yield iNode, xyz_coord
+    for iNode, ((ix, x), (iy, y), (iz, z)) in enumerate(
+            itertools.product(
+                enumerate(x_vals),
+                enumerate(y_vals),
+                enumerate(z_vals)
+            ), start=1):
+        polar_index = PolarIndex(R=iz, Th=ix, Z=iy)
+        xyz_coord = base.XYZ(x, y, z)
+        yield iNode, polar_index, xyz_coord
 
-    return {iNode: n_p for iNode, n_p in gen_nodes()}
 
 def generate_nodes_inner_cyl(stent_params: StentParams) -> typing.Dict[int, base.RThZ]:
     if stent_params.cylinder.divs.R != 1:
@@ -482,6 +536,17 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
         yield this_point, boundary_set
 
 
+def generate_stent_part_elements(stent_params: StentParams) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
+    if stent_params.stent_element_dimensions == 2:
+        yield from generate_plate_elements_all(stent_params.divs, stent_params.stent_element_type)
+
+    elif stent_params.stent_element_dimensions == 3:
+        yield from generate_brick_elements_all(stent_params.divs)
+
+    else:
+        raise ValueError(stent_params.stent_element_dimensions)
+
+
 def generate_brick_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
     for iElem, one_elem_idx in generate_elem_indices(divs):
         yield one_elem_idx, iElem, element.Element(
@@ -550,7 +615,7 @@ def make_initial_design_dylan(stent_params: StentParams) -> StentDesign:
 
     nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
 
-    nodes_polar = generate_nodes_stent_polar(stent_params=stent_params)
+    nodes_polar = get_node_num_to_pos(stent_params=stent_params)
 
     def elem_cent_polar(e: element.Element) -> base.RThZ:
         node_pos = [nodes_polar[iNode] for iNode in e.connection]
@@ -577,7 +642,7 @@ def make_initial_design_dylan(stent_params: StentParams) -> StentDesign:
 
         return False
 
-    included_elements = (idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs) if check_elem(e))
+    included_elements = (idx for idx, iElem, e in generate_stent_part_elements(stent_params) if check_elem(e))
     return StentDesign(
         stent_params=stent_params,
         active_elements=frozenset(included_elements)
@@ -586,10 +651,12 @@ def make_initial_design_dylan(stent_params: StentParams) -> StentDesign:
 
 def _make_design_from_line_segments(stent_params: StentParams, line_z_th_points: typing.List[base.XYZ], width: float, nominal_radius: float) -> StentDesign:
 
-    nodes_polar = generate_nodes_stent_polar(stent_params=stent_params)
+    node_pos_dict = get_node_num_to_pos(stent_params=stent_params)
+
+    dims_3d = stent_params.stent_element_dimensions == 3
 
     def elem_cent_polar(e: element.Element) -> base.RThZ:
-        node_pos = [nodes_polar[iNode] for iNode in e.connection]
+        node_pos = [node_pos_dict[iNode] for iNode in e.connection]
         ave_node_pos = sum(node_pos) / len(node_pos)
         return ave_node_pos
 
@@ -627,8 +694,13 @@ def _make_design_from_line_segments(stent_params: StentParams, line_z_th_points:
     def point_line_dist(p1: base.XYZ, p2: base.XYZ, x0: base.RThZ):
         # https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line#Line_defined_by_two_points
 
-        # Put everything at the nominal radius
-        x0_xyz = x0._replace(r=nominal_radius).to_xyz()
+        if dims_3d:
+            # Put everything at the nominal radius
+            x0_xyz = x0._replace(r=nominal_radius).to_xyz()
+
+        else:
+            # Planar
+            x0_xyz = x0
 
         return _dist(p1.x, p1.y, p2.x, p2.y, x0_xyz.x, x0_xyz.y)
 
@@ -651,7 +723,7 @@ def _make_design_from_line_segments(stent_params: StentParams, line_z_th_points:
 
         return min(all_dists()) <= (0.5 * width)
 
-    included_elements = (idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs) if check_elem(e))
+    included_elements = (idx for idx, iElem, e in generate_stent_part_elements(stent_params) if check_elem(e))
     return StentDesign(
         stent_params=stent_params,
         active_elements=frozenset(included_elements)
@@ -722,12 +794,29 @@ def make_initial_straight_edge(stent_params: StentParams) -> StentDesign:
         base.RThZ(r=nominal_radius, theta_deg=0.9 * stent_params.angle, z=z_left),
         base.RThZ(r=nominal_radius, theta_deg=1.0 * stent_params.angle, z=z_left),
     ]
-    xyz_point = [p.to_xyz() for p in polar_points]
+
+    if stent_params.stent_element_dimensions == 2:
+        xyz_point = [p.to_planar_unrolled() for p in polar_points]
+
+    elif stent_params.stent_element_dimensions == 3:
+        xyz_point = [p.to_xyz() for p in polar_points]
+
+    else:
+        raise ValueError(stent_params.stent_element_dimensions)
+
     return _make_design_from_line_segments(stent_params, xyz_point, width, nominal_radius)
 
 
+def make_initial_all_in(stent_params: StentParams) -> StentDesign:
+    included_elements = (idx for idx, iElem, e in generate_stent_part_elements(stent_params))
+    return StentDesign(
+        stent_params=stent_params,
+        active_elements=frozenset(included_elements)
+    )
+
 
 make_initial_design = make_initial_straight_edge
+
 
 
 def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snapshot) -> StentDesign:
@@ -738,3 +827,22 @@ def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snaps
         stent_params=stent_params,
         active_elements=frozenset(active_elements_idx),
     )
+
+def show_initial_model_test(stent_design: StentDesign):
+    from stent_opt.struct_opt import display
+
+    node_positions = {polar_index: xyz.to_xyz() for _, polar_index, xyz in generate_nodes(stent_design.stent_params)}
+    poly_list = []
+    for face_nodes, val in single_faces_and_vals:
+        verts = [node_position[iNode] for iNode in face_nodes]
+
+        poly_list.append( (verts, val))
+
+
+
+
+
+
+if __name__ == "__main__":
+    stent_design = make_initial_all_in(basic_stent_params)
+    show_initial_model_test(stent_design)
