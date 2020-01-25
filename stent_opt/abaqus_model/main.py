@@ -187,7 +187,7 @@ class AbaqusModel:
             if is_first_step:
                 yield "** Mass Scaling: Semi-Automatic"
                 yield "**               Whole Model"
-                yield "*Variable Mass Scaling, dt=1e-05, type=set equal dt, frequency=1"
+                yield "*Variable Mass Scaling, dt=1e-04, type=set equal dt, frequency=1"
 
             yield from base.inp_heading("LOADS")
 

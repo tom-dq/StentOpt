@@ -343,17 +343,27 @@ def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.
         ),
     )
 
-    hold_base = boundary_condition.BoundaryDispRot(
-        name="HoldBase",
+    hold_base1 = boundary_condition.BoundaryDispRot(
+        name="HoldBaseA",
         with_amplitude=None,
         components=(
             boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentZMin.name], dof=2, value=0.0),
         ),
     )
 
+    hold_base2 = boundary_condition.BoundaryDispRot(
+        name="HoldBaseB",
+        with_amplitude=None,
+        components=(
+            boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentZMin.name], dof=2, value=0.0),
+        ),
+    )
+
+
     model.add_load_specific_steps([step_expand], expand_disp)
     model.add_load_specific_steps([step_release], let_go_disp)
-    model.add_load_specific_steps([step_expand, step_release], hold_base)
+    model.add_load_specific_steps([step_expand], hold_base1)
+    model.add_load_specific_steps([step_release], hold_base2)
 
 
 def _apply_loads_enforced_disp_rigid_cyl(stent_params: StentParams, model: main.AbaqusModel):
@@ -607,7 +617,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=4', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', 'cpus=1', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -667,7 +677,6 @@ def do_opt(stent_params: StentParams, in_path):
         make_stent_model(current_design, fn_inp)
 
         run_model(fn_inp)
-        raise Exception("Doneskiis!")
         perform_extraction(history.make_fn_in_dir(working_dir, ".odb", starting_i), history.make_fn_in_dir(working_dir, ".db", starting_i))
 
         with history.History(history_db_fn) as hist:
@@ -730,7 +739,7 @@ def _get_next_free_dir(base_dir):
 if __name__ == "__main__":
     #with tempfile.TemporaryDirectory() as temp_dir:
 
-    working_dir = _get_next_free_dir(r"E:\Simulations\StentOpt")
+    working_dir = _get_next_free_dir(r"C:\TEMP\aba")
 
     do_opt(basic_stent_params, str(working_dir))
 

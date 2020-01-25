@@ -11,6 +11,7 @@ import collections
 
 import abaqusConstants
 import odbAccess
+import numpy
 
 if SAVE_IMAGES:
     import abaqus
@@ -156,6 +157,23 @@ def get_strain_results_PEEQ_one_frame(extraction_meta):
         )
 
 
+def _add_with_zero_pad(a, b):
+    """Add two numpy arrays together, zero padding as needed."""
+    a_shape = a.shape
+    b_shape = b.shape
+
+    if len(a_shape) != 1 or len(b.shape) != 1:
+        print_in_term("Can't add these guys!")
+        raise ValueError(a_shape, b_shape)
+
+    max_len = max(a_shape[0], b_shape[0])
+
+    working = numpy.zeros(shape=(max_len,))
+    working[:a_shape[0]] = a
+    working[:b_shape[0]] += b
+    return working
+
+
 def get_node_position_one_frame(extraction_meta):
     relevant_disp_field = (
         extraction_meta
@@ -165,7 +183,7 @@ def get_node_position_one_frame(extraction_meta):
     )
 
     for one_value in relevant_disp_field.values:
-        overall_pos = _get_data_array_as_double(one_value) + extraction_meta.node_init_pos[one_value.nodeLabel]
+        overall_pos = _add_with_zero_pad(_get_data_array_as_double(one_value), extraction_meta.node_init_pos[one_value.nodeLabel])
         yield NodePos(
             frame_rowid=None,
             node_num=one_value.nodeLabel,

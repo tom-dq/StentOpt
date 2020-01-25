@@ -238,7 +238,7 @@ class StentDesign(typing.NamedTuple):
 
 def node_to_elem_design_space(divs: PolarIndex) -> PolarIndex:
     return divs._replace(
-        R=divs.R - 1,
+        R=max(divs.R - 1, 1), # Special case if we're at R=1 - that means plate elements.
         Th=divs.Th - 1,
         Z=divs.Z - 1)
 
@@ -563,9 +563,7 @@ def generate_plate_elements_all(divs: PolarIndex, elem_type: element.ElemType) -
     def get_iNode(iR, iTh, iZ):
         return node_from_index(divs, iR, iTh, iZ)
 
-    divs_one_extra_thickness = divs._replace(R=divs.R+1)
-
-    for iElem, i in generate_elem_indices(divs_one_extra_thickness):
+    for iElem, i in generate_elem_indices(divs):
         connection = [
             get_iNode(i.R, i.Th, i.Z),
             get_iNode(i.R, i.Th+1, i.Z),

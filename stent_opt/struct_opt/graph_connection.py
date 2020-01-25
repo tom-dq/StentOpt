@@ -29,6 +29,7 @@ def _element_idx_to_something_within(entity: _Entity, distance: float, stent_des
         idx in stent_design.active_elements}
 
     # Get the hop distance between individual nodes.
+    #TODO- make this Plate/Brick aware
     elem_idx_to_nodes = {idx: design.get_c3d8_connection(stent_design.stent_params.divs, idx) for idx in elem_num_to_idx.values()}
     active_nodes = set()
     node_hops = dict()
