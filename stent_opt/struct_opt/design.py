@@ -288,6 +288,18 @@ def get_c3d8_connection(design_space: PolarIndex, i: PolarIndex):
     return tuple(connection)
 
 
+def get_2d_plate_connection(design_space: PolarIndex, i: PolarIndex):
+
+    connection = [
+        node_from_index(design_space, i.R, i.Th, i.Z),
+        node_from_index(design_space, i.R, i.Th + 1, i.Z),
+        node_from_index(design_space, i.R, i.Th + 1, i.Z + 1),
+        node_from_index(design_space, i.R, i.Th, i.Z + 1),
+    ]
+
+    return tuple(connection)
+
+
 class GlobalPartNames:
     STENT = "Stent"
     BALLOON = "Balloon"
@@ -536,6 +548,17 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
         yield this_point, boundary_set
 
 
+def get_single_element_connection(stent_params: StentParams, i: PolarIndex) -> tuple:
+    if stent_params.stent_element_dimensions == 2:
+        return get_2d_plate_connection(stent_params.divs, i)
+
+    elif stent_params.stent_element_dimensions == 3:
+        return get_c3d8_connection(stent_params.divs, i)
+
+    else:
+        raise ValueError(stent_params.stent_element_dimensions)
+
+
 def generate_stent_part_elements(stent_params: StentParams) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
     if stent_params.stent_element_dimensions == 2:
         yield from generate_plate_elements_all(stent_params.divs, stent_params.stent_element_type)
@@ -560,20 +583,10 @@ def generate_plate_elements_all(divs: PolarIndex, elem_type: element.ElemType) -
     if divs.R != 1:
         raise ValueError(divs)
 
-    def get_iNode(iR, iTh, iZ):
-        return node_from_index(divs, iR, iTh, iZ)
-
-    for iElem, i in generate_elem_indices(divs):
-        connection = [
-            get_iNode(i.R, i.Th, i.Z),
-            get_iNode(i.R, i.Th+1, i.Z),
-            get_iNode(i.R, i.Th+1, i.Z+1),
-            get_iNode(i.R, i.Th, i.Z+1),
-        ]
-
-        yield i, iElem, element.Element(
+    for iElem, one_elem_idx in generate_elem_indices(divs):
+        yield one_elem_idx, iElem, element.Element(
             name=elem_type,
-            connection=tuple(connection),
+            connection=get_2d_plate_connection(divs, one_elem_idx),
         )
 
 

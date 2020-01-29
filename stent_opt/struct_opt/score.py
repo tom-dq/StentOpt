@@ -5,11 +5,16 @@ import typing
 
 import numpy
 
-from stent_opt.abaqus_model import base
+from stent_opt.abaqus_model import base, element
 from stent_opt.odb_interface import db_defs
 from stent_opt.struct_opt import design, deformation_grad, graph_connection
 
-FACES_OF_HEX = (
+
+_FACES_OF_QUAD = (
+    (0, 1, 2, 3,),
+)
+
+_FACES_OF_HEX = (
     (0, 1, 2, 3),
     (4, 5, 6, 7),
     (0, 1, 5, 4),
@@ -18,6 +23,11 @@ FACES_OF_HEX = (
     (3, 0, 4, 7),
 )
 
+FACES_OF = {
+    element.ElemType.CPE4R: _FACES_OF_QUAD,
+    element.ElemType.CPS4R: _FACES_OF_QUAD,
+    element.ElemType.C3D8R: _FACES_OF_HEX,
+}
 
 class PrimaryRankingComponent(typing.NamedTuple):
     comp_name: str
@@ -86,11 +96,11 @@ def get_primary_ranking_element_distortion(old_design: design.StentDesign, nt_ro
 
     for elem_idx in old_design.active_elements:
         elem_num = elem_indices_to_num[elem_idx]
-        elem_connection = design.get_c3d8_connection(old_design.stent_params.divs, elem_idx)
+        elem_connection = design.get_single_element_connection(old_design.stent_params, elem_idx)
         yield PrimaryRankingComponent(
             comp_name="InternalAngle",
             elem_id=elem_num,
-            value=_max_delta_angle_of_element(node_to_pos, elem_connection)
+            value=_max_delta_angle_of_element(old_design.stent_params, node_to_pos, elem_connection)
         )
 
 
@@ -102,7 +112,7 @@ def _transform_patch_over_boundary(stent_design: design.StentDesign, node_dict_x
 
     def span(node_dict_polar):
         theta_vals = [r_th_z.theta_deg for r_th_z in node_dict_polar.values()]
-        return max(theta_vals) - min(theta_vals)
+        return max(theta_vals, default=0) - min(theta_vals, default=0)
 
     span_orig = span(node_dict_r_th_z)
     if span_orig < half_angle:
@@ -221,8 +231,12 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
 
     STENCIL_LENGTH = 0.2  # mm
 
+    need_to_rotate = old_design.stent_params.stent_element_dimensions == 3
+
     elem_to_nodes_in_range = graph_connection.element_idx_to_nodes_within(STENCIL_LENGTH, old_design)
-    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.stent_params.divs) if idx in old_design.active_elements}
+
+    idx_num_elem = [(idx, iElem, elem) for idx, iElem, elem in design.generate_stent_part_elements(old_design.stent_params) if idx in old_design.active_elements]
+    elem_indices_to_num = {idx: iElem for (idx, iElem, elem) in idx_num_elem}
 
     node_to_pos_deformed = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in nt_rows_node_pos}
 
@@ -234,13 +248,14 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
 
     def prepare_node_patch(node_dict_xyz, patch_node_nums):
         raw = {iNode: xyz for iNode, xyz in node_dict_xyz.items() if iNode in patch_node_nums}
-        return _transform_patch_over_boundary(old_design, raw)
+        if need_to_rotate:
+            return _transform_patch_over_boundary(old_design, raw)
+
+        else:
+            return raw
 
     node_num_to_contribs = collections.defaultdict(list)
     for elem_idx, node_num_set in elem_to_nodes_in_range.items():
-        TEMP_elem_num = elem_indices_to_num[elem_idx]
-        if TEMP_elem_num == 2836:
-            print(TEMP_elem_num)
 
         orig = prepare_node_patch(node_to_pos_original, node_num_set)
         deformed = prepare_node_patch(node_to_pos_deformed, node_num_set)
@@ -251,7 +266,7 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
 
     node_num_to_overall_ave = {node_num: statistics.mean(data) for node_num, data in node_num_to_contribs.items()}
 
-    elem_idx_to_nodes = {idx: design.get_c3d8_connection(old_design.stent_params.divs, idx) for idx in elem_indices_to_num}
+    elem_idx_to_nodes = {idx: elem.connection for idx, iElem, elem in idx_num_elem}
 
     for elem_idx, elem_num in elem_indices_to_num.items():
         nodal_vals = [node_num_to_overall_ave[node_num] for node_num in elem_idx_to_nodes[elem_idx]]
@@ -262,7 +277,7 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
         )
 
 
-def _max_delta_angle_of_element(node_to_pos: typing.Dict[int, base.XYZ], elem_connection) -> float:
+def _max_delta_angle_of_element(stent_params: design.StentParams, node_to_pos: typing.Dict[int, base.XYZ], elem_connection) -> float:
     corner_points_numpy = {
         iNode: numpy.array(node_to_pos[iNode]) for iNode in elem_connection
     }
@@ -274,7 +289,8 @@ def _max_delta_angle_of_element(node_to_pos: typing.Dict[int, base.XYZ], elem_co
         (2, 3, 0),
         (3, 0, 1),
     )
-    for one_face_idx in FACES_OF_HEX:
+
+    for one_face_idx in FACES_OF[stent_params.stent_element_type]:
         one_face_nodes = [elem_connection[i] for i in one_face_idx]
 
         for one_corner_idx in CORNERS_OF_QUAD:

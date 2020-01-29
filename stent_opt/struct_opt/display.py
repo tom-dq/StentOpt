@@ -90,7 +90,7 @@ def render_status(
 
         for one_elem in stent_design.active_elements:
             elem_connection = design.get_c3d8_connection(stent_design.stent_params.divs, one_elem)
-            for one_face_idx in stent_opt.struct_opt.score.FACES_OF_HEX:
+            for one_face_idx in stent_opt.struct_opt.score.FACES_OF[stent_design.stent_params.stent_element_type]:
                 global_node_nums = [elem_connection[i] for i in one_face_idx]
                 yield global_node_nums, elem_lookup[one_elem]
 
@@ -123,6 +123,9 @@ def show_polygons(title, poly_list, bg_col):
 
     min_c = min(val for _, val in poly_list)
     max_c = max(val for _, val in poly_list)
+
+    if max_c - min_c < 1e-10:
+        max_c = max_c + 1e-6
 
     norm = mpl.colors.Normalize(vmin=min_c, vmax=max_c)
     cmap = cm.plasma

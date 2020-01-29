@@ -269,10 +269,10 @@ def make_plot_tests():
     # Bad import - just for testing
     from stent_opt import make_stent
 
-    history_iters = [0, 1]
+    history_iters = [0]  # [0, 1]
     last_iter = history_iters[-1]
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\aba-98")
+    working_dir = pathlib.Path(r"C:\TEMP\aba\AA-10")
     db_fn = history.make_fn_in_dir(working_dir, ".db", last_iter)
     db_history = history.make_history_db(working_dir)
 
@@ -320,15 +320,11 @@ def make_plot_tests():
     for db_data in [peeq_rows, stress_rows]:
         all_ranks.append(list(score.get_primary_ranking_components(db_data)))
 
-
-
     sec_rank = list(score.get_secondary_ranking_sum_of_norm(all_ranks))
     all_ranks.append(sec_rank)
 
-
     for one_rank in all_ranks:
         display.render_status(old_design, pos_lookup, one_rank, "Testing")
-
 
 
 def track_history_checks_test():
