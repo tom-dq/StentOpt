@@ -20,7 +20,8 @@ class ViewAngle(typing.NamedTuple):
 
 _VIEW_SIDE = ViewAngle(elev=17., azim=-20.)
 _VIEW_TOP = ViewAngle(elev=60., azim=0.)
-VIEW_ANGLE = _VIEW_SIDE
+_VIEW_2D = ViewAngle(elev=90., azim=0.)
+VIEW_ANGLE = _VIEW_2D
 
 
 class BackgroundColour:
