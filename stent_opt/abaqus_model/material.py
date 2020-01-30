@@ -8,6 +8,8 @@ class Point(typing.NamedTuple):
     strain: float
 
 
+# TODO - add some damping to this!
+
 @dataclasses.dataclass(frozen=True)
 class MaterialBase:
     name: str  # All materials have to have this!
