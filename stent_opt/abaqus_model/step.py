@@ -3,6 +3,8 @@ import dataclasses
 
 from stent_opt.abaqus_model import base
 
+FALLBACK_VISC_B1 = 0.2  # Linear Bulk Viscosity Paramter - default in Abaqus is 0.06
+FALLBACK_VISC_B2 = 5.0  # Quadratic ... - default in Abaqus is 1.2
 
 @dataclasses.dataclass(frozen=True)
 class StepBase:

@@ -272,7 +272,7 @@ def make_plot_tests():
     history_iters = [0]  # [0, 1]
     last_iter = history_iters[-1]
 
-    working_dir = pathlib.Path(r"C:\TEMP\aba\AA-10")
+    working_dir = pathlib.Path(r"C:\TEMP\aba\AA-11")
     db_fn = history.make_fn_in_dir(working_dir, ".db", last_iter)
     db_history = history.make_history_db(working_dir)
 

@@ -297,20 +297,20 @@ def apply_loads(stent_params: StentParams, model: main.AbaqusModel):
 
 def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.AbaqusModel):
     t1 = 2.0
-    t2 = 0.5
+    t2 = 1.0
 
     step_expand = step.StepDynamicExplicit(
         name=f"Expand",
         final_time=t1,
-        bulk_visc_b1=0.06,
-        bulk_visc_b2=1.2,
+        bulk_visc_b1=step.FALLBACK_VISC_B1,
+        bulk_visc_b2=step.FALLBACK_VISC_B2,
     )
 
     step_release = step.StepDynamicExplicit(
         name=f"Release",
         final_time=t1+t2,
-        bulk_visc_b1=0.06,
-        bulk_visc_b2=1.2,
+        bulk_visc_b1=step.FALLBACK_VISC_B1,
+        bulk_visc_b2=step.FALLBACK_VISC_B2,
     )
 
     model.add_step(step_expand)
@@ -337,7 +337,7 @@ def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.
 
     let_go_disp = boundary_condition.BoundaryDispRot(
         name="ReleaseDisp",
-        with_amplitude=amp,
+        with_amplitude=None,
         components=(
             boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentTheta0.name], dof=1, value=0.0),
         ),
@@ -376,8 +376,8 @@ def _apply_loads_enforced_disp_rigid_cyl(stent_params: StentParams, model: main.
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
         final_time=total_time,
-        bulk_visc_b1=0.06,
-        bulk_visc_b2=1.2,
+        bulk_visc_b1=step.FALLBACK_VISC_B1,
+        bulk_visc_b2=step.FALLBACK_VISC_B2,
     )
 
     model.add_step(one_step)
@@ -423,8 +423,8 @@ def _apply_loads_pressure(stent_params: StentParams, model: main.AbaqusModel):
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
         final_time=total_time,
-        bulk_visc_b1=0.06,
-        bulk_visc_b2=1.2,
+        bulk_visc_b1=step.FALLBACK_VISC_B1,
+        bulk_visc_b2=step.FALLBACK_VISC_B2,
     )
 
     model.add_step(one_step)
