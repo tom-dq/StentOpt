@@ -830,7 +830,7 @@ make_initial_design = make_initial_straight_edge
 
 
 
-def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snapshot) -> StentDesign:
+def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snapshot") -> StentDesign:
     elem_num_to_idx = {iElem: idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs)}
     active_elements_idx = {elem_num_to_idx[iElem] for iElem in snapshot.active_elements}
 

@@ -1,0 +1,7 @@
+numpy
+matplotlib>=3.1
+bokeh
+panel
+holoviews
+scipy
+networkx
