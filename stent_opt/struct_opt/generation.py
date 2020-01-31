@@ -22,7 +22,8 @@ class Tail(enum.Enum):
     top = enum.auto()
 
 
-MAKE_PLOTS = True
+MAKE_PLOTS = False
+USE_REGION_GRADIENT = False
 
 # TODO - hinge behaviour
 #   - Try the Jacobian or somesuch to get the deformation in an element.
@@ -146,19 +147,17 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
     all_ranks = []
 
-    # Gradient tracking
-    n_gradient_tracking = 5
-    final_grad_track = iter_n
-    first_grad_track = max(0, final_grad_track-n_gradient_tracking)
-    grad_track_steps = range(first_grad_track, final_grad_track)
+    if USE_REGION_GRADIENT:
+        # Gradient tracking
+        n_gradient_tracking = 5
+        final_grad_track = iter_n
+        first_grad_track = max(0, final_grad_track-n_gradient_tracking)
+        grad_track_steps = range(first_grad_track, final_grad_track)
 
-    print(f"Iter {iter_n}, grad track = {list(grad_track_steps)}")
-    recent_gradient_input_data = get_gradient_input_data(working_dir, grad_track_steps)
-    vicinity_ranking = list(score.get_primary_ranking_local_stress_gradient(recent_gradient_input_data, statistics.mean))
-    for idx, x in enumerate(vicinity_ranking):
-        print(idx, x, sep='\t')
-
-    all_ranks.append(vicinity_ranking)
+        print(f"Iter {iter_n}, grad track = {list(grad_track_steps)}")
+        recent_gradient_input_data = get_gradient_input_data(working_dir, grad_track_steps)
+        vicinity_ranking = list(score.get_primary_ranking_local_stress_gradient(recent_gradient_input_data, statistics.mean))
+        all_ranks.append(vicinity_ranking)
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -210,15 +209,23 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
         hist.add_many_status_checks(status_checks)
 
+        # Note the node positions for rendering later on.
+        node_pos_for_hist = (history.NodePosition(
+            iteration_num=iter_n_min_1,
+            node_num=node_num,
+            x=pos.x,
+            y=pos.y,
+            z=pos.z) for node_num, pos in pos_lookup.items())
+        hist.add_node_positions(node_pos_for_hist)
 
     if MAKE_PLOTS:
         stress_rank = list(score.get_primary_ranking_components(stress_rows))
         #local_def_rank = list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows))
-        for plot_rank in [vicinity_ranking, stress_rank, sec_rank]:
+        # for plot_rank in [vicinity_ranking, stress_rank, sec_rank]:
+        for plot_rank in all_ranks:
             display.render_status(design_n_min_1, pos_lookup, plot_rank, title_if_plotting)
 
     overall_rank = {one.elem_id: one.value for one in sec_rank}
-
 
     unsmoothed = {elem_num_to_indices[iElem]: val for iElem, val in overall_rank.items()}
     smoothed = gaussian_smooth(design_n_min_1.stent_params.divs, unsmoothed)

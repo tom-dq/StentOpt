@@ -617,7 +617,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=1', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', 'cpus=8', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -738,8 +738,7 @@ def _get_next_free_dir(base_dir):
 
 if __name__ == "__main__":
     #with tempfile.TemporaryDirectory() as temp_dir:
-
-    working_dir = _get_next_free_dir(r"C:\TEMP\aba")
+    working_dir = _get_next_free_dir(r"E:\Simulations\StentOpt")
 
     do_opt(basic_stent_params, str(working_dir))
 

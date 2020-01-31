@@ -37,6 +37,14 @@ class ParamKeyValue(typing.NamedTuple):
     param_value: typing.Optional[str]
 
 
+class NodePosition(typing.NamedTuple):
+    iteration_num: int
+    node_num: int
+    x: float
+    y: float
+    z: float
+
+
 _make_snapshot_table = """CREATE TABLE IF NOT EXISTS Snapshot(
 iteration_num INTEGER,
 filename TEXT,
@@ -54,10 +62,19 @@ _make_parameters_table_ = """CREATE TABLE IF NOT EXISTS ParamKeyValue(
 param_name TEXT UNIQUE,
 param_value TEXT)"""
 
+
+_make_node_pos_table_ = """CREATE TABLE IF NOT EXISTS NodePosition(
+iteration_num INTEGER,
+node_num INTEGER,
+x REAL,
+y REAL,
+z REAL)"""
+
 _make_tables = [
     _make_snapshot_table,
     _make_status_check_table,
     _make_parameters_table_,
+    _make_node_pos_table_,
 ]
 
 class History:
@@ -95,6 +112,11 @@ class History:
         ins_string = self._generate_insert_string_nt_class(StatusCheck)
         with self.connection:
             self.connection.executemany(ins_string, status_checks)
+
+    def add_node_positions(self, node_positions: typing.Iterable[NodePosition]):
+        ins_string = self._generate_insert_string_nt_class(NodePosition)
+        with self.connection:
+            self.connection.executemany(ins_string, node_positions)
 
     def get_snapshots(self) -> typing.Iterable[Snapshot]:
         with self.connection:
@@ -170,9 +192,13 @@ class History:
 
     def get_status_checks(self) -> typing.Iterable[StatusCheck]:
         with self.connection:
-            rows = self.connection.execute("SELECT * FROM StatusCheck ORDER BY iteration_num")
+            rows = self.connection.execute("SELECT * FROM StatusCheck ORDER BY iteration_num, metric_name")
             yield from (StatusCheck(*row) for row in rows)
 
+    def get_node_positions(self) -> typing.Iterable[NodePosition]:
+        with self.connection:
+            rows = self.connection.execute("SELECT * FROM NodePosition ORDER BY iteration_num")
+            yield from (NodePosition(*row) for row in rows)
 
 
 
