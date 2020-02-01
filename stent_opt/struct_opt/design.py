@@ -11,7 +11,7 @@ from stent_opt.abaqus_model import base, element
 # Convert to and from database string formats.
 from stent_opt.struct_opt import history
 
-# These can be serialised an deserialsed
+# These can be serialised and deserialised
 _enum_types = [
     element.ElemType,
 ]
@@ -329,8 +329,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=88,  # 31
-        Z=800,  # 120
+        Th=33,  # 31
+        Z=300,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -368,7 +368,7 @@ def _pairwise(iterable):
     return zip(a, b)
 
 
-def _gen_ordinates(n, low, high):
+def gen_ordinates(n, low, high):
     if n == 1:
         if math.isclose(low, high):
             return [low]
@@ -397,9 +397,9 @@ def get_node_num_to_pos(stent_params) -> typing.Dict[int, typing.Union[base.XYZ,
 
 
 def _generate_nodes_stent_polar(stent_params: StentParams) -> typing.Iterable[typing.Tuple[int, PolarIndex, base.RThZ]]:
-    r_vals = _gen_ordinates(stent_params.divs.R, stent_params.r_min, stent_params.r_max)
-    th_vals = _gen_ordinates(stent_params.divs.Th, 0.0, stent_params.angle)
-    z_vals = _gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
+    r_vals = gen_ordinates(stent_params.divs.R, stent_params.r_min, stent_params.r_max)
+    th_vals = gen_ordinates(stent_params.divs.Th, 0.0, stent_params.angle)
+    z_vals = gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
 
     for iNode, ((iR, r), (iTh, th), (iZ, z)) in enumerate(itertools.product(
             enumerate(r_vals),
@@ -419,9 +419,9 @@ def _generate_nodes_stent_planar(stent_params: StentParams) -> typing.Iterable[t
     Z      <->    Y
     """
 
-    x_vals = _gen_ordinates(stent_params.divs.Th, 0.0, stent_params.theta_arc_initial)
-    y_vals = _gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
-    z_vals = _gen_ordinates(stent_params.divs.R, stent_params.radial_midplane_initial, stent_params.radial_midplane_initial)
+    x_vals = gen_ordinates(stent_params.divs.Th, 0.0, stent_params.theta_arc_initial)
+    y_vals = gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
+    z_vals = gen_ordinates(stent_params.divs.R, stent_params.radial_midplane_initial, stent_params.radial_midplane_initial)
 
     for iNode, ((ix, x), (iy, y), (iz, z)) in enumerate(
             itertools.product(
@@ -443,8 +443,8 @@ def generate_nodes_inner_cyl(stent_params: StentParams) -> typing.Dict[int, base
         z_half_overshoot = 0.5 * stent_params.length * stent_params.cylinder.overshoot_ratio
 
         r_val = stent_params.actuation_surface_ratio
-        th_vals = _gen_ordinates(stent_params.cylinder.divs.Th, -theta_half_overshoot, stent_params.angle+theta_half_overshoot)
-        z_vals = _gen_ordinates(stent_params.cylinder.divs.Z, -z_half_overshoot, stent_params.length+z_half_overshoot)
+        th_vals = gen_ordinates(stent_params.cylinder.divs.Th, -theta_half_overshoot, stent_params.angle + theta_half_overshoot)
+        z_vals = gen_ordinates(stent_params.cylinder.divs.Z, -z_half_overshoot, stent_params.length + z_half_overshoot)
 
         for iNode, (th, z) in enumerate(itertools.product(th_vals, z_vals), start=1):
             polar_coord = base.RThZ(r_val, th, z)
@@ -536,7 +536,7 @@ def generate_nodes_balloon_polar(stent_params: StentParams) -> typing.Iterable[
         raise ValueError("Didn't satisfy the spacing requirements.")
 
     z_overshoot = 0.5 * stent_params.length * (stent_params.balloon.overshoot_ratio)
-    z_vals = _gen_ordinates(stent_params.balloon.divs.Z, -z_overshoot, stent_params.length+z_overshoot)
+    z_vals = gen_ordinates(stent_params.balloon.divs.Z, -z_overshoot, stent_params.length + z_overshoot)
     for (idx_r, r_th), (idx_z, z) in itertools.product(enumerate(r_th_points), enumerate(z_vals)):
         boundary_set = set()
         if idx_r == 0: boundary_set.add(GlobalNodeSetNames.BalloonTheta0)
