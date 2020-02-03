@@ -191,8 +191,8 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
     all_ranks.extend([
         list(score.get_primary_ranking_components(peeq_rows)),                    # Elem result based scores
         list(score.get_primary_ranking_components(stress_rows)),
-        list(score.get_primary_ranking_element_distortion(design_n_min_1, pos_rows)), # Node position based scores
-        list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows)),
+        # list(score.get_primary_ranking_element_distortion(design_n_min_1, pos_rows)), # Node position based scores
+        # list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows)),
     ])
 
     # Compute a secondary rank from all the first ones.

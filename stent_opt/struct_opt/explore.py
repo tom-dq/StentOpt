@@ -13,8 +13,8 @@ from stent_opt.struct_opt import history, design
 
 holoviews.extension('bokeh')
 
-WORKING_DIR_TEMP = pathlib.Path(r"C:\TEMP\aba\AA-17")
-
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-25")
+FIG_SIZE = (2000, 1350)
 
 class ContourView(typing.NamedTuple):
     iteration_num: int
@@ -62,7 +62,7 @@ def make_contour(
     poly_data = [gen_poly_data(elem, value) for elem, value in element_to_value.items()]
 
     polys = holoviews.Polygons(poly_data, vdims='level', group=contour_view.metric_name)
-    polys.opts(color='level', aspect='equal', line_width=0.1, padding=0.1, width=1300, height=750, invert_axes=True)
+    polys.opts(color='level', aspect='equal', line_width=0.1, padding=0.1, width=FIG_SIZE[0], height=FIG_SIZE[1], invert_axes=True)
 
     return polys
 
@@ -99,16 +99,18 @@ def make_quadmesh(
     for idx, val in elem_idx_to_value.items():
         Z[idx.Z-z_low, idx.Th-th_low] = val
 
-    # Overwrite with the nodes... TODO
-
-    #for node_idx, pos in node_idx_pos.items():
-    #    X[node_idx.Th-th_low, node_idx.Z-z_low] = pos.x
-    #    Y[node_idx.Th-th_low, node_idx.Z-z_low] = pos.y
+    # Overwrite with the nodes...
+    th_range = range(th_low, th_high+1)
+    z_range = range(z_low, z_high+1)
+    for node_idx, pos in node_idx_pos.items():
+        if node_idx.Th in th_range and node_idx.Z in z_range:
+            X[node_idx.Z-z_low, node_idx.Th-th_low] = pos.x
+            Y[node_idx.Z-z_low, node_idx.Th-th_low] = pos.y
 
     # Populate with the real values.
     qmesh = holoviews.QuadMesh((X, Y, Z), vdims='level', group=contour_view.metric_name)
     # qmesh.opts(color='level', aspect='equal', line_width=0.1, padding=0.1, width=1300, height=750, invert_axes=True)
-    qmesh.opts(aspect='equal', line_width=0.1, padding=0.1, width=1300, height=750)
+    qmesh.opts(aspect='equal', line_width=0.1, padding=0.1, width=FIG_SIZE[0], height=FIG_SIZE[1])
     return qmesh
 
 
@@ -135,7 +137,8 @@ def make_dashboard(working_dir: pathlib.Path):
 
             for deformed, node_pos in (
                     (False, node_pos_undeformed),
-                    (True, node_pos_deformed_all_iters[contour_view_raw.iteration_num])
+                    (True, node_pos_deformed_all_iters[contour_view_raw.iteration_num]),
+
             ):
                 contour_view = contour_view_raw._replace(deformed=deformed)
                 print(contour_view)
