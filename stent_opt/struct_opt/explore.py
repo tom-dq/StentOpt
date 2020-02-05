@@ -13,7 +13,7 @@ from stent_opt.struct_opt import history, design
 
 holoviews.extension('bokeh')
 
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-27")
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-30")
 FIG_SIZE = (2000, 1350)
 
 class ContourView(typing.NamedTuple):
