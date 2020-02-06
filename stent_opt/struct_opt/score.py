@@ -229,7 +229,7 @@ def get_primary_ranking_local_stress_gradient(
 def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets the local-ish deformation within a given number of elements, by removing the rigid body rotation/translation."""
 
-    STENCIL_LENGTH = 0.2  # mm
+    STENCIL_LENGTH = 0.1  # mm
 
     need_to_rotate = old_design.stent_params.stent_element_dimensions == 3
 
@@ -256,6 +256,10 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
 
     node_num_to_contribs = collections.defaultdict(list)
     for elem_idx, node_num_set in elem_to_nodes_in_range.items():
+
+        elem_num = elem_indices_to_num[elem_idx]
+        if elem_num == 1912:
+            print(elem_idx, node_num_set)
 
         orig = prepare_node_patch(node_to_pos_original, node_num_set)
         deformed = prepare_node_patch(node_to_pos_deformed, node_num_set)
