@@ -1,9 +1,11 @@
 # Utilities for separating the rigid body and deformation gradients of some point cloud.
-
+import math
 import typing
 
 import numpy
 import scipy
+import scipy.optimize
+import rmsd
 
 from stent_opt.abaqus_model.base import XYZ
 
@@ -29,6 +31,7 @@ def _get_node_map(key_order, points: numpy.array) -> T_NodeMap:
         out_points[k] = XYZ(x, y, z)
 
     return out_points
+
 
 def get_rigid_motion(orig: T_NodeMap, deformed: T_NodeMap) -> RigidMotion:
     # Assume all points are weighted equally, and put them in the same order.
@@ -205,16 +208,103 @@ def test_from_real_data_should_be_small():
                 9454: XYZ(x=1.4644388854503632, y=3.2165971398353577, z=2.47306090593338)}
 
     NOMINAL_LENGTH = 0.2
-    measure = nodal_deformation(NOMINAL_LENGTH, orig, deformed)
+    measure = nodal_deformation_rmsd(NOMINAL_LENGTH, orig, deformed)
     print(measure)
 
+
+def _euler_angle_rotation_matrix(alpha: float, beta: float, gamma: float) -> numpy.array:
+    """Generate the 3x3 rotation matrix from the X,Z,X euler angle rotations.
+    https://en.wikipedia.org/wiki/Euler_angles"""
+
+    s1, c1 = math.sin(alpha), math.cos(alpha)
+    s2, c2 = math.sin(beta), math.cos(beta)
+    s3, c3 = math.sin(gamma), math.cos(gamma)
+
+    R = numpy.array([
+        [c2, -1.0*c3*s2, s2*s3],
+        [c1*s2, c1*c2*c3 - s1*s3, -1.0*c3*s1 - c1*c2*s3],
+        [s1*s2, c1*s3 + c2*c3*s1, c1*c3 - c2*s1*s3],
+    ])
+
+    return R
+
+
+def nodal_deformation_least_squares(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMap) -> float:
+    """Gets some normalised deformation measure for the subset of nodes overall."""
+
+    node_keys = tuple(sorted(set.union(set(orig.keys()), set(deformed.keys()))))
+
+    p_orig = _get_points_array(node_keys, orig)
+    q_deformed = _get_points_array(node_keys, deformed)
+
+    # Step 1 - get the centroids
+    p_bar = numpy.mean(p_orig, axis=0)
+    q_bar = numpy.mean(q_deformed, axis=0)
+    t_init = q_bar - p_bar
+
+    def f_to_minimise(x):
+        """x[0:3] -> euler angle rotation.
+        x[3:6] -> translation"""
+
+        rigid_motion = RigidMotion(
+            R=_euler_angle_rotation_matrix(x[0], x[1], x[2]),
+            t=x[3:6]
+        )
+
+        p_with_rigid = _apply_rigid_motion(rigid_motion, p_orig)
+        deformation_only_working = q_deformed - p_with_rigid
+        deformation_norm_working = numpy.linalg.norm(deformation_only_working, axis=1)
+        return deformation_norm_working
+
+
+    # Initial guess
+    x0 = numpy.concatenate([numpy.array([0.0, 0.0, 0.0]), t_init])
+
+    opt_res = scipy.optimize.least_squares(f_to_minimise, x0, method='lm')
+
+    print(opt_res)
+
+    deformation_norm = f_to_minimise(opt_res.x)
+    if len(deformation_norm) != len(orig):
+        raise ValueError("Looks like Tom got an index/axis wrong someplace...")
+
+    return float(numpy.mean(deformation_norm) / nominal_length)
+
+
+def nodal_deformation_rmsd(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMap) -> float:
+    """Use this: https://github.com/charnley/rmsd"""
+
+    node_keys = tuple(sorted(set.union(set(orig.keys()), set(deformed.keys()))))
+
+    p_orig = _get_points_array(node_keys, orig)
+    q_deformed = _get_points_array(node_keys, deformed)
+
+    # Step 1 - get the centroids
+    p_bar = numpy.mean(p_orig, axis=0)
+    q_bar = numpy.mean(q_deformed, axis=0)
+
+    # Centre both of them
+    p_cent = p_orig - numpy.mean(p_orig, axis=0)
+    q_cent = q_deformed - numpy.mean(q_deformed, axis=0)
+
+    U = rmsd.kabsch(p_cent, q_cent)
+    p_cent_rotate = numpy.dot(p_cent, U)
+
+    deformation_only = q_cent - p_cent_rotate
+    deformation_norm = numpy.linalg.norm(deformation_only, axis=1)
+
+    DEBUG_MAKE_PLOT = True
+    if DEBUG_MAKE_PLOT:
+        _DEBUG_plot_rigid(p_cent, p_cent_rotate, q_cent)
+
+
+    return float(numpy.mean(deformation_norm) / nominal_length)
 
 
 if __name__ == "__main__":
     test_from_real_data_should_be_small()
 
 if False:
-
     orig_points = {
         "a": XYZ(0.0, 0.0, 0.0),
         "b": XYZ(1.0, 0.0, 0.0),
@@ -247,9 +337,9 @@ if False:
         "e": XYZ(-0.5, 0.5, 0.0),
     }
 
-    print(nodal_deformation(1.0, orig_points, move_in_z))
-    print(nodal_deformation(1.0, orig_points, strain_in_x))
-    print(nodal_deformation(1.0, orig_points, rotate_90_deg))
+    print(nodal_deformation_rmsd(1.0, orig_points, move_in_z))
+    print(nodal_deformation_rmsd(1.0, orig_points, strain_in_x))
+    print(nodal_deformation_rmsd(1.0, orig_points, rotate_90_deg))
 
 
 

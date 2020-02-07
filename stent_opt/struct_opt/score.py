@@ -264,7 +264,7 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
         orig = prepare_node_patch(node_to_pos_original, node_num_set)
         deformed = prepare_node_patch(node_to_pos_deformed, node_num_set)
 
-        this_val = deformation_grad.nodal_deformation(STENCIL_LENGTH, orig, deformed)
+        this_val = deformation_grad.nodal_deformation_rmsd(STENCIL_LENGTH, orig, deformed)
         for node_num in node_num_set:
             node_num_to_contribs[node_num].append(this_val)
 

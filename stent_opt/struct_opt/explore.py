@@ -13,7 +13,16 @@ from stent_opt.struct_opt import history, design
 
 holoviews.extension('bokeh')
 
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-32")
+def _get_most_recent_working_dir() -> pathlib.Path:
+    subdirs = (p for p in pathlib.Path(r"E:\Simulations\StentOpt").iterdir() if p.is_dir())
+
+    def most_recent(p: pathlib.Path):
+        return p.stat().st_ctime
+
+    return max(subdirs, key=most_recent)
+
+
+WORKING_DIR_TEMP = _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
 FIG_SIZE = (2000, 1350)
 
 class ContourView(typing.NamedTuple):
