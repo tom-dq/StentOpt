@@ -190,9 +190,9 @@ class History:
                 active_elements=frozenset( (elem_num_to_idx[iElem] for iElem in maybe_snapshot.active_elements)),
             )
 
-    def get_status_checks(self) -> typing.Iterable[StatusCheck]:
+    def get_status_checks(self, iter_greater_than: int) -> typing.Iterable[StatusCheck]:
         with self.connection:
-            rows = self.connection.execute("SELECT * FROM StatusCheck ORDER BY iteration_num, metric_name")
+            rows = self.connection.execute("SELECT * FROM StatusCheck WHERE iteration_num >= ? ORDER BY iteration_num, metric_name ", (iter_greater_than,))
             yield from (StatusCheck(*row) for row in rows)
 
     def get_node_positions(self) -> typing.Iterable[NodePosition]:

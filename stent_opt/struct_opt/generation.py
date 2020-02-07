@@ -25,7 +25,7 @@ class Tail(enum.Enum):
 MAKE_PLOTS = False
 USE_REGION_GRADIENT = True
 
-SINGLE_COMPONENT = db_defs.ElementStress
+SINGLE_COMPONENT = None #  db_defs.ElementStress
 
 # TODO - hinge behaviour
 #   - Try the Jacobian or somesuch to get the deformation in an element.
@@ -73,7 +73,7 @@ def get_gradient_input_data(
 T_index_to_val = typing.Dict[design.PolarIndex, float]
 def gaussian_smooth(design_space: design.PolarIndex, unsmoothed: T_index_to_val) -> T_index_to_val:
 
-    GAUSSIAN_SIGMA = 0.25 # Was 0.5, and 2.0
+    GAUSSIAN_SIGMA = 0.5 # Was 0.5, and 2.0
 
     # Make a 3D array
     design_space_elements = design.node_to_elem_design_space(design_space)

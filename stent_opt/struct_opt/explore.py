@@ -22,7 +22,7 @@ def _get_most_recent_working_dir() -> pathlib.Path:
     return max(subdirs, key=most_recent)
 
 
-WORKING_DIR_TEMP = _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-46")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
 FIG_SIZE = (2000, 1350)
 
 class ContourView(typing.NamedTuple):
@@ -34,7 +34,7 @@ class ContourView(typing.NamedTuple):
 def get_status_checks() -> typing.List["history.StatusCheck"]:
     history_db = history.make_history_db(WORKING_DIR_TEMP)
     with history.History(history_db) as hist:
-        return list(hist.get_status_checks())
+        return list(hist.get_status_checks(iter_greater_than=0))
 
 
 def _build_contour_view_data(hist: history.History) -> typing.Iterable[typing.Tuple[ContourView, typing.Dict[int, float]]]:
@@ -47,7 +47,7 @@ def _build_contour_view_data(hist: history.History) -> typing.Iterable[typing.Tu
             deformed=None,
         )
 
-    for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(), make_contour_view):
+    for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(0), make_contour_view):
         elem_vals = {status_check.elem_num: status_check.metric_val for status_check in sub_iter}
         yield contour_view, elem_vals
 
@@ -164,9 +164,6 @@ def make_dashboard(working_dir: pathlib.Path):
                     if iElem in snapshots[contour_view.iteration_num].active_elements}
 
                 node_idx_pos = {node_num_to_idx[iNode]: pos for iNode, pos in node_pos.items()}
-
-                # polys = make_contour(node_pos, contour_view, elem_to_value)
-                # plot_dict[contour_view] = polys
 
                 qmesh = make_quadmesh(stent_params, node_idx_pos, contour_view, elem_idx_to_value)
                 plot_dict[contour_view] = qmesh
