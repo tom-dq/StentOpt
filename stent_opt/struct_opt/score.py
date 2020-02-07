@@ -209,19 +209,19 @@ def get_primary_ranking_local_stress_gradient(
             status_vals.append(dp.element_activation)
             response_vals.append(dp.vicinity_ranking)
 
-            can_make_line = len(set(status_vals)) > 1
-            if can_make_line:
-                line_of_best_fit = get_line_of_best_fit(status_vals, response_vals)
-                grad = line_of_best_fit.m
+        can_make_line = len(set(status_vals)) > 1
+        if can_make_line:
+            line_of_best_fit = get_line_of_best_fit(status_vals, response_vals)
+            grad = line_of_best_fit.m
 
-            else:
-                grad = 0.0
+        else:
+            grad = 0.0
 
-            yield PrimaryRankingComponent(
-                comp_name="RegionGradient",
-                elem_id=elem_num,
-                value=grad
-            )
+        yield PrimaryRankingComponent(
+            comp_name="RegionGradient",
+            elem_id=elem_num,
+            value=grad
+        )
 
     # TODO - include the "authority"
 
@@ -256,10 +256,6 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
 
     node_num_to_contribs = collections.defaultdict(list)
     for elem_idx, node_num_set in elem_to_nodes_in_range.items():
-
-        elem_num = elem_indices_to_num[elem_idx]
-        if elem_num == 1912:
-            print(elem_idx, node_num_set)
 
         orig = prepare_node_patch(node_to_pos_original, node_num_set)
         deformed = prepare_node_patch(node_to_pos_deformed, node_num_set)

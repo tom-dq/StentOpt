@@ -23,7 +23,9 @@ class Tail(enum.Enum):
 
 
 MAKE_PLOTS = False
-USE_REGION_GRADIENT = False
+USE_REGION_GRADIENT = True
+
+SINGLE_COMPONENT = db_defs.ElementStress
 
 # TODO - hinge behaviour
 #   - Try the Jacobian or somesuch to get the deformation in an element.
@@ -35,10 +37,15 @@ USE_REGION_GRADIENT = False
 # Zero based node indexes from Figure 28.1.1–1 in the Abaqus manual
 
 
-def get_gradient_input_data(working_dir, iteration_nums: typing.Iterable[int]) -> typing.Iterable[score.GradientInputData]:
+def get_gradient_input_data(
+        working_dir,
+        raw_component,
+        iteration_nums: typing.Iterable[int],
+) -> typing.Iterable[score.GradientInputData]:
+    """raw_component is db_defs.ElementStress or db_defs.ElementPEEQ"""
+
     working_dir = pathlib.Path(working_dir)
     history_db_fn = history.make_history_db(working_dir)
-
 
     with history.History(history_db_fn) as hist:
         stent_params = hist.get_stent_params()
@@ -53,9 +60,9 @@ def get_gradient_input_data(working_dir, iteration_nums: typing.Iterable[int]) -
                 good_frames = [f for f in all_frames if f.instance_name == "STENT-1"]
                 one_frame = good_frames.pop()
 
-                stress_rows = list(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))
-                stress_ranking_components = list(score.get_primary_ranking_components(stress_rows))
-                element_ranking_components = {one_comp.elem_id: one_comp for one_comp in stress_ranking_components}
+                raw_rows = list(data.get_all_rows_at_frame(raw_component, one_frame))
+                raw_ranking_components = list(score.get_primary_ranking_components(raw_rows))
+                element_ranking_components = {one_comp.elem_id: one_comp for one_comp in raw_ranking_components}
                 yield score.GradientInputData(
                     iteration_num=iter_num,
                     stent_design=design.make_design_from_snapshot(stent_params, snapshot),
@@ -66,7 +73,7 @@ def get_gradient_input_data(working_dir, iteration_nums: typing.Iterable[int]) -
 T_index_to_val = typing.Dict[design.PolarIndex, float]
 def gaussian_smooth(design_space: design.PolarIndex, unsmoothed: T_index_to_val) -> T_index_to_val:
 
-    GAUSSIAN_SIGMA = 2.0  # Was 0.5
+    GAUSSIAN_SIGMA = 0.25 # Was 0.5, and 2.0
 
     # Make a 3D array
     design_space_elements = design.node_to_elem_design_space(design_space)
@@ -155,7 +162,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
         grad_track_steps = range(first_grad_track, final_grad_track)
 
         print(f"Iter {iter_n}, grad track = {list(grad_track_steps)}")
-        recent_gradient_input_data = get_gradient_input_data(working_dir, grad_track_steps)
+        recent_gradient_input_data = get_gradient_input_data(working_dir, SINGLE_COMPONENT, grad_track_steps)
         vicinity_ranking = list(score.get_primary_ranking_local_stress_gradient(recent_gradient_input_data, statistics.mean))
         all_ranks.append(vicinity_ranking)
 
@@ -181,18 +188,27 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
         good_frames = [f for f in all_frames if f.instance_name == "STENT-1"]
         one_frame = good_frames.pop()
 
-        peeq_rows = list(data.get_all_rows_at_frame(db_defs.ElementPEEQ, one_frame))
-        stress_rows = list(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))
+        if SINGLE_COMPONENT:
+            raw_elem_rows = [
+                list(score.get_primary_ranking_components(data.get_all_rows_at_frame(SINGLE_COMPONENT, one_frame))),
+            ]
+
+        else:
+            raw_elem_rows = [
+                list(score.get_primary_ranking_components(data.get_all_rows_at_frame(db_defs.ElementPEEQ, one_frame))),
+                list(score.get_primary_ranking_components(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))),
+            ]
+
         pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
 
     pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in pos_rows}
 
     # Compute the primary and overall ranking components
+    all_ranks.extend(raw_elem_rows)
+
     all_ranks.extend([
-        list(score.get_primary_ranking_components(peeq_rows)),                    # Elem result based scores
-        list(score.get_primary_ranking_components(stress_rows)),
         # list(score.get_primary_ranking_element_distortion(design_n_min_1, pos_rows)), # Node position based scores
-        list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows)),
+        # list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows)),
     ])
 
     # Compute a secondary rank from all the first ones.
@@ -276,7 +292,7 @@ def make_plot_tests():
     # Bad import - just for testing
     from stent_opt import make_stent
 
-    history_iters = [0]  # [0, 1]
+    history_iters = [0, 1, 2]  # [0, 1]
     last_iter = history_iters[-1]
 
     working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-32")
@@ -286,7 +302,7 @@ def make_plot_tests():
     all_ranks = []
 
     # Gradient tracking test
-    recent_gradient_input_data = list(get_gradient_input_data(working_dir, history_iters))
+    recent_gradient_input_data = list(get_gradient_input_data(working_dir, db_defs.ElementStress, history_iters))
 
 
     vicinity_ranking = list(score.get_primary_ranking_local_stress_gradient(recent_gradient_input_data, statistics.mean))
@@ -337,7 +353,7 @@ def make_plot_tests():
 def track_history_checks_test():
     working_dir = r"E:\Simulations\StentOpt\aba-98"
 
-    old_data = get_gradient_input_data(working_dir, [0,1])
+    old_data = get_gradient_input_data(working_dir, db_defs.ElementStress, [0,1])
     for x in old_data:
         print(x)
 

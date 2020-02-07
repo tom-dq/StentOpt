@@ -293,7 +293,7 @@ def nodal_deformation_rmsd(nominal_length: float, orig: T_NodeMap, deformed: T_N
     deformation_only = q_cent - p_cent_rotate
     deformation_norm = numpy.linalg.norm(deformation_only, axis=1)
 
-    DEBUG_MAKE_PLOT = True
+    DEBUG_MAKE_PLOT = False
     if DEBUG_MAKE_PLOT:
         _DEBUG_plot_rigid(p_cent, p_cent_rotate, q_cent)
 
