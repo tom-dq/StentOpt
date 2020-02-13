@@ -170,7 +170,7 @@ def get_primary_ranking_local_stress_gradient(
     all_active_element_idxs = {elem_num_to_index[iElem] for iElem in all_active_element_nums}
     stent_design_all_elems_active = recent_gradient_input_data[0].stent_design._replace(active_elements=frozenset(all_active_element_idxs))
 
-    STENCIL_LENGTH = 0.1  # mm
+    STENCIL_LENGTH = 0.05  # mm
     elem_to_elems_in_range = graph_connection.element_idx_to_elems_within(STENCIL_LENGTH, stent_design_all_elems_active)
     elem_num_to_region_elem_nums = {
         elem_indices_to_num[elem_idx]: [elem_indices_to_num[one_elem_idx] for one_elem_idx in many_elem_idxs]

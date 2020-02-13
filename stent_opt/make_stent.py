@@ -705,10 +705,12 @@ def do_opt(stent_params: StentParams, in_path):
 
         new_design = generation.make_new_generation(working_dir, i_current)
 
-        num_new = len(new_design.active_elements - old_design.active_elements)
-        num_removed = len(old_design.active_elements - new_design.active_elements)
-        print(f"Added: {num_new}\tRemoved: {num_removed}.")
-        if design == old_design and (i_current != main_loop_start_i):
+        new_elements = new_design.active_elements - old_design.active_elements
+        removed_elements = old_design.active_elements - new_design.active_elements
+        num_new = len(new_elements)
+        num_removed = len(removed_elements)
+        print(f"Added: {num_new}\t{sorted(new_elements)}\tRemoved: {num_removed}\t{sorted(removed_elements)}.")
+        if new_design == old_design and (i_current != main_loop_start_i):
             done = True
 
         make_stent_model(new_design, fn_inp)

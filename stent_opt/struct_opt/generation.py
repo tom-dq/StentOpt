@@ -23,9 +23,9 @@ class Tail(enum.Enum):
 
 
 MAKE_PLOTS = False
-REGION_GRADIENT_COMPONENT = db_defs.ElementStress  # Either db_defs.ElementStress, say, or None to not do region gradient
+REGION_GRADIENT_COMPONENT = db_defs.ElementPEEQ  # Either db_defs.ElementStress, say, or None to not do region gradient
 
-SINGLE_COMPONENT = None #  db_defs.ElementStress
+SINGLE_COMPONENT = db_defs.ElementPEEQ #  db_defs.ElementStress
 
 # TODO - hinge behaviour
 #   - Try the Jacobian or somesuch to get the deformation in an element.
@@ -292,14 +292,15 @@ def make_plot_tests():
     # Bad import - just for testing
     from stent_opt import make_stent
 
-    history_iters = [0, 1, 2]  # [0, 1]
+    history_iters = [0, 1]  # [0, 1]
     last_iter = history_iters[-1]
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-32")
-    db_fn = history.make_fn_in_dir(working_dir, ".db", last_iter)
+    working_dir = pathlib.Path(r"C:\TEMP\aba\AA-24")
+
     db_history = history.make_history_db(working_dir)
 
     all_ranks = []
+    iter_to_pos = {}
 
     # Gradient tracking test
     recent_gradient_input_data = list(get_gradient_input_data(working_dir, db_defs.ElementStress, history_iters))
@@ -314,37 +315,41 @@ def make_plot_tests():
 
     all_ranks.append(vicinity_ranking)
 
-    with history.History(db_history) as hist:
-        stent_params = hist.get_stent_params()
-        old_snapshot = hist.get_snapshot(last_iter)
-        old_design = design.make_design_from_snapshot(stent_params, old_snapshot)
+    for one_iter in history_iters:
+        db_fn = history.make_fn_in_dir(working_dir, ".db", one_iter)
+        with history.History(db_history) as hist:
+            stent_params = hist.get_stent_params()
+            old_snapshot = hist.get_snapshot(one_iter)
+            old_design = design.make_design_from_snapshot(stent_params, old_snapshot)
 
-    # stent_params = design.basic_stent_params
-    # old_design = design.make_initial_design(stent_params)
+        # stent_params = design.basic_stent_params
+        # old_design = design.make_initial_design(stent_params)
 
-    with datastore.Datastore(db_fn) as data:
-        all_frames = list(data.get_all_frames())
-        good_frames = [f for f in all_frames if f.instance_name == "STENT-1"]
-        one_frame = good_frames.pop()
+        with datastore.Datastore(db_fn) as data:
+            all_frames = list(data.get_all_frames())
+            good_frames = [f for f in all_frames if f.instance_name == "STENT-1"]
+            one_frame = good_frames.pop()
 
-        peeq_rows = list(data.get_all_rows_at_frame(db_defs.ElementPEEQ, one_frame))
-        stress_rows = list(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))
-        pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
+            peeq_rows = list(data.get_all_rows_at_frame(db_defs.ElementPEEQ, one_frame))
+            stress_rows = list(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))
+            pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
 
-    pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in pos_rows}
+        pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in pos_rows}
+        iter_to_pos[one_iter] = pos_lookup
+        # Node position pased effort functions
+        eff_funcs = [score.get_primary_ranking_macro_deformation, score.get_primary_ranking_element_distortion, ]
 
-    # Node position pased effort functions
-    eff_funcs = [score.get_primary_ranking_macro_deformation, score.get_primary_ranking_element_distortion, ]
+        for one_func in eff_funcs:
+            # all_ranks.append(list(one_func(old_design, pos_rows)))
+            pass
 
-    for one_func in eff_funcs:
-        all_ranks.append(list(one_func(old_design, pos_rows)))
+        # Element-based effort functions
+        for db_data in [stress_rows]: # [peeq_rows]: #, stress_rows]:
+            all_ranks.append(list(score.get_primary_ranking_components(db_data)))
 
-    # Element-based effort functions
-    for db_data in [peeq_rows, stress_rows]:
-        all_ranks.append(list(score.get_primary_ranking_components(db_data)))
 
     sec_rank = list(score.get_secondary_ranking_sum_of_norm(all_ranks))
-    all_ranks.append(sec_rank)
+    #all_ranks.append(sec_rank)
 
     for one_rank in all_ranks:
         display.render_status(old_design, pos_lookup, one_rank, "Testing")

@@ -329,8 +329,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=22,  # 31
-        Z=200,  # 120
+        Th=66,  # 31
+        Z=600,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -826,7 +826,32 @@ def make_initial_all_in(stent_params: StentParams) -> StentDesign:
     )
 
 
-make_initial_design = make_initial_straight_edge
+def make_initial_two_lines(stent_params: StentParams) -> StentDesign:
+    """Make a simpler sharp corner with straight edges."""
+    width = 0.1
+    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
+
+    z_left = 0.4 * stent_params.length
+    z_right = 0.6 * stent_params.length
+    polar_points = [
+        base.RThZ(r=nominal_radius, theta_deg=0.0 * stent_params.angle, z=z_left),
+        base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=z_right),
+        base.RThZ(r=nominal_radius, theta_deg=1.0 * stent_params.angle, z=z_left),
+    ]
+
+    if stent_params.stent_element_dimensions == 2:
+        xyz_point = [p.to_planar_unrolled() for p in polar_points]
+
+    elif stent_params.stent_element_dimensions == 3:
+        xyz_point = [p.to_xyz() for p in polar_points]
+
+    else:
+        raise ValueError(stent_params.stent_element_dimensions)
+
+    return _make_design_from_line_segments(stent_params, xyz_point, width, nominal_radius)
+
+
+make_initial_design = make_initial_two_lines
 
 
 
