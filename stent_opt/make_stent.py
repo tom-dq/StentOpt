@@ -596,7 +596,6 @@ def _apply_boundaries_3d(stent_params: StentParams, model: main.AbaqusModel):
 
 
 def write_model(model: main.AbaqusModel, fn_inp):
-    print(fn_inp)
     with open(fn_inp, "w") as fOut:
         for l in model.produce_inp_lines():
             fOut.write(l + "\n")
@@ -608,6 +607,7 @@ def make_stent_model(stent_design: StentDesign, fn_inp: str):
     apply_loads(stent_design.stent_params, model)
     add_interaction(stent_design.stent_params, model)
     apply_boundaries(stent_design.stent_params, model)
+    print(fn_inp, f"Volume Ratio={stent_design.volume_ratio()}")  # TODO - this is wrong - fix the volume ratio stuff.
     write_model(model, fn_inp)
 
 

@@ -241,6 +241,8 @@ class StentDesign(typing.NamedTuple):
     stent_params: StentParams
     active_elements: typing.FrozenSet[PolarIndex]
 
+    def volume_ratio(self) -> float:
+        return len(self.active_elements) / self.stent_params.divs.fully_populated_elem_count()
 
 def node_to_elem_design_space(divs: PolarIndex) -> PolarIndex:
     return divs._replace(
@@ -336,8 +338,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=44,  # 31
-        Z=400,  # 120
+        Th=22,  # 31
+        Z=200,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -835,7 +837,7 @@ def make_initial_all_in(stent_params: StentParams) -> StentDesign:
 
 def make_initial_two_lines(stent_params: StentParams) -> StentDesign:
     """Make a simpler sharp corner with straight edges."""
-    width = 0.1
+    width = 0.25
     nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
 
     z_left = 0.4 * stent_params.length
