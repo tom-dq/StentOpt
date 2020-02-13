@@ -23,9 +23,13 @@ class Tail(enum.Enum):
 
 
 MAKE_PLOTS = False
-REGION_GRADIENT_COMPONENT = db_defs.ElementPEEQ  # Either db_defs.ElementStress, say, or None to not do region gradient
+REGION_GRADIENT_COMPONENT = None  # Either db_defs.ElementStress or ElementPEEQ say, or None to not do region gradient
 
-SINGLE_COMPONENT = db_defs.ElementPEEQ #  db_defs.ElementStress
+USED_ELEM_COMPONENTS = [
+    db_defs.ElementStress,
+    db_defs.ElementPEEQ,
+]
+SINGLE_COMPONENT = db_defs.ElementStress #  db_defs.ElementStress, or None to
 
 # TODO - hinge behaviour
 #   - Try the Jacobian or somesuch to get the deformation in an element.
@@ -56,9 +60,7 @@ def get_gradient_input_data(
             snapshot = hist.get_snapshot(iter_num)
 
             with datastore.Datastore(output_db_fn) as data:
-                all_frames = list(data.get_all_frames())
-                good_frames = [f for f in all_frames if f.instance_name == "STENT-1"]
-                one_frame = good_frames.pop()
+                one_frame = data.get_last_frame_of_instance("STENT-1")
 
                 raw_rows = list(data.get_all_rows_at_frame(raw_component, one_frame))
                 raw_ranking_components = list(score.get_primary_ranking_components(raw_rows))
@@ -144,6 +146,47 @@ def display_design_flat(design_space: design.PolarIndex, data: T_index_to_val):
     plt.show()
 
 
+def _target_volume_ratio(iter_n) -> float:
+    """Gradually remove material, then taper off."""
+
+    NUM_REDUCE_ITERS = 20
+    START_RATIO = 0.5
+    FLOOR_RATIO = 0.1
+
+    delta = START_RATIO - FLOOR_RATIO
+
+    reducing = delta * (NUM_REDUCE_ITERS-iter_n)/NUM_REDUCE_ITERS + FLOOR_RATIO
+
+    return max(FLOOR_RATIO, reducing)
+
+
+def _target_num_elems(stent_params: design.StentParams, iter_n: int) -> int:
+    """Get a target element count"""
+    return int(stent_params.divs.fully_populated_elem_count() * _target_volume_ratio(iter_n))
+
+
+def evolve_decider(design_n_min_1, sensitivity_result, iter_n) -> typing.Set[design.PolarIndex]:
+    """Decides which elements are coming in and going out."""
+
+    MAX_NEW_NUM = int(0.05 * design_n_min_1.stent_params.divs.fully_populated_elem_count())
+
+    top_new_potential_elems = get_top_n_elements(sensitivity_result, Tail.top, MAX_NEW_NUM)
+    actual_new_elems = top_new_potential_elems - design_n_min_1.active_elements
+    num_new = len(actual_new_elems)
+
+    target_count = _target_num_elems(design_n_min_1.stent_params, iter_n)
+
+    num_with_new_additions = len(design_n_min_1.active_elements) + num_new
+    num_to_go = num_with_new_additions - target_count
+
+    # Remove however many we added.
+    existing_elems_only_ranked = {idx: val for idx,val in sensitivity_result.items() if idx in design_n_min_1.active_elements}
+    to_go = get_top_n_elements(existing_elems_only_ranked, Tail.bottom, num_to_go)
+
+    new_active_elems = (design_n_min_1.active_elements | top_new_potential_elems) - to_go
+    return new_active_elems
+
+
 def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentDesign:
     iter_n_min_1 = iter_n - 1  # Previous iteration number.
     title_if_plotting = f"Iteration {iter_n}"
@@ -183,21 +226,12 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
     # Get the old data.
     with datastore.Datastore(db_fn_prev) as data:
 
-        all_frames = list(data.get_all_frames())
+        one_frame = data.get_last_frame_of_instance("STENT-1")
 
-        good_frames = [f for f in all_frames if f.instance_name == "STENT-1"]
-        one_frame = good_frames.pop()
-
-        if SINGLE_COMPONENT:
-            raw_elem_rows = [
-                list(score.get_primary_ranking_components(data.get_all_rows_at_frame(SINGLE_COMPONENT, one_frame))),
-            ]
-
-        else:
-            raw_elem_rows = [
-                list(score.get_primary_ranking_components(data.get_all_rows_at_frame(db_defs.ElementPEEQ, one_frame))),
-                list(score.get_primary_ranking_components(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))),
-            ]
+        raw_elem_rows = [
+            list(score.get_primary_ranking_components(data.get_all_rows_at_frame(one_component, one_frame)))
+            for one_component in USED_ELEM_COMPONENTS
+        ]
 
         pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
 
@@ -259,19 +293,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
         display.render_status(design_n_min_1, pos_lookup, smoothed_rank_comps, title_if_plotting)
 
-
-    # Only change over 10% of the elements, say.
-    changeover_num_max = max(1, len(design_n_min_1.active_elements)//4)
-
-    top_new_potential_elems = get_top_n_elements(smoothed, Tail.top, changeover_num_max)
-    actual_new_elems = top_new_potential_elems - design_n_min_1.active_elements
-    num_new = len(actual_new_elems)
-
-    # Remove however many we added.
-    existing_elems_only_smoothed_rank = {idx: val for idx,val in smoothed.items() if idx in design_n_min_1.active_elements}
-    to_go = get_top_n_elements(existing_elems_only_smoothed_rank, Tail.bottom, num_new)
-
-    new_active_elems = (design_n_min_1.active_elements | top_new_potential_elems) - to_go
+    new_active_elems = evolve_decider(design_n_min_1, smoothed, iter_n)
 
     # Save the latest design snapshot
     # Log the history
@@ -326,9 +348,7 @@ def make_plot_tests():
         # old_design = design.make_initial_design(stent_params)
 
         with datastore.Datastore(db_fn) as data:
-            all_frames = list(data.get_all_frames())
-            good_frames = [f for f in all_frames if f.instance_name == "STENT-1"]
-            one_frame = good_frames.pop()
+            one_frame = data.get_last_frame_of_instance("STENT-1")
 
             peeq_rows = list(data.get_all_rows_at_frame(db_defs.ElementPEEQ, one_frame))
             stress_rows = list(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))

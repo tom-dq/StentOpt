@@ -22,7 +22,7 @@ def _get_most_recent_working_dir() -> pathlib.Path:
     return max(subdirs, key=most_recent)
 
 
-WORKING_DIR_TEMP = pathlib.Path(r"C:\TEMP\aba\AA-19")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
+WORKING_DIR_TEMP = pathlib.Path(r"C:\TEMP\aba\AA-31")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
 FIG_SIZE_UNI = (2000, 1350)
 FIG_SIZE_LAPTOP = (1200, 750)
 
@@ -149,6 +149,7 @@ def make_quadmesh(
 
 def make_dashboard(working_dir: pathlib.Path):
     # Get the data from the
+    print(working_dir)
 
     history_db = history.make_history_db(working_dir)
     with history.History(history_db) as hist:

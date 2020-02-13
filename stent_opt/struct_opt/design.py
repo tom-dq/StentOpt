@@ -117,6 +117,12 @@ class PolarIndex(typing.NamedTuple):
     def from_db_strings(cls, data):
         return _nt_from_db_strings(cls, data)
 
+    def fully_populated_elem_count(self) -> int:
+        return (
+                self.Z - 1 *
+                self.Th - 1 *
+                max(self.R - 1, 1)
+        )
 
 
 class Actuation(enum.Enum):

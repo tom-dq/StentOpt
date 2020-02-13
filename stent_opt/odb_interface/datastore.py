@@ -66,9 +66,15 @@ class Datastore:
 
     def get_all_frames(self):
         with self.connection:
-            rows = self.connection.execute("SELECT * FROM Frame")
+            rows = self.connection.execute("SELECT * FROM Frame ORDER BY rowid")
             for row in rows:
                 yield db_defs.Frame(*row)
+
+    def get_last_frame_of_instance(self, inst_name):
+        with self.connection:
+            rows = self.connection.execute("SELECT * FROM Frame WHERE instance_name = ? ORDER BY rowid DESC LIMIT 1", (inst_name,))
+            for row in rows:
+                return db_defs.Frame(*row)
 
     def get_all_rows_at_frame(self, named_tuple_class, frame):
         with self.connection:
