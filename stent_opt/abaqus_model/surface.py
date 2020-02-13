@@ -27,3 +27,6 @@ class Surface:
         for elem_set, face in self.sets_and_faces:
             yield f"{elem_set.get_name(base.SetContext.assembly)}, {face.name}"
 
+    def num_elem(self) -> int:
+        """Total number of surfaces or edges"""
+        return sum(len(e_set.elements) for e_set, _ in self.sets_and_faces)

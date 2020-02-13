@@ -217,10 +217,6 @@ def make_a_stent(stent_design: StentDesign):
 def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
     """Sets up the standard surfaces on the model."""
 
-    if stent_params.stent_element_dimensions == 2:
-        # Nothing to do in this case
-        return
-
     stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
     stent_part = stent_instance.base_part
 
@@ -240,49 +236,58 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
         one_part.add_element_set(elem_set)
         one_instance.add_surface(the_surface)
 
-    def create_elem_surface_S1(elem_nums, name):
-        create_elem_surface(stent_instance, elem_nums, name, surface.SurfaceFace.S1)
+    if stent_params.stent_element_dimensions == 2:
+        # Just have to make the leading edge
+        max_theta = max(i.Th for i in elem_indexes.values())
+        max_theta_elems = {iElem for iElem, i in elem_indexes.items() if i.Th == max_theta}
+        create_elem_surface(stent_instance, max_theta_elems, GlobalSurfNames.PLANAR_LEADING_EDGE, surface.SurfaceFace.S2)
 
-    # Get the minimum radius surface
-    min_r = min(i.R for i in elem_indexes.values())
-    min_r_elems = {iElem for iElem, i in elem_indexes.items() if i.R == min_r}
-    create_elem_surface_S1(min_r_elems, GlobalSurfNames.INNER_MIN_RADIUS)
+    elif stent_params.stent_element_dimensions == 3:
+        # Have to make a few surfaces
 
-    # Minimum R at any point
-    all_elems_through_thickness = collections.defaultdict(set)
-    for iElem, i in elem_indexes.items():
-        key = (i.Th, i.Z)
-        all_elems_through_thickness[key].add( (i.R, iElem) )
+        def create_elem_surface_S1(elem_nums, name):
+            create_elem_surface(stent_instance, elem_nums, name, surface.SurfaceFace.S1)
 
-    min_elem_through_thickness = set()
-    for _, elems in all_elems_through_thickness.items():
-        min_r_and_elem = min(elems)
-        min_r, min_elem = min_r_and_elem[:]
-        min_elem_through_thickness.add(min_elem)
+        # Get the minimum radius surface
+        min_r = min(i.R for i in elem_indexes.values())
+        min_r_elems = {iElem for iElem, i in elem_indexes.items() if i.R == min_r}
+        create_elem_surface_S1(min_r_elems, GlobalSurfNames.INNER_MIN_RADIUS)
 
-    create_elem_surface_S1(min_elem_through_thickness, GlobalSurfNames.INNER_SURFACE)
+        # Minimum R at any point
+        all_elems_through_thickness = collections.defaultdict(set)
+        for iElem, i in elem_indexes.items():
+            key = (i.Th, i.Z)
+            all_elems_through_thickness[key].add( (i.R, iElem) )
 
-    # Minimum R, as long as the R in on the inner half.
-    all_r = [i.R for i in elem_indexes.values()]
-    median_r = statistics.median(all_r)
-    min_bottom_half = set()
-    for _, elems in all_elems_through_thickness.items():
-        min_r_and_elem = min(elems)
-        min_r, min_elem = min_r_and_elem[:]
-        if min_r <= median_r:
-            min_bottom_half.add(min_elem)
+        min_elem_through_thickness = set()
+        for _, elems in all_elems_through_thickness.items():
+            min_r_and_elem = min(elems)
+            min_r, min_elem = min_r_and_elem[:]
+            min_elem_through_thickness.add(min_elem)
 
-    create_elem_surface_S1(min_bottom_half, GlobalSurfNames.INNER_BOTTOM_HALF)
+        create_elem_surface_S1(min_elem_through_thickness, GlobalSurfNames.INNER_SURFACE)
 
-    if stent_params.actuation == Actuation.balloon:
-        instance_balloon = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON)
-        all_balloon_elems = instance_balloon.base_part.elements.keys()
-        create_elem_surface(instance_balloon, all_balloon_elems, GlobalSurfNames.BALLOON_INNER, surface.SurfaceFace.SNEG)
+        # Minimum R, as long as the R in on the inner half.
+        all_r = [i.R for i in elem_indexes.values()]
+        median_r = statistics.median(all_r)
+        min_bottom_half = set()
+        for _, elems in all_elems_through_thickness.items():
+            min_r_and_elem = min(elems)
+            min_r, min_elem = min_r_and_elem[:]
+            if min_r <= median_r:
+                min_bottom_half.add(min_elem)
 
-    elif stent_params.actuation == Actuation.rigid_cylinder:
-        instance_cyl = model.get_only_instance_base_part_name(GlobalPartNames.CYL_INNER)
-        all_cyl_elements = instance_cyl.base_part.elements.keys()
-        create_elem_surface(instance_cyl, all_cyl_elements, GlobalSurfNames.CYL_INNER, surface.SurfaceFace.SNEG)
+        create_elem_surface_S1(min_bottom_half, GlobalSurfNames.INNER_BOTTOM_HALF)
+
+        if stent_params.actuation == Actuation.balloon:
+            instance_balloon = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON)
+            all_balloon_elems = instance_balloon.base_part.elements.keys()
+            create_elem_surface(instance_balloon, all_balloon_elems, GlobalSurfNames.BALLOON_INNER, surface.SurfaceFace.SNEG)
+
+        elif stent_params.actuation == Actuation.rigid_cylinder:
+            instance_cyl = model.get_only_instance_base_part_name(GlobalPartNames.CYL_INNER)
+            all_cyl_elements = instance_cyl.base_part.elements.keys()
+            create_elem_surface(instance_cyl, all_cyl_elements, GlobalSurfNames.CYL_INNER, surface.SurfaceFace.SNEG)
 
 
 def apply_loads(stent_params: StentParams, model: main.AbaqusModel):
@@ -298,18 +303,18 @@ def apply_loads(stent_params: StentParams, model: main.AbaqusModel):
 
 def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.AbaqusModel):
     t1 = 2.0
-    t2 = 1.0
+    t2 = 3.0
 
     step_expand = step.StepDynamicExplicit(
         name=f"Expand",
-        final_time=t1,
+        step_time=t1,
         bulk_visc_b1=step.FALLBACK_VISC_B1,
         bulk_visc_b2=step.FALLBACK_VISC_B2,
     )
 
     step_release = step.StepDynamicExplicit(
         name=f"Release",
-        final_time=t1+t2,
+        step_time=t2,
         bulk_visc_b1=step.FALLBACK_VISC_B1,
         bulk_visc_b2=step.FALLBACK_VISC_B2,
     )
@@ -326,7 +331,8 @@ def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.
     )
     amp = amplitude.Amplitude("Amp-1", amp_data)
 
-    stent_part = model.get_only_instance_base_part_name(GlobalPartNames.STENT).base_part
+    stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
+    stent_part = stent_instance.base_part
     expand_disp = boundary_condition.BoundaryDispRot(
         name="ExpandDisp",
         with_amplitude=amp,
@@ -365,6 +371,31 @@ def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.
     model.add_load_specific_steps([step_release], let_go_disp)
     model.add_load_specific_steps([step_expand], hold_base1)
     model.add_load_specific_steps([step_release], hold_base2)
+    
+    # Rebound pressure (kind of like the blood vessel squeezing in).
+    
+    one_element_len = stent_params.length / stent_params.divs.Z
+    leading_edge = stent_instance.surfaces[GlobalSurfNames.PLANAR_LEADING_EDGE]
+    actuated_line_length = leading_edge.num_elem() * one_element_len
+    pressure_load = 0.2 / actuated_line_length
+
+    amp_data = (
+        amplitude.XY(0.0, 0.0),
+        amplitude.XY(0.1 * t2, 0.0),
+        amplitude.XY(0.6 * t2, pressure_load),
+        amplitude.XY(t2, pressure_load),
+    )
+
+    amp_pressure = amplitude.Amplitude("Amp-Press", amp_data)
+
+    inner_pressure = load.PressureLoad(
+        name="Pressure",
+        with_amplitude=amp_pressure,
+        on_surface=leading_edge,
+        value=pressure_load,
+    )
+
+    model.add_load_specific_steps([step_release], inner_pressure)
 
 
 def _apply_loads_enforced_disp_rigid_cyl(stent_params: StentParams, model: main.AbaqusModel):
@@ -376,7 +407,7 @@ def _apply_loads_enforced_disp_rigid_cyl(stent_params: StentParams, model: main.
 
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
-        final_time=total_time,
+        step_time=total_time,
         bulk_visc_b1=step.FALLBACK_VISC_B1,
         bulk_visc_b2=step.FALLBACK_VISC_B2,
     )
@@ -423,7 +454,7 @@ def _apply_loads_pressure(stent_params: StentParams, model: main.AbaqusModel):
 
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
-        final_time=total_time,
+        step_time=total_time,
         bulk_visc_b1=step.FALLBACK_VISC_B1,
         bulk_visc_b2=step.FALLBACK_VISC_B2,
     )

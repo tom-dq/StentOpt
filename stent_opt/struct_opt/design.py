@@ -312,6 +312,7 @@ class GlobalSurfNames:
     INNER_MIN_RADIUS = "InMinR"
     BALLOON_INNER = "BalInner"
     CYL_INNER = "CylInner"
+    PLANAR_LEADING_EDGE = "Lead"
 
 
 class GlobalNodeSetNames(enum.Enum):
@@ -329,8 +330,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=66,  # 31
-        Z=600,  # 120
+        Th=44,  # 31
+        Z=400,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
