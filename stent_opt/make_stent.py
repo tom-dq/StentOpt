@@ -28,6 +28,7 @@ try:
 except KeyError:
     pass
 
+N_CPUS_ABAQUS = max(psutil.cpu_count(logical=False) - 1, 1)  # Make this 1 on my laptop so I don't get the firewall message.
 
 def make_a_stent(stent_design: StentDesign):
 
@@ -617,7 +618,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', 'cpus=8', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', f'cpus={N_CPUS_ABAQUS}', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -738,7 +739,7 @@ def _get_next_free_dir(base_dir):
 
 if __name__ == "__main__":
     #with tempfile.TemporaryDirectory() as temp_dir:
-    working_dir = _get_next_free_dir(r"E:\Simulations\StentOpt")
+    working_dir = _get_next_free_dir(r"C:\TEMP\aba")
 
     do_opt(basic_stent_params, str(working_dir))
 

@@ -14,7 +14,7 @@ from stent_opt.struct_opt import history, design
 holoviews.extension('bokeh')
 
 def _get_most_recent_working_dir() -> pathlib.Path:
-    subdirs = (p for p in pathlib.Path(r"E:\Simulations\StentOpt").iterdir() if p.is_dir())
+    subdirs = (p for p in pathlib.Path(r"C:\TEMP\aba").iterdir() if p.is_dir())
 
     def most_recent(p: pathlib.Path):
         return p.stat().st_ctime
@@ -22,8 +22,11 @@ def _get_most_recent_working_dir() -> pathlib.Path:
     return max(subdirs, key=most_recent)
 
 
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-46")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
-FIG_SIZE = (2000, 1350)
+WORKING_DIR_TEMP = pathlib.Path(r"C:\TEMP\aba\AA-19")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
+FIG_SIZE_UNI = (2000, 1350)
+FIG_SIZE_LAPTOP = (1200, 750)
+
+FIG_SIZE = FIG_SIZE_LAPTOP
 
 class ContourView(typing.NamedTuple):
     iteration_num: int
@@ -78,11 +81,15 @@ def make_contour(
 
 def make_quadmesh(
         stent_params: design.StentParams,
+        active_elements: typing.FrozenSet[design.PolarIndex],
         node_idx_pos: typing.Dict[design.PolarIndex, base.XYZ],
         contour_view: ContourView,
         elem_idx_to_value: typing.Dict[design.PolarIndex, float],
-) -> holoviews.QuadMesh:
+) -> holoviews.Overlay:
     """Make a single Quadmesh representation"""
+
+    # If it's not deformed, all the nodal positions should be there so we can plot inactive elements as well.
+    INCLUDE_GHOST_ELEMENENTS = not contour_view.deformed
 
     # Make the undeformed meshgrid.
     x_vals = design.gen_ordinates(stent_params.divs.Th, 0.0, stent_params.theta_arc_initial)
@@ -104,9 +111,16 @@ def make_quadmesh(
     # The values are element centred.
     elem_shape = (X.shape[0]-1, X.shape[1]-1)
     Z = numpy.full(shape=elem_shape, fill_value=numpy.nan)
+    Z_ghost = Z.copy()
 
     for idx, val in elem_idx_to_value.items():
-        Z[idx.Z-z_low, idx.Th-th_low] = val
+        if idx in active_elements:
+            Z[idx.Z-z_low, idx.Th-th_low] = val
+
+        elif INCLUDE_GHOST_ELEMENENTS:
+            Z_ghost[idx.Z - z_low, idx.Th - th_low] = val
+
+    all_ghosts_nan = numpy.isnan(Z_ghost).all()
 
     # Overwrite with the nodes...
     th_range = range(th_low, th_high+1)
@@ -117,10 +131,20 @@ def make_quadmesh(
             Y[node_idx.Z-z_low, node_idx.Th-th_low] = pos.y
 
     # Populate with the real values.
-    qmesh = holoviews.QuadMesh((X, Y, Z), vdims='level', group=contour_view.metric_name)
-    # qmesh.opts(color='level', aspect='equal', line_width=0.1, padding=0.1, width=1300, height=750, invert_axes=True)
-    qmesh.opts(aspect='equal', line_width=0.1, padding=0.1, width=FIG_SIZE[0], height=FIG_SIZE[1])
-    return qmesh
+
+    qmesh_real = holoviews.QuadMesh((X, Y, Z), vdims='level', group=contour_view.metric_name)
+    qmesh_real.options(cmap='viridis')
+
+    qmesh_list = [qmesh_real]
+    if INCLUDE_GHOST_ELEMENENTS and not all_ghosts_nan:
+        qmesh_ghost = holoviews.QuadMesh((X, Y, Z_ghost), vdims='level', group=contour_view.metric_name)
+        qmesh_ghost.options(cmap='inferno')
+        qmesh_list.append(qmesh_ghost)
+
+    for qmesh in qmesh_list:
+        qmesh.opts(aspect='equal', line_width=0.1, padding=0.1, width=FIG_SIZE[0], height=FIG_SIZE[1], colorbar=True)
+
+    return holoviews.Overlay(qmesh_list)
 
 
 def make_dashboard(working_dir: pathlib.Path):
@@ -150,6 +174,7 @@ def make_dashboard(working_dir: pathlib.Path):
 
             ):
                 contour_view = contour_view_raw._replace(deformed=deformed)
+                active_elements = frozenset(num_to_idx[iElem] for iElem in snapshots[contour_view.iteration_num].active_elements)
                 print(contour_view)
 
                 # Some measures (like RegionGradient) can exist even if the element is inactive. Strip these out of the display.
@@ -160,12 +185,11 @@ def make_dashboard(working_dir: pathlib.Path):
 
                 elem_idx_to_value = {
                     num_to_idx[iElem]: val for
-                    iElem, val in  elem_data.items()
-                    if iElem in snapshots[contour_view.iteration_num].active_elements}
+                    iElem, val in  elem_data.items()}
 
                 node_idx_pos = {node_num_to_idx[iNode]: pos for iNode, pos in node_pos.items()}
 
-                qmesh = make_quadmesh(stent_params, node_idx_pos, contour_view, elem_idx_to_value)
+                qmesh = make_quadmesh(stent_params, active_elements, node_idx_pos, contour_view, elem_idx_to_value)
                 plot_dict[contour_view] = qmesh
 
         hmap = holoviews.HoloMap(plot_dict, kdims=list(contour_view._fields))
@@ -182,11 +206,7 @@ def do_test():
     zs[3,4] = numpy.nan
     qmesh = holoviews.QuadMesh((xs, ys, zs))
 
-    x = [4.2, 5, 6]
-    y = [12,15]
-    X, Y = numpy.meshgrid(x, y)
-    Z = X + Y
-
+    qmesh.opts(colorbar=True, width=380)
 
 
     panel.panel(qmesh).show()

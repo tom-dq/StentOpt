@@ -23,7 +23,7 @@ class Tail(enum.Enum):
 
 
 MAKE_PLOTS = False
-USE_REGION_GRADIENT = True
+REGION_GRADIENT_COMPONENT = db_defs.ElementStress  # Either db_defs.ElementStress, say, or None to not do region gradient
 
 SINGLE_COMPONENT = None #  db_defs.ElementStress
 
@@ -154,7 +154,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
     all_ranks = []
 
-    if USE_REGION_GRADIENT:
+    if REGION_GRADIENT_COMPONENT:
         # Gradient tracking
         n_gradient_tracking = 5
         final_grad_track = iter_n
@@ -162,7 +162,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
         grad_track_steps = range(first_grad_track, final_grad_track)
 
         print(f"Iter {iter_n}, grad track = {list(grad_track_steps)}")
-        recent_gradient_input_data = get_gradient_input_data(working_dir, SINGLE_COMPONENT, grad_track_steps)
+        recent_gradient_input_data = get_gradient_input_data(working_dir, REGION_GRADIENT_COMPONENT, grad_track_steps)
         vicinity_ranking = list(score.get_primary_ranking_local_stress_gradient(recent_gradient_input_data, statistics.mean))
         all_ranks.append(vicinity_ranking)
 
