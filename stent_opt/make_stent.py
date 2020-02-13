@@ -571,30 +571,6 @@ def write_model(model: main.AbaqusModel, fn_inp):
             fOut.write(l + "\n")
 
 
-
-def ___include_elem_decider_cavities() -> typing.Callable:
-    """As a first test, make some cavities in the segment."""
-
-    rs = [0.5 * (basic_stent_params.r_min + basic_stent_params.r_max), ]
-    thetas = [0.0, basic_stent_params.angle]
-    z_vals = [0, 0.5 * basic_stent_params.length, basic_stent_params.length]
-
-    cavities = []
-    for r, th, z in itertools.product(rs, thetas, z_vals):
-        cavities.append((base.RThZ(r=r, theta_deg=th, z=z).to_xyz(), 0.25))
-
-    def check_elem(e: element.Element) -> bool:
-        for cent, max_dist in cavities:
-            this_elem_cent = elem_cent_polar(e)
-            dist = abs(cent - this_elem_cent.to_xyz())
-            if dist < max_dist:
-                return False
-
-        return True
-
-    return check_elem
-
-
 def make_stent_model(stent_design: StentDesign, fn_inp: str):
     model = make_a_stent(stent_design)
     create_surfaces(stent_design.stent_params, model)
