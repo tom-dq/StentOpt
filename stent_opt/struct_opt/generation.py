@@ -22,7 +22,7 @@ class Tail(enum.Enum):
     top = enum.auto()
 
 
-MAX_CHANGE_IN_VOLUME_RATIO = 0.01  # No more than this change in volume ratio between increments.
+MAX_CHANGE_IN_VOLUME_RATIO = 0.005  # No more than this change in volume ratio between increments.
 NUM_REDUCE_ITERS = 20
 
 MAKE_PLOTS = False
@@ -166,7 +166,7 @@ def _clamp_update(old, new, max_delta):
     if abs(full_diff) > max_delta:
         lower_bound = old - max_delta
         upper_bound = old + max_delta
-        working_a = max(full_diff, lower_bound)
+        working_a = max(new, lower_bound)
         return min(working_a, upper_bound)
 
     else:
