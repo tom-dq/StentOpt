@@ -22,7 +22,8 @@ class Tail(enum.Enum):
     top = enum.auto()
 
 
-MAX_CHANGE_IN_VOLUME_RATIO = 0.02  # No more than this change in volume ratio between increments.
+MAX_CHANGE_IN_VOLUME_RATIO = 0.01  # No more than this change in volume ratio between increments.
+NUM_REDUCE_ITERS = 20
 
 MAKE_PLOTS = False
 REGION_GRADIENT_COMPONENT = None  # Either db_defs.ElementStress or ElementPEEQ say, or None to not do region gradient
@@ -132,6 +133,8 @@ def get_top_n_elements(data: T_index_to_val, tail: Tail, n_elems: int) -> typing
     def sort_key(index_val):
         return index_val[1]
 
+    if n_elems < 0:
+        raise ValueError(n_elems)
 
     rev = True if tail == Tail.top else False
     sorted_data = sorted(data.items(), key=sort_key, reverse=rev)
@@ -174,7 +177,6 @@ def _clamp_update(old, new, max_delta):
 def _target_volume_ratio_ideal(iter_n) -> float:
     """Gradually remove material, then taper off."""
 
-    NUM_REDUCE_ITERS = 20
     START_RATIO = 0.15
     FLOOR_RATIO = 0.08
 
@@ -213,6 +215,8 @@ def evolve_decider(design_n_min_1, sensitivity_result, iter_n) -> typing.Set[des
     # If there was no change in volume ratio, what would be the maximum number of elements we could add?
     max_new_num_unconstrained = int(MAX_CHANGE_IN_VOLUME_RATIO * design_n_min_1.stent_params.divs.fully_populated_elem_count())
     max_new_num = min(max_new_num_unconstrained, max_new_num_unconstrained+delta_n_elems)
+    if max_new_num < 0:
+        max_new_num = 0
 
     top_new_potential_elems = get_top_n_elements(sensitivity_result, Tail.top, max_new_num)
     actual_new_elems = top_new_potential_elems - design_n_min_1.active_elements
@@ -458,7 +462,7 @@ def evolve_decider_test():
     iter_n_min_1 = 0
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"C:\TEMP\aba\AA-45\History.db")
+    history_db = pathlib.Path(r"C:\TEMP\aba\AA-49\History.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()

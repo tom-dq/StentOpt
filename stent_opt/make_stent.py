@@ -709,6 +709,7 @@ def do_opt(stent_params: StentParams, in_path):
     with history.History(history_db_fn) as hist:
         old_design = hist.get_most_recent_design()
 
+    first_permissable_stopping_iter = generation.NUM_REDUCE_ITERS + 1
     for i_current in range(main_loop_start_i, 1000):
         fn_inp = history.make_fn_in_dir(working_dir, ".inp", i_current)
         fn_odb = history.make_fn_in_dir(working_dir, ".odb", i_current)
@@ -721,7 +722,10 @@ def do_opt(stent_params: StentParams, in_path):
         num_removed = len(removed_elements)
         print(f"Added: {num_new}\tRemoved: {num_removed}.")
         # print(f"Added: {num_new}\t{sorted(new_elements)}\tRemoved: {num_removed}\t{sorted(removed_elements)}.")
-        if new_design == old_design and (i_current != main_loop_start_i):
+        same_design = new_design == old_design
+        not_on_first_iter = i_current != main_loop_start_i
+        volume_change_stabilised = i_current > first_permissable_stopping_iter
+        if same_design and not_on_first_iter and volume_change_stabilised:
             done = True
 
         make_stent_model(new_design, fn_inp)
