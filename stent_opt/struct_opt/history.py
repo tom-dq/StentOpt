@@ -1,5 +1,6 @@
 # Keeps track of how the optimisation has been going.
 import itertools
+import enum
 import pathlib
 import sqlite3
 import typing
@@ -8,6 +9,7 @@ import collections
 import matplotlib.pyplot as plt
 
 from stent_opt.struct_opt import design
+
 
 class Snapshot(typing.NamedTuple):
     iteration_num: int
@@ -25,11 +27,24 @@ class Snapshot(typing.NamedTuple):
             active_elements=active_elements,
         )
 
+class StatusCheckStage(enum.Enum):
+    primary = enum.auto()
+    secondary = enum.auto()
+    smoothed = enum.auto()
+
+
 class StatusCheck(typing.NamedTuple):
     iteration_num: int
     elem_num: int
+    stage: StatusCheckStage
     metric_name: str
     metric_val: float
+
+    def for_db_form(self):
+        return self._replace(stage=self.stage.name)
+
+    def from_db(self):
+        return self._replace(stage=StatusCheckStage[self.stage])
 
 
 class ParamKeyValue(typing.NamedTuple):
@@ -54,6 +69,7 @@ active_elements TEXT
 _make_status_check_table = """CREATE TABLE IF NOT EXISTS StatusCheck(
 iteration_num INTEGER,
 elem_num INTEGER,
+stage TEXT,
 metric_name TEXT,
 metric_val REAL
 )"""
@@ -111,7 +127,8 @@ class History:
     def add_many_status_checks(self, status_checks: typing.Iterable[StatusCheck]):
         ins_string = self._generate_insert_string_nt_class(StatusCheck)
         with self.connection:
-            self.connection.executemany(ins_string, status_checks)
+            status_checks_for_db = (st.for_db_form() for st in status_checks)
+            self.connection.executemany(ins_string, status_checks_for_db)
 
     def add_node_positions(self, node_positions: typing.Iterable[NodePosition]):
         ins_string = self._generate_insert_string_nt_class(NodePosition)
@@ -193,7 +210,7 @@ class History:
     def get_status_checks(self, iter_greater_than: int) -> typing.Iterable[StatusCheck]:
         with self.connection:
             rows = self.connection.execute("SELECT * FROM StatusCheck WHERE iteration_num >= ? ORDER BY iteration_num, metric_name ", (iter_greater_than,))
-            yield from (StatusCheck(*row) for row in rows)
+            yield from (StatusCheck(*row).from_db() for row in rows)
 
     def get_node_positions(self) -> typing.Iterable[NodePosition]:
         with self.connection:

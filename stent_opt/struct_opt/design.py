@@ -118,11 +118,11 @@ class PolarIndex(typing.NamedTuple):
         return _nt_from_db_strings(cls, data)
 
     def fully_populated_elem_count(self) -> int:
-        return (
-                self.Z - 1 *
-                self.Th - 1 *
-                max(self.R - 1, 1)
-        )
+        z_elems = self.Z - 1
+        th_elems = self.Th - 1
+        r_elems = max(self.R - 1, 1)
+        return z_elems * th_elems * r_elems
+
 
 
 class Actuation(enum.Enum):
@@ -242,7 +242,9 @@ class StentDesign(typing.NamedTuple):
     active_elements: typing.FrozenSet[PolarIndex]
 
     def volume_ratio(self) -> float:
-        return len(self.active_elements) / self.stent_params.divs.fully_populated_elem_count()
+        active_elements = len(self.active_elements)
+        fully_populated = self.stent_params.divs.fully_populated_elem_count()
+        return active_elements / fully_populated
 
 def node_to_elem_design_space(divs: PolarIndex) -> PolarIndex:
     return divs._replace(

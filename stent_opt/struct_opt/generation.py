@@ -22,6 +22,8 @@ class Tail(enum.Enum):
     top = enum.auto()
 
 
+MAX_CHANGE_IN_VOLUME_RATIO = 0.02  # No more than this change in volume ratio between increments.
+
 MAKE_PLOTS = False
 REGION_GRADIENT_COMPONENT = None  # Either db_defs.ElementStress or ElementPEEQ say, or None to not do region gradient
 
@@ -96,7 +98,11 @@ def gaussian_smooth(design_space: design.PolarIndex, unsmoothed: T_index_to_val)
     out_dict = {}
     for r, th, z in zip(*non_zero_inds):
         out_idx = design.PolarIndex(R=r, Th=th, Z=z)
-        out_dict[out_idx] = float(out_nd_array[(r, th, z)])
+        smoothed_val = float(out_nd_array[(r, th, z)])
+        was_in_old_design = out_idx in unsmoothed
+        is_nonzero = bool(smoothed_val)
+        if was_in_old_design or is_nonzero:
+            out_dict[out_idx] = smoothed_val
 
     return out_dict
 
@@ -146,8 +152,27 @@ def display_design_flat(design_space: design.PolarIndex, data: T_index_to_val):
     plt.show()
 
 
-def _target_volume_ratio(iter_n) -> float:
+def _clamp_update(old, new, max_delta):
+    """Go from old towards new, but by no more than max_delta"""
+
+    if max_delta <= 0.0:
+        raise ValueError(max_delta)
+
+    full_diff = new-old
+
+    if abs(full_diff) > max_delta:
+        lower_bound = old - max_delta
+        upper_bound = old + max_delta
+        working_a = max(full_diff, lower_bound)
+        return min(working_a, upper_bound)
+
+    else:
+        return new
+
+
+def _target_volume_ratio(stent_design, iter_n) -> float:
     """Gradually remove material, then taper off."""
+
 
     NUM_REDUCE_ITERS = 20
     START_RATIO = 0.5
@@ -157,24 +182,34 @@ def _target_volume_ratio(iter_n) -> float:
 
     reducing = delta * (NUM_REDUCE_ITERS-iter_n)/NUM_REDUCE_ITERS + FLOOR_RATIO
 
-    return max(FLOOR_RATIO, reducing)
+    target_ratio = max(FLOOR_RATIO, reducing)
 
+    # If we are too far from the ideal volume ratio, clip it.
+    existing_volume_ratio = stent_design.volume_ratio()
 
-def _target_num_elems(stent_params: design.StentParams, iter_n: int) -> int:
+    clamped_target = _clamp_update(existing_volume_ratio, target_ratio, MAX_CHANGE_IN_VOLUME_RATIO)
+    print(existing_volume_ratio, target_ratio, clamped_target, sep='\t')
+    return clamped_target
+
+def _target_num_elems(stent_design: design.StentDesign, iter_n: int) -> int:
     """Get a target element count"""
-    return int(stent_params.divs.fully_populated_elem_count() * _target_volume_ratio(iter_n))
+    fully_populated = stent_design.stent_params.divs.fully_populated_elem_count()
+    return int(fully_populated * _target_volume_ratio(stent_design, iter_n))
 
 
 def evolve_decider(design_n_min_1, sensitivity_result, iter_n) -> typing.Set[design.PolarIndex]:
     """Decides which elements are coming in and going out."""
 
-    MAX_NEW_NUM = int(0.05 * design_n_min_1.stent_params.divs.fully_populated_elem_count())
+    target_count = _target_num_elems(design_n_min_1, iter_n)
+    delta_n_elems = target_count - len(design_n_min_1.active_elements)
 
-    top_new_potential_elems = get_top_n_elements(sensitivity_result, Tail.top, MAX_NEW_NUM)
+    # If there was no change in volume ratio, what would be the maximum number of elements we could add?
+    max_new_num_unconstrained = int(MAX_CHANGE_IN_VOLUME_RATIO * design_n_min_1.stent_params.divs.fully_populated_elem_count())
+    max_new_num = min(max_new_num_unconstrained, max_new_num_unconstrained+delta_n_elems)
+
+    top_new_potential_elems = get_top_n_elements(sensitivity_result, Tail.top, max_new_num)
     actual_new_elems = top_new_potential_elems - design_n_min_1.active_elements
     num_new = len(actual_new_elems)
-
-    target_count = _target_num_elems(design_n_min_1.stent_params, iter_n)
 
     num_with_new_additions = len(design_n_min_1.active_elements) + num_new
     num_to_go = num_with_new_additions - target_count
@@ -185,6 +220,21 @@ def evolve_decider(design_n_min_1, sensitivity_result, iter_n) -> typing.Set[des
 
     new_active_elems = (design_n_min_1.active_elements | top_new_potential_elems) - to_go
     return new_active_elems
+
+
+def _hist_status_stage_from_rank_comp(rank_comp: typing.Union[score.PrimaryRankingComponent, score.SecondaryRankingComponent]) -> history.StatusCheckStage:
+    if isinstance(rank_comp, score.PrimaryRankingComponent):
+        return history.StatusCheckStage.primary
+
+    elif isinstance(rank_comp, score.SecondaryRankingComponent):
+        if "smoothed" in rank_comp.comp_name.lower():
+            return history.StatusCheckStage.smoothed
+
+        else:
+            return history.StatusCheckStage.secondary
+
+    raise TypeError(rank_comp)
+
 
 
 def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentDesign:
@@ -254,6 +304,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
         status_checks = (history.StatusCheck(
             iteration_num=iter_n_min_1,
             elem_num=rank_comp.elem_id,
+            stage=_hist_status_stage_from_rank_comp(rank_comp),
             metric_name=rank_comp.comp_name,
             metric_val=rank_comp.value) for rank_comp_list in all_ranks for rank_comp in rank_comp_list)
 
@@ -279,6 +330,18 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
     unsmoothed = {elem_num_to_indices[iElem]: val for iElem, val in overall_rank.items()}
     smoothed = gaussian_smooth(design_n_min_1.stent_params.divs, unsmoothed)
+
+    # Put back into the StatusCheck form so we can serialise it...
+    with history.History(history_db) as hist:
+        sec_rank_name = sec_rank[0].comp_name + " Smoothed"
+        sec_rank_smoothed = (history.StatusCheck(
+                iteration_num=iter_n_min_1,
+                elem_num=elem_indices_to_num[elem_id],
+                stage=history.StatusCheckStage.smoothed,
+                metric_name=sec_rank_name,
+                metric_val=val) for elem_id, val in smoothed.items())
+
+        hist.add_many_status_checks(sec_rank_smoothed)
 
     if MAKE_PLOTS and False:  # Turn this off for now.
         # Dress the smoothed value up as a primary ranking component to display
@@ -383,6 +446,25 @@ def track_history_checks_test():
         print(x)
 
 
+
+def evolve_decider_test():
+    iter_n_min_1 = 0
+
+    history_db = pathlib.Path(r"C:\TEMP\aba\AA-42\History.db")
+
+    with history.History(history_db) as hist:
+        stent_params = hist.get_stent_params()
+
+        elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
+
+        snapshot_n_min_1 = hist.get_snapshot(iter_n_min_1)
+        design_n_min_1 = design.StentDesign(
+            stent_params=stent_params,
+            active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements))
+        )
+
+
+    new_active_elems = evolve_decider(design_n_min_1, smoothed, iter_n)
 
 
 

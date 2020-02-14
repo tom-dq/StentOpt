@@ -607,7 +607,7 @@ def make_stent_model(stent_design: StentDesign, fn_inp: str):
     apply_loads(stent_design.stent_params, model)
     add_interaction(stent_design.stent_params, model)
     apply_boundaries(stent_design.stent_params, model)
-    print(fn_inp, f"Volume Ratio={stent_design.volume_ratio()}")  # TODO - this is wrong - fix the volume ratio stuff.
+    print(fn_inp, f"Volume Ratio={stent_design.volume_ratio()}", sep='\t')
     write_model(model, fn_inp)
 
 
