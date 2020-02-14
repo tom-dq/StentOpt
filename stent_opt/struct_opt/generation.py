@@ -77,7 +77,7 @@ def get_gradient_input_data(
 T_index_to_val = typing.Dict[design.PolarIndex, float]
 def gaussian_smooth(design_space: design.PolarIndex, unsmoothed: T_index_to_val) -> T_index_to_val:
 
-    GAUSSIAN_SIGMA = 0.5 # Was 0.5, and 2.0
+    GAUSSIAN_SIGMA = 2.0 # Was 0.5, and 2.0
 
     # Make a 3D array
     design_space_elements = design.node_to_elem_design_space(design_space)
@@ -212,7 +212,7 @@ def evolve_decider(design_n_min_1, sensitivity_result, iter_n) -> typing.Set[des
     num_new = len(actual_new_elems)
 
     num_with_new_additions = len(design_n_min_1.active_elements) + num_new
-    num_to_go = num_with_new_additions - target_count
+    num_to_go = max(num_with_new_additions - target_count, 0)
 
     # Remove however many we added.
     existing_elems_only_ranked = {idx: val for idx,val in sensitivity_result.items() if idx in design_n_min_1.active_elements}
@@ -449,8 +449,9 @@ def track_history_checks_test():
 
 def evolve_decider_test():
     iter_n_min_1 = 0
+    iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"C:\TEMP\aba\AA-42\History.db")
+    history_db = pathlib.Path(r"C:\TEMP\aba\AA-45\History.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -463,14 +464,22 @@ def evolve_decider_test():
             active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements))
         )
 
+        status_checks = hist.get_status_checks(0)
+        smoothed_checks = [st for st in status_checks if st.stage == history.StatusCheckStage.smoothed]
+        smoothed = {elem_num_to_indices[st.elem_num]: st.metric_val for st in smoothed_checks}
 
     new_active_elems = evolve_decider(design_n_min_1, smoothed, iter_n)
+    n_new = len(new_active_elems - design_n_min_1.active_elements)
+    n_gone = len(design_n_min_1.active_elements - new_active_elems)
+
+    print(f"Gone: {n_gone}\tNew: {n_new}")
 
 
 
 
 if __name__ == '__main__':
-    make_plot_tests()
+    evolve_decider_test()
+    # make_plot_tests()
 
 
 
