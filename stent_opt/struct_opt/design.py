@@ -236,6 +236,10 @@ class StentParams(typing.NamedTuple):
     def theta_arc_initial(self):
         return self.radial_midplane_initial * math.radians(self.angle)
 
+    @property
+    def single_element_z_span(self) -> float:
+        return self.length / self.divs.Z
+
 
 class StentDesign(typing.NamedTuple):
     stent_params: StentParams
@@ -331,7 +335,7 @@ class GlobalNodeSetNames(enum.Enum):
     BalloonZ0 = enum.auto()
     BalloonZMax = enum.auto()
     RigidCyl = enum.auto()
-    PlanarStentTheta0 = enum.auto()
+    PlanarStentTheta0 = enum.auto()  # These are the sides - only enforce the displacement at the base
     PlanarStentThetaMax = enum.auto()
     PlanarStentZMin = enum.auto()
 

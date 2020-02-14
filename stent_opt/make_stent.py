@@ -104,8 +104,12 @@ def make_a_stent(stent_design: StentDesign):
             min_idx_z = min(idx.Z for idx in iNode_to_idx_active.values())
 
             def get_boundary_node_set(node_idx: design.PolarIndex):
-                if node_idx.Th == 0: yield design.GlobalNodeSetNames.PlanarStentTheta0
-                if node_idx.Th == stent_params.divs.Th-1: yield design.GlobalNodeSetNames.PlanarStentThetaMax
+                # TODO - make "is_in_bottom_chunk" generalisable and more robust.
+                vert_distant = (node_idx.Z - min_idx_z) * stent_params.single_element_z_span
+                is_in_bottom_chunk = vert_distant < 0.5
+
+                if node_idx.Th == 0 and is_in_bottom_chunk: yield design.GlobalNodeSetNames.PlanarStentTheta0
+                if node_idx.Th == stent_params.divs.Th-1 and is_in_bottom_chunk: yield design.GlobalNodeSetNames.PlanarStentThetaMax
                 if node_idx.Z == min_idx_z: yield design.GlobalNodeSetNames.PlanarStentZMin
 
             boundary_set_name_to_nodes = collections.defaultdict(set)
@@ -373,10 +377,9 @@ def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.
     model.add_load_specific_steps([step_release], hold_base2)
     
     # Rebound pressure (kind of like the blood vessel squeezing in).
-    
-    one_element_len = stent_params.length / stent_params.divs.Z
+
     leading_edge = stent_instance.surfaces[GlobalSurfNames.PLANAR_LEADING_EDGE]
-    actuated_line_length = leading_edge.num_elem() * one_element_len
+    actuated_line_length = leading_edge.num_elem() * stent_params.single_element_z_span
     pressure_load = 0.2 / actuated_line_length
 
     amp_data = (
