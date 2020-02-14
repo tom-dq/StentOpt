@@ -170,19 +170,26 @@ def _clamp_update(old, new, max_delta):
         return new
 
 
-def _target_volume_ratio(stent_design, iter_n) -> float:
+
+def _target_volume_ratio_ideal(iter_n) -> float:
     """Gradually remove material, then taper off."""
 
-
     NUM_REDUCE_ITERS = 20
-    START_RATIO = 0.5
-    FLOOR_RATIO = 0.1
+    START_RATIO = 0.15
+    FLOOR_RATIO = 0.08
 
     delta = START_RATIO - FLOOR_RATIO
 
     reducing = delta * (NUM_REDUCE_ITERS-iter_n)/NUM_REDUCE_ITERS + FLOOR_RATIO
 
     target_ratio = max(FLOOR_RATIO, reducing)
+
+    return target_ratio
+
+
+def _target_volume_ratio_clamped(stent_design, iter_n) -> float:
+
+    target_ratio = _target_volume_ratio_ideal(iter_n)
 
     # If we are too far from the ideal volume ratio, clip it.
     existing_volume_ratio = stent_design.volume_ratio()
@@ -194,7 +201,7 @@ def _target_volume_ratio(stent_design, iter_n) -> float:
 def _target_num_elems(stent_design: design.StentDesign, iter_n: int) -> int:
     """Get a target element count"""
     fully_populated = stent_design.stent_params.divs.fully_populated_elem_count()
-    return int(fully_populated * _target_volume_ratio(stent_design, iter_n))
+    return int(fully_populated * _target_volume_ratio_clamped(stent_design, iter_n))
 
 
 def evolve_decider(design_n_min_1, sensitivity_result, iter_n) -> typing.Set[design.PolarIndex]:

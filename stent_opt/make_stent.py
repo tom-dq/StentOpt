@@ -716,7 +716,8 @@ def do_opt(stent_params: StentParams, in_path):
         removed_elements = old_design.active_elements - new_design.active_elements
         num_new = len(new_elements)
         num_removed = len(removed_elements)
-        print(f"Added: {num_new}\t{sorted(new_elements)}\tRemoved: {num_removed}\t{sorted(removed_elements)}.")
+        print(f"Added: {num_new}\tRemoved: {num_removed}.")
+        # print(f"Added: {num_new}\t{sorted(new_elements)}\tRemoved: {num_removed}\t{sorted(removed_elements)}.")
         if new_design == old_design and (i_current != main_loop_start_i):
             done = True
 
