@@ -22,11 +22,11 @@ class Tail(enum.Enum):
     top = enum.auto()
 
 
-MAX_CHANGE_IN_VOLUME_RATIO = 0.005  # No more than this change in volume ratio between increments.
-NUM_REDUCE_ITERS = 20
+MAX_CHANGE_IN_VOLUME_RATIO = 0.0025  # No more than this change in volume ratio between increments.
+NUM_REDUCE_ITERS = 60
 
 MAKE_PLOTS = False
-REGION_GRADIENT_COMPONENT = None  # Either db_defs.ElementStress or ElementPEEQ say, or None to not do region gradient
+REGION_GRADIENT_COMPONENT = db_defs.ElementPEEQ  # Either db_defs.ElementStress or ElementPEEQ say, or None to not do region gradient
 
 USED_ELEM_COMPONENTS = [
     db_defs.ElementStress,
@@ -177,8 +177,8 @@ def _clamp_update(old, new, max_delta):
 def _target_volume_ratio_ideal(iter_n) -> float:
     """Gradually remove material, then taper off."""
 
-    START_RATIO = 0.15
-    FLOOR_RATIO = 0.08
+    START_RATIO = 0.12
+    FLOOR_RATIO = 0.05
 
     delta = START_RATIO - FLOOR_RATIO
 
@@ -303,7 +303,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
     all_ranks.extend([
         # list(score.get_primary_ranking_element_distortion(design_n_min_1, pos_rows)), # Node position based scores
-        # list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows)),
+        list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows)),
     ])
 
     # Compute a secondary rank from all the first ones.
