@@ -267,7 +267,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
         print(f"Iter {iter_n}, grad track = {list(grad_track_steps)}")
         recent_gradient_input_data = get_gradient_input_data(working_dir, REGION_GRADIENT_COMPONENT, grad_track_steps)
-        vicinity_ranking = list(score.get_primary_ranking_local_stress_gradient(recent_gradient_input_data, statistics.mean))
+        vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(recent_gradient_input_data, statistics.mean))
         all_ranks.append(vicinity_ranking)
 
     with history.History(history_db) as hist:
@@ -402,7 +402,7 @@ def make_plot_tests():
     recent_gradient_input_data = list(get_gradient_input_data(working_dir, db_defs.ElementStress, history_iters))
 
 
-    vicinity_ranking = list(score.get_primary_ranking_local_stress_gradient(recent_gradient_input_data, statistics.mean))
+    vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(recent_gradient_input_data, statistics.mean))
     for idx, x in enumerate(vicinity_ranking):
         print(idx, x, sep='\t')
 

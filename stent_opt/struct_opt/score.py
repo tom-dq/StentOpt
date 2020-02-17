@@ -149,7 +149,7 @@ def get_line_of_best_fit(x_vals, y_vals) -> LineOfBestFit:
     return LineOfBestFit(m=float(m), c=float(c))
 
 
-def get_primary_ranking_local_stress_gradient(
+def get_primary_ranking_local_region_gradient(
         recent_gradient_input_data: typing.Iterable[GradientInputData],
         region_reducer: typing.Callable[[typing.Iterable[float]], float],  # e.g., max or statistics.mean.
         ) -> typing.Iterable[PrimaryRankingComponent]:
@@ -212,7 +212,7 @@ def get_primary_ranking_local_stress_gradient(
         can_make_line = len(set(status_vals)) > 1
         if can_make_line:
             line_of_best_fit = get_line_of_best_fit(status_vals, response_vals)
-            grad = line_of_best_fit.m
+            grad = -1.0 * line_of_best_fit.m
 
         else:
             grad = 0.0

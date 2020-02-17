@@ -22,11 +22,11 @@ def _get_most_recent_working_dir() -> pathlib.Path:
     return max(subdirs, key=most_recent)
 
 
-WORKING_DIR_TEMP = pathlib.Path(r"C:\TEMP\aba\AA-56")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-50")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
 FIG_SIZE_UNI = (2000, 1350)
 FIG_SIZE_LAPTOP = (1200, 750)
 
-FIG_SIZE = FIG_SIZE_LAPTOP
+FIG_SIZE = FIG_SIZE_UNI
 
 class ContourView(typing.NamedTuple):
     iteration_num: int

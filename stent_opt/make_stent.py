@@ -28,7 +28,37 @@ try:
 except KeyError:
     pass
 
-N_CPUS_ABAQUS = max(psutil.cpu_count(logical=False) - 1, 1)  # Make this 1 on my laptop so I don't get the firewall message.
+
+def _get_next_free_dir(base_dir):
+    def idea(i):
+        return f"AA-{i}"
+
+    existing_stuff = set(os.listdir(base_dir))
+
+    def is_already_there(f):
+        return f in existing_stuff
+
+    all_proposals = (idea(x) for x in itertools.count())
+    good_proposals = itertools.dropwhile(is_already_there, all_proposals)
+    one_good_propsal = next(good_proposals)
+    return os.path.join(base_dir, one_good_propsal)
+
+
+# Different stuff for which computer we're on
+if psutil.cpu_count(logical=False) == 2:
+    laptop = True
+    N_CPUS_ABAQUS = 1  # Make this 1 on my laptop so I don't get the firewall message.
+    working_dir = _get_next_free_dir(r"C:\TEMP\aba")
+
+elif psutil.cpu_count(logical=False) == 8:
+    laptop = False
+    N_CPUS_ABAQUS = 12
+    working_dir = _get_next_free_dir(r"E:\Simulations\StentOpt")
+
+else:
+    raise ValueError()
+
+
 
 def make_a_stent(stent_design: StentDesign):
 
@@ -739,24 +769,9 @@ def do_opt(stent_params: StentParams, in_path):
         if done:
             break
 
-def _get_next_free_dir(base_dir):
-    def idea(i):
-        return f"AA-{i}"
-
-    existing_stuff = set(os.listdir(base_dir))
-
-    def is_already_there(f):
-        return f in existing_stuff
-
-    all_proposals = (idea(x) for x in itertools.count())
-    good_proposals = itertools.dropwhile(is_already_there, all_proposals)
-    one_good_propsal = next(good_proposals)
-    return os.path.join(base_dir, one_good_propsal)
 
 
 if __name__ == "__main__":
     #with tempfile.TemporaryDirectory() as temp_dir:
-    working_dir = _get_next_free_dir(r"C:\TEMP\aba")
-
     do_opt(basic_stent_params, str(working_dir))
 
