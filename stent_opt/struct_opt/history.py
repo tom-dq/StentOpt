@@ -5,21 +5,13 @@ import pathlib
 import sqlite3
 import typing
 import statistics
-import collections
 import matplotlib.pyplot as plt
 
-
-class RegionReducer(enum.Enum):
-    max_val: enum.auto()
-    mean_val: enum.auto()
-
-
-import stent_opt.struct_opt.generation
+from stent_opt.struct_opt.common import RegionReducer
 from stent_opt.abaqus_model import element
 from stent_opt.struct_opt import design
 from stent_opt.odb_interface import db_defs
 from stent_opt.struct_opt import optim_params
-
 
 
 _enum_types = [

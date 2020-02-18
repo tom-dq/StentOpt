@@ -1,7 +1,7 @@
 import typing
 
 from stent_opt.odb_interface import db_defs
-from stent_opt.struct_opt import design, history
+from stent_opt.struct_opt import common, design, history
 
 
 class VolumeTargetOpts(typing.NamedTuple):
@@ -23,7 +23,7 @@ T_elem_result = typing.Union[db_defs.ElementStress, db_defs.ElementPEEQ]
 class RegionGradient(typing.NamedTuple):
     """Parameters for the positive/negative influence of element activation or inactivation."""
     component: T_elem_result
-    reducer: "history.RegionReducer"
+    reduce_type: common.RegionReducer
     n_past_increments: int
 
     def to_db_strings(self):
@@ -130,7 +130,7 @@ active = OptimParams(
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
         component=db_defs.ElementStress,
-        reducer=history.RegionReducer.mean_val,
+        reduce_type=common.RegionReducer.mean_val,
         n_past_increments=5,
     ),
     element_components=[

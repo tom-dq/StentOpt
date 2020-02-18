@@ -12,7 +12,7 @@ from stent_opt.abaqus_model import base, element
 from stent_opt.struct_opt import history
 
 # These can be serialised and deserialised
-from stent_opt.struct_opt.history import nt_to_db_strings, nt_from_db_strings
+# from stent_opt.struct_opt.history import nt_to_db_strings, nt_from_db_strings, Snapshot
 
 
 class PolarIndex(typing.NamedTuple):
@@ -21,11 +21,11 @@ class PolarIndex(typing.NamedTuple):
     Z: int
 
     def to_db_strings(self):
-        yield from nt_to_db_strings(self)
+        yield from history.nt_to_db_strings(self)
 
     @classmethod
     def from_db_strings(cls, data):
-        return nt_from_db_strings(cls, data)
+        return history.nt_from_db_strings(cls, data)
 
     def fully_populated_elem_count(self) -> int:
         z_elems = self.Z - 1
@@ -49,11 +49,11 @@ class Balloon(typing.NamedTuple):
     divs: PolarIndex
 
     def to_db_strings(self):
-        yield from nt_to_db_strings(self)
+        yield from history.nt_to_db_strings(self)
 
     @classmethod
     def from_db_strings(cls, data):
-        return nt_from_db_strings(cls, data)
+        return history.nt_from_db_strings(cls, data)
 
 
 class Cylinder(typing.NamedTuple):
@@ -62,11 +62,11 @@ class Cylinder(typing.NamedTuple):
     divs: PolarIndex
 
     def to_db_strings(self):
-        yield from nt_to_db_strings(self)
+        yield from history.nt_to_db_strings(self)
 
     @classmethod
     def from_db_strings(cls, data):
-        return nt_from_db_strings(cls, data)
+        return history.nt_from_db_strings(cls, data)
 
 
 class StentParams(typing.NamedTuple):
@@ -81,11 +81,11 @@ class StentParams(typing.NamedTuple):
     expansion_ratio: typing.Optional[float]
 
     def to_db_strings(self):
-        yield from nt_to_db_strings(self)
+        yield from history.nt_to_db_strings(self)
 
     @classmethod
     def from_db_strings(cls, data):
-        return nt_from_db_strings(cls, data)
+        return history.nt_from_db_strings(cls, data)
 
     @property
     def actuation(self) -> Actuation:
@@ -780,7 +780,7 @@ make_initial_design = make_initial_two_lines
 
 
 
-def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snapshot") -> StentDesign:
+def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snapshot) -> StentDesign:
     elem_num_to_idx = {iElem: idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs)}
     active_elements_idx = {elem_num_to_idx[iElem] for iElem in snapshot.active_elements}
 
