@@ -12,17 +12,17 @@ class _Entity(enum.Enum):
     elem = enum.auto()
 
 
-def element_idx_to_nodes_within(distance: float, stent_design: design.StentDesign):
+def element_idx_to_nodes_within(distance: float, stent_design: "design.StentDesign"):
     """Gets elem -> set_of_nodes within some connectivity threshold."""
     return _element_idx_to_something_within(_Entity.node, distance, stent_design)
 
 
-def element_idx_to_elems_within(distance: float, stent_design: design.StentDesign):
+def element_idx_to_elems_within(distance: float, stent_design: "design.StentDesign"):
     """Gets elem -> set_of_elements within some connectivity threshold."""
     return _element_idx_to_something_within(_Entity.elem, distance, stent_design)
 
 
-def _element_idx_to_something_within(entity: _Entity, distance: float, stent_design: design.StentDesign):
+def _element_idx_to_something_within(entity: _Entity, distance: float, stent_design: "design.StentDesign"):
     elem_num_to_idx = {
         iElem: idx for iElem, idx in
         design.generate_elem_indices(stent_design.stent_params.divs) if

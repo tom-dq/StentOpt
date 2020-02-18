@@ -69,7 +69,7 @@ BACKGROUND_COLOUR_TRACKER = BackgroundColour()
 
 
 def render_status(
-        stent_design: design.StentDesign,
+        stent_design: "design.StentDesign",
         node_position: typing.Dict[int, base.XYZ],
         components: typing.Iterable[typing.Union["generation.PrimaryRankingComponent", "generation.SecondaryRankingComponent"]],
         title_prefix: str,

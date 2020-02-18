@@ -44,7 +44,7 @@ class SecondaryRankingComponent(typing.NamedTuple):
 class GradientInputData(typing.NamedTuple):
     """Used to encapsulate the design at a particular iteration."""
     iteration_num: int
-    stent_design: design.StentDesign
+    stent_design: "design.StentDesign"
     element_ranking_components: typing.Dict[int, PrimaryRankingComponent]
 
 
@@ -88,7 +88,7 @@ def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingCom
         raise ValueError(nt_row)
 
 
-def get_primary_ranking_element_distortion(old_design: design.StentDesign, nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
+def get_primary_ranking_element_distortion(old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
 
     elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.stent_params.divs)}
 
@@ -104,7 +104,7 @@ def get_primary_ranking_element_distortion(old_design: design.StentDesign, nt_ro
         )
 
 
-def _transform_patch_over_boundary(stent_design: design.StentDesign, node_dict_xyz):
+def _transform_patch_over_boundary(stent_design: "design.StentDesign", node_dict_xyz):
 
     node_dict_r_th_z = {node_key: xyz.to_r_th_z() for node_key, xyz in node_dict_xyz.items()}
 
@@ -226,7 +226,7 @@ def get_primary_ranking_local_region_gradient(
     # TODO - include the "authority"
 
 
-def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
+def get_primary_ranking_macro_deformation(old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets the local-ish deformation within a given number of elements, by removing the rigid body rotation/translation."""
 
     STENCIL_LENGTH = 0.1  # mm
@@ -277,7 +277,7 @@ def get_primary_ranking_macro_deformation(old_design: design.StentDesign, nt_row
         )
 
 
-def _max_delta_angle_of_element(stent_params: design.StentParams, node_to_pos: typing.Dict[int, base.XYZ], elem_connection) -> float:
+def _max_delta_angle_of_element(stent_params: "design.StentParams", node_to_pos: typing.Dict[int, base.XYZ], elem_connection) -> float:
     corner_points_numpy = {
         iNode: numpy.array(node_to_pos[iNode]) for iNode in elem_connection
     }

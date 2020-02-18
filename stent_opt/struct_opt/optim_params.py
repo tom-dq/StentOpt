@@ -17,9 +17,24 @@ class VolumeTargetOpts(typing.NamedTuple):
     def from_db_strings(cls, data):
         return history.nt_from_db_strings(cls, data)
 
+T_elem_result = typing.Union[db_defs.ElementStress, db_defs.ElementPEEQ]
+
+
+class RegionGradient(typing.NamedTuple):
+    """Parameters for the positive/negative influence of element activation or inactivation."""
+    component: T_elem_result
+    reducer: "history.RegionReducer"
+    n_past_increments: int
+
+    def to_db_strings(self):
+        yield from history.nt_to_db_strings(self)
+
+    @classmethod
+    def from_db_strings(cls, data):
+        return history.nt_from_db_strings(cls, data)
+
 
 T_vol_func = typing.Callable[[VolumeTargetOpts, int], float]
-T_elem_result = typing.Union[db_defs.ElementStress, db_defs.ElementPEEQ]
 
 
 class OptimParams(typing.NamedTuple):
@@ -27,7 +42,7 @@ class OptimParams(typing.NamedTuple):
     max_change_in_vol_ratio: float
     volume_target_opts: VolumeTargetOpts
     volume_target_func: T_vol_func
-    region_gradient_component: typing.Optional[T_elem_result]  # None to not have the region gradient included.
+    region_gradient: typing.Optional[RegionGradient]  # None to not have the region gradient included.
     element_components: typing.List[T_elem_result]
     gaussian_sigma: float
 
@@ -113,7 +128,11 @@ active = OptimParams(
         reduction_iters=50,
     ),
     volume_target_func=vol_reduce_then_flat,
-    region_gradient_component=db_defs.ElementStress,
+    region_gradient=RegionGradient(
+        component=db_defs.ElementStress,
+        reducer=history.RegionReducer.mean_val,
+        n_past_increments=5,
+    ),
     element_components=[
         db_defs.ElementPEEQ,
         db_defs.ElementStress,
