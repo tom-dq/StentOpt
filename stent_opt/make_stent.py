@@ -704,8 +704,8 @@ def do_opt(stent_params: StentParams, in_path):
 
     # If we've already started, use the most recent snapshot in the history.
     with history.History(history_db_fn) as hist:
-        # hist.set_design_space(stent_params.divs)
         hist.set_stent_params(stent_params)
+        hist.set_optim_params(optim_params.active)
         restart_i = hist.max_saved_iteration_num()
 
     start_from_scratch = restart_i is None

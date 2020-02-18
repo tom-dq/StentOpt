@@ -12,97 +12,7 @@ from stent_opt.abaqus_model import base, element
 from stent_opt.struct_opt import history
 
 # These can be serialised and deserialised
-_enum_types = [
-    element.ElemType,
-]
-
-
-def _get_type_ignoring_nones(some_type):
-    if getattr(some_type, "__origin__", None) is typing.Union:
-        non_none_args = [t for t in some_type.__args__ if t != type(None)]
-
-    else:
-        non_none_args = [some_type]
-
-    if len(non_none_args) != 1:
-        raise ValueError(some_type)
-
-    return non_none_args[0]
-
-def _nt_to_db_strings(nt_instance) -> typing.Iterable[typing.Tuple[str, typing.Optional[str]]]:
-    """(key, value) pairs which can go into a database"""
-    for key, val in nt_instance._asdict().items():
-        this_item_type = _get_type_ignoring_nones(nt_instance._field_types[key])
-        matched_enum_types = [et for et in _enum_types if isinstance(val, et)]
-        if this_item_type in (int, float):
-            yield key, str(val)
-
-        elif val is None:
-            # Actual null in the DB.
-            yield key, None
-
-        elif hasattr(val, "to_db_strings"):
-            # Delegate to the lower level
-            for sub_key, sub_val in val.to_db_strings():
-                yield f"{key}.{sub_key}", sub_val
-
-        elif len(matched_enum_types) == 1:
-            # Enums can also be stored - just use the name and we can figure out the type again later on.
-            enum_type = matched_enum_types[0]
-            yield key, val.name
-
-        else:
-            raise TypeError(f"Don't known what to make of {key}: {val} type {this_item_type}.")
-
-
-def _nt_from_db_strings(nt_class, data):
-
-    def get_prefix(one_string_and_data: str):
-        one_string, _ = one_string_and_data
-        if "." in one_string:
-            return one_string.split(".", maxsplit=1)[0]
-
-        else:
-            return None
-
-    def remove_prefix(one_string_and_data: str):
-        one_string, one_data = one_string_and_data
-        if "." in one_string:
-            return one_string.split(".", maxsplit=1)[1], one_data
-
-        else:
-            return None, one_data
-
-
-
-    working_data = {}
-    for prefix, data_sublist in itertools.groupby(sorted(data), key=get_prefix):
-        if prefix:
-            # Have to delegate to a child class to create.
-            without_prefix_data = [remove_prefix(one_data) for one_data in data_sublist]
-
-            nt_subclass = nt_class._field_types[prefix]
-            single_type = _get_type_ignoring_nones(nt_subclass)
-
-            # Is a sub-branch namedtuple
-            working_data[prefix] = single_type.from_db_strings(without_prefix_data)
-
-        else:
-            # Should be able to create it directly.
-            for name, value in data_sublist:
-                base_type = _get_type_ignoring_nones(nt_class._field_types[name])
-
-                if value is None:
-                    working_data[name] = None
-
-                elif base_type in _enum_types:
-                    # Is an enum, lookup from the dictionary.
-                    working_data[name] = base_type[value]
-
-                else:
-                    working_data[name] = base_type(value)
-
-    return nt_class(**working_data)
+from stent_opt.struct_opt.history import nt_to_db_strings, nt_from_db_strings
 
 
 class PolarIndex(typing.NamedTuple):
@@ -111,11 +21,11 @@ class PolarIndex(typing.NamedTuple):
     Z: int
 
     def to_db_strings(self):
-        yield from _nt_to_db_strings(self)
+        yield from nt_to_db_strings(self)
 
     @classmethod
     def from_db_strings(cls, data):
-        return _nt_from_db_strings(cls, data)
+        return nt_from_db_strings(cls, data)
 
     def fully_populated_elem_count(self) -> int:
         z_elems = self.Z - 1
@@ -139,11 +49,11 @@ class Balloon(typing.NamedTuple):
     divs: PolarIndex
 
     def to_db_strings(self):
-        yield from _nt_to_db_strings(self)
+        yield from nt_to_db_strings(self)
 
     @classmethod
     def from_db_strings(cls, data):
-        return _nt_from_db_strings(cls, data)
+        return nt_from_db_strings(cls, data)
 
 
 class Cylinder(typing.NamedTuple):
@@ -152,11 +62,11 @@ class Cylinder(typing.NamedTuple):
     divs: PolarIndex
 
     def to_db_strings(self):
-        yield from _nt_to_db_strings(self)
+        yield from nt_to_db_strings(self)
 
     @classmethod
     def from_db_strings(cls, data):
-        return _nt_from_db_strings(cls, data)
+        return nt_from_db_strings(cls, data)
 
 
 class StentParams(typing.NamedTuple):
@@ -171,11 +81,11 @@ class StentParams(typing.NamedTuple):
     expansion_ratio: typing.Optional[float]
 
     def to_db_strings(self):
-        yield from _nt_to_db_strings(self)
+        yield from nt_to_db_strings(self)
 
     @classmethod
     def from_db_strings(cls, data):
-        return _nt_from_db_strings(cls, data)
+        return nt_from_db_strings(cls, data)
 
     @property
     def actuation(self) -> Actuation:
@@ -880,8 +790,6 @@ def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snap
     )
 
 def show_initial_model_test(stent_design: StentDesign):
-    from stent_opt.struct_opt import display
-
     node_positions = {polar_index: xyz.to_xyz() for _, polar_index, xyz in generate_nodes(stent_design.stent_params)}
     poly_list = []
     for face_nodes, val in single_faces_and_vals:

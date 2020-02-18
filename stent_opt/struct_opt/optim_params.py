@@ -1,13 +1,21 @@
 import typing
 
 from stent_opt.odb_interface import db_defs
-from stent_opt.struct_opt import design
+from stent_opt.struct_opt import design, history
+
 
 class VolumeTargetOpts(typing.NamedTuple):
     """Sets a target volume ratio, at a given iteration."""
     initial_ratio: float
     floor_ratio: float
     reduction_iters: int
+
+    def to_db_strings(self):
+        yield from history.nt_to_db_strings(self)
+
+    @classmethod
+    def from_db_strings(cls, data):
+        return history.nt_from_db_strings(cls, data)
 
 
 T_vol_func = typing.Callable[[VolumeTargetOpts, int], float]
@@ -23,18 +31,18 @@ class OptimParams(typing.NamedTuple):
     element_components: typing.List[T_elem_result]
     gaussian_sigma: float
 
-    def _target_volume_ratio_clamped(self, stent_design: design.StentDesign, iter_num: int) -> float:
+    def _target_volume_ratio_clamped(self, stent_design: "design.StentDesign", iter_num: int) -> float:
         existing_volume_ratio = stent_design.volume_ratio()
         target_ratio_unclamped = self.volume_target_func(self.volume_target_opts, iter_num)
         clamped_target = _clamp_update(existing_volume_ratio, target_ratio_unclamped, self.max_change_in_vol_ratio)
         return clamped_target
 
-    def target_num_elems(self, stent_design: design.StentDesign, iter_num: int) -> int:
+    def target_num_elems(self, stent_design: "design.StentDesign", iter_num: int) -> int:
         fully_populated_elems = stent_design.stent_params.divs.fully_populated_elem_count()
         volume_ratio = self._target_volume_ratio_clamped(stent_design, iter_num)
         return int(fully_populated_elems * volume_ratio)
 
-    def is_converged(self, previous_design: design.StentDesign, this_design: design.StentDesign, iter_num: int) -> bool:
+    def is_converged(self, previous_design: "design.StentDesign", this_design: "design.StentDesign", iter_num: int) -> bool:
         """Have we converged?"""
         target_stabilised = iter_num > self.volume_target_opts.reduction_iters + 1
         if not target_stabilised:
@@ -51,6 +59,20 @@ class OptimParams(typing.NamedTuple):
 
         return True
 
+    def to_db_strings(self):
+        yield from history.nt_to_db_strings(self)
+
+    @classmethod
+    def from_db_strings(cls, data):
+        return history.nt_from_db_strings(cls, data)
+
+    def __eq__(self, other) -> bool:
+        """Have to override this because "volume_target_func" can get a false negative (since the function can be declared
+        and imported different times, I guess)."""
+        if type(other) != type(self):
+            return False
+
+        return list(self.to_db_strings()) == list(other.to_db_strings())
 
 # Functions which set a target volume ratio. These are idealised.
 def vol_reduce_then_flat(vol_target_opts: VolumeTargetOpts, iter_num: int) -> float:
@@ -61,6 +83,9 @@ def vol_reduce_then_flat(vol_target_opts: VolumeTargetOpts, iter_num: int) -> fl
 
     return target_ratio
 
+_for_db_funcs = [
+    vol_reduce_then_flat,
+]
 
 def _clamp_update(old, new, max_delta):
     """Go from old towards new, but by no more than max_delta"""
@@ -95,5 +120,19 @@ active = OptimParams(
     ],
     gaussian_sigma=2.0,
 )
+
+
+if __name__ == "__main__":
+    #  check we can serialise and deserialse the optimisation parameters
+    data = list(active.to_db_strings())
+    for x in data:
+        print(*x, sep='\t')
+
+    again = OptimParams.from_db_strings(data)
+
+    print(again)
+    print(active)
+    assert active == again
+
 
 

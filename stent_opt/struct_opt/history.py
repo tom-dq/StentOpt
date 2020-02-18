@@ -8,8 +8,19 @@ import statistics
 import collections
 import matplotlib.pyplot as plt
 
+from stent_opt.abaqus_model import element
 from stent_opt.struct_opt import design
+from stent_opt.odb_interface import db_defs
+from stent_opt.struct_opt import optim_params
 
+_enum_types = [
+    element.ElemType,
+]
+
+_nt_class_types = [
+    db_defs.ElementStress,
+    db_defs.ElementPEEQ,
+]
 
 class Snapshot(typing.NamedTuple):
     iteration_num: int
@@ -47,7 +58,12 @@ class StatusCheck(typing.NamedTuple):
         return self._replace(stage=StatusCheckStage[self.stage])
 
 
-class ParamKeyValue(typing.NamedTuple):
+class DesignParam(typing.NamedTuple):
+    param_name: str
+    param_value: typing.Optional[str]
+
+
+class OptParam(typing.NamedTuple):
     param_name: str
     param_value: typing.Optional[str]
 
@@ -74,10 +90,14 @@ metric_name TEXT,
 metric_val REAL
 )"""
 
-_make_parameters_table_ = """CREATE TABLE IF NOT EXISTS ParamKeyValue(
+_make_design_parameters_table_ = """CREATE TABLE IF NOT EXISTS DesignParam(
 param_name TEXT UNIQUE,
 param_value TEXT)"""
 
+
+_make_opt_parameters_table_ = """CREATE TABLE IF NOT EXISTS OptParam(
+param_name TEXT UNIQUE,
+param_value TEXT)"""
 
 _make_node_pos_table_ = """CREATE TABLE IF NOT EXISTS NodePosition(
 iteration_num INTEGER,
@@ -89,7 +109,8 @@ z REAL)"""
 _make_tables = [
     _make_snapshot_table,
     _make_status_check_table,
-    _make_parameters_table_,
+    _make_design_parameters_table_,
+    _make_opt_parameters_table_,
     _make_node_pos_table_,
 ]
 
@@ -144,17 +165,34 @@ class History:
     def set_stent_params(self, stent_params: "design.StentParams"):
         """Save the model parameters"""
         data_rows = list(stent_params.to_db_strings())
-        ins_string = self._generate_insert_string_nt_class(ParamKeyValue)
+        ins_string = self._generate_insert_string_nt_class(DesignParam)
         with self.connection:
             self.connection.executemany(ins_string, data_rows)
 
     def get_stent_params(self) -> "design.StentParams":
         """Get the model parameters"""
         with self.connection:
-            rows = self.connection.execute("SELECT * FROM ParamKeyValue")
+            rows = self.connection.execute("SELECT * FROM DesignParam")
             l_rows = list(rows)
 
         return design.StentParams.from_db_strings(l_rows)
+
+    def set_optim_params(self, opt_params: optim_params.OptimParams):
+        """Save the optimisation parameters."""
+        data_rows = list(opt_params.to_db_strings())
+        ins_string = self._generate_insert_string_nt_class(OptParam)
+        with self.connection:
+            self.connection.executemany(ins_string, data_rows)
+
+
+    def get_opt_params(self) -> "optim_params.OptimParams":
+        """Get the model parameters"""
+        with self.connection:
+            rows = self.connection.execute("SELECT * FROM OptParam")
+            l_rows = list(rows)
+
+        return optim_params.OptimParams.from_db_strings(l_rows)
+
 
     def max_saved_iteration_num(self) -> int:
         with self.connection:
@@ -278,12 +316,187 @@ def make_history_db(working_dir: pathlib.Path) -> pathlib.Path:
 
 
 def history_write_read_test():
-    with History(r"c:\temp\aaa23.db") as history:
+    with History(r"c:\temp\aaa234.db") as history:
         orig_stent_params = design.basic_stent_params
         history.set_stent_params(orig_stent_params)
+        history.set_optim_params(optim_params.active)
+
         recreated_stent_params = history.get_stent_params()
+        recreated_optim_params = history.get_opt_params()
 
         print(orig_stent_params == recreated_stent_params)
+        print(optim_params.active == recreated_optim_params)
+
+
+def _nt_has_all_fields_as_property(maybe_nt):
+    fields = maybe_nt._fields
+
+    def is_property(field_name):
+        p = getattr(maybe_nt, field_name)
+        print(p)
+
+    if all(is_property(f_n) for f_n in fields):
+        return True
+
+    elif not any(is_property(f_n) for f_n in fields):
+        return False
+
+    else:
+        raise ValueError("Indeterminate...")
+
+
+def is_nt_class(maybe_nt) -> bool:
+    try:
+        return _nt_has_all_fields_as_property(maybe_nt) == True
+
+    except AttributeError:
+        # Not a named tuple
+        return False
+
+
+def is_nt_instance(maybe_nt) -> bool:
+    try:
+        return _nt_has_all_fields_as_property(maybe_nt) == False
+
+    except AttributeError:
+        # Not a named tuple
+        return False
+
+
+def _item_to_db_strings(key, val, this_item_type) -> typing.Iterable[typing.Tuple[str, typing.Optional[str]]]:
+    matched_enum_types = [et for et in _enum_types if isinstance(val, et)]
+    matched_nt_class_types = [nt for nt in _nt_class_types if nt is val]
+
+    if this_item_type in (int, float):
+        yield key, str(val)
+
+    elif val is None:
+        # Actual null in the DB.
+        yield key, None
+
+    elif hasattr(val, "to_db_strings"):
+        # Delegate to the lower level
+        for sub_key, sub_val in val.to_db_strings():
+            yield f"{key}.{sub_key}", sub_val
+
+    elif len(matched_enum_types) == 1:
+        # Enums can also be stored - just use the name and we can figure out the type again later on.
+        enum_type = matched_enum_types[0]
+        yield key, val.name
+
+    elif callable(val):
+        # A function - assume it can be looked up or retrieved by the name.
+        yield key, val.__name__
+
+    elif isinstance(val, list):
+        for idx, one_item in enumerate(val):
+            # Use the ellipsis to signal we don't know anything about the type of the element in the list - leave it up to the recursive call to deal with it.
+            sub_key, sub_val = next(_item_to_db_strings(f"{key}.[{idx}]", one_item, ...))
+            yield sub_key, sub_val
+
+    elif len(matched_nt_class_types) == 1:
+        # Just return the name to signal that it's the class.
+        yield key, val.__name__
+
+    else:
+        raise TypeError(f"Don't known what to make of {key}: {val} type {this_item_type}.")
+
+
+def nt_to_db_strings(nt_instance) -> typing.Iterable[typing.Tuple[str, typing.Optional[str]]]:
+    """(key, value) pairs which can go into a database"""
+    for key, val in nt_instance._asdict().items():
+        this_item_type = _get_type_ignoring_nones(nt_instance._field_types[key])
+        yield from _item_to_db_strings(key, val, this_item_type)
+
+
+def single_item_from_string(s):
+    """Strings which may be named tuples classes, or functions"""
+
+    matches_nt_class = [nt for nt in _nt_class_types if nt.__name__ == s]
+    matches_funcs = [f for f in optim_params._for_db_funcs if f.__name__ == s]
+    matches = matches_nt_class + matches_funcs
+
+    if len(matches) == 1:
+        return matches[0]
+
+    elif len(matches) > 1:
+        raise ValueError(s)
+
+    return None
+
+
+def nt_from_db_strings(nt_class, data):
+
+    def get_prefix(one_string_and_data: str):
+        one_string, _ = one_string_and_data
+        if "." in one_string:
+            return one_string.split(".", maxsplit=1)[0]
+
+        else:
+            return None
+
+    def remove_prefix(one_string_and_data: str):
+        one_string, one_data = one_string_and_data
+        if "." in one_string:
+            return one_string.split(".", maxsplit=1)[1], one_data
+
+        else:
+            return None, one_data
+
+    working_data = {}
+    for prefix, data_sublist in itertools.groupby(sorted(data), key=get_prefix):
+        if prefix:
+            # Have to delegate to a child class to create.
+            without_prefix_data = [remove_prefix(one_data) for one_data in data_sublist]
+
+            nt_subclass = nt_class._field_types[prefix]
+            single_type = _get_type_ignoring_nones(nt_subclass)
+
+            # Is a sub-branch namedtuple or list of items.
+            def is_an_item(k):
+                return k.startswith('[') and k.endswith(']')
+
+            text_is_a_list = all(is_an_item(k) for k,v in without_prefix_data)
+            if text_is_a_list:
+                working_data[prefix] = [single_item_from_string(nt_s) for k, nt_s in without_prefix_data]
+
+            else:
+                working_data[prefix] = single_type.from_db_strings(without_prefix_data)
+
+        else:
+            # Should be able to create it directly.
+            for name, value in data_sublist:
+                base_type = _get_type_ignoring_nones(nt_class._field_types[name])
+
+                if value is None:
+                    working_data[name] = None
+
+                elif base_type in _enum_types:
+                    # Is an enum, lookup from the dictionary.
+                    working_data[name] = base_type[value]
+
+                elif single_item_from_string(value):
+                    working_data[name] = single_item_from_string(value)
+
+                else:
+                    working_data[name] = base_type(value)
+
+    return nt_class(**working_data)
+
+
+def _get_type_ignoring_nones(some_type):
+    """Returns either a single type, or a tuple of types (special case for unions)."""
+    if getattr(some_type, "__origin__", None) is typing.Union:
+        non_none_args = [t for t in some_type.__args__ if t != type(None)]
+
+    else:
+        non_none_args = [some_type]
+
+    if len(non_none_args) != 1:
+        return tuple(non_none_args)
+        # raise ValueError(some_type)
+
+    return non_none_args[0]
 
 
 if __name__ == "__main__":
@@ -291,5 +504,3 @@ if __name__ == "__main__":
 
 if False:
     plot_history(r"E:\Simulations\StentOpt\aba-70\History.db")
-
-
