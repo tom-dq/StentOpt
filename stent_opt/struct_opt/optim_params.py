@@ -125,11 +125,11 @@ active = OptimParams(
     volume_target_opts=VolumeTargetOpts(
         initial_ratio=0.12,
         floor_ratio=0.05,
-        reduction_iters=50,
+        reduction_iters=100,
     ),
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
-        component=db_defs.ElementStress,
+        component=db_defs.ElementStress,  # TODO - make the code respect all these settings rather than whatever's littered around the place.
         reduce_type=common.RegionReducer.mean_val,
         n_past_increments=5,
     ),
