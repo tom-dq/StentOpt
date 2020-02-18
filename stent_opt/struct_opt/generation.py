@@ -10,11 +10,8 @@ import scipy.ndimage
 import matplotlib.pyplot as plt
 
 from stent_opt.odb_interface import datastore, db_defs
-from stent_opt.struct_opt import design
 from stent_opt.abaqus_model import base
-
-
-from stent_opt.struct_opt import display, score, history
+from stent_opt.struct_opt import design, display, score, history, optim_params
 
 
 class Tail(enum.Enum):
@@ -22,22 +19,9 @@ class Tail(enum.Enum):
     top = enum.auto()
 
 
-MAX_CHANGE_IN_VOLUME_RATIO = 0.0025  # No more than this change in volume ratio between increments.
-NUM_REDUCE_ITERS = 60
-
 MAKE_PLOTS = False
-REGION_GRADIENT_COMPONENT = db_defs.ElementPEEQ  # Either db_defs.ElementStress or ElementPEEQ say, or None to not do region gradient
-
-USED_ELEM_COMPONENTS = [
-    db_defs.ElementStress,
-    db_defs.ElementPEEQ,
-]
-SINGLE_COMPONENT = db_defs.ElementStress #  db_defs.ElementStress, or None to
 
 # TODO - hinge behaviour
-#   - Try the Jacobian or somesuch to get the deformation in an element.
-#   - Rolling window of "rigid body removed deformation" to favour hinges.
-#   - Be able to plot objective functions...
 #   - Stop it disconnecting bits
 
 
@@ -77,9 +61,6 @@ def get_gradient_input_data(
 
 T_index_to_val = typing.Dict[design.PolarIndex, float]
 def gaussian_smooth(design_space: design.PolarIndex, unsmoothed: T_index_to_val) -> T_index_to_val:
-
-    GAUSSIAN_SIGMA = 2.0 # Was 0.5, and 2.0
-
     # Make a 3D array
     design_space_elements = design.node_to_elem_design_space(design_space)
     raw = numpy.zeros(shape=design_space_elements)
@@ -87,11 +68,11 @@ def gaussian_smooth(design_space: design.PolarIndex, unsmoothed: T_index_to_val)
         raw[r, th, z] = val
 
     # Gaussian smooth with wraparound in the Theta direction...
-    step1 = scipy.ndimage.gaussian_filter1d(raw, sigma=GAUSSIAN_SIGMA, axis=1, mode='wrap')
+    step1 = scipy.ndimage.gaussian_filter1d(raw, sigma=optim_params.active.gaussian_sigma, axis=1, mode='wrap')
 
     # With the other two ordinates, replicate the closest cell we have.
-    step2 = scipy.ndimage.gaussian_filter1d(step1, sigma=GAUSSIAN_SIGMA, axis=0, mode='nearest')
-    step3 = scipy.ndimage.gaussian_filter1d(step2, sigma=GAUSSIAN_SIGMA, axis=2, mode='nearest')
+    step2 = scipy.ndimage.gaussian_filter1d(step1, sigma=optim_params.active.gaussian_sigma, axis=0, mode='nearest')
+    step3 = scipy.ndimage.gaussian_filter1d(step2, sigma=optim_params.active.gaussian_sigma, axis=2, mode='nearest')
 
     # Put it back and return
     out_nd_array = step3
@@ -155,65 +136,14 @@ def display_design_flat(design_space: design.PolarIndex, data: T_index_to_val):
     plt.show()
 
 
-def _clamp_update(old, new, max_delta):
-    """Go from old towards new, but by no more than max_delta"""
-
-    if max_delta <= 0.0:
-        raise ValueError(max_delta)
-
-    full_diff = new-old
-
-    if abs(full_diff) > max_delta:
-        lower_bound = old - max_delta
-        upper_bound = old + max_delta
-        working_a = max(new, lower_bound)
-        return min(working_a, upper_bound)
-
-    else:
-        return new
-
-
-
-def _target_volume_ratio_ideal(iter_n) -> float:
-    """Gradually remove material, then taper off."""
-
-    START_RATIO = 0.12
-    FLOOR_RATIO = 0.05
-
-    delta = START_RATIO - FLOOR_RATIO
-
-    reducing = delta * (NUM_REDUCE_ITERS-iter_n)/NUM_REDUCE_ITERS + FLOOR_RATIO
-
-    target_ratio = max(FLOOR_RATIO, reducing)
-
-    return target_ratio
-
-
-def _target_volume_ratio_clamped(stent_design, iter_n) -> float:
-
-    target_ratio = _target_volume_ratio_ideal(iter_n)
-
-    # If we are too far from the ideal volume ratio, clip it.
-    existing_volume_ratio = stent_design.volume_ratio()
-
-    clamped_target = _clamp_update(existing_volume_ratio, target_ratio, MAX_CHANGE_IN_VOLUME_RATIO)
-    print(existing_volume_ratio, target_ratio, clamped_target, sep='\t')
-    return clamped_target
-
-def _target_num_elems(stent_design: design.StentDesign, iter_n: int) -> int:
-    """Get a target element count"""
-    fully_populated = stent_design.stent_params.divs.fully_populated_elem_count()
-    return int(fully_populated * _target_volume_ratio_clamped(stent_design, iter_n))
-
-
 def evolve_decider(design_n_min_1, sensitivity_result, iter_n) -> typing.Set[design.PolarIndex]:
     """Decides which elements are coming in and going out."""
 
-    target_count = _target_num_elems(design_n_min_1, iter_n)
+    target_count = optim_params.active.target_num_elems(design_n_min_1, iter_n)
     delta_n_elems = target_count - len(design_n_min_1.active_elements)
 
     # If there was no change in volume ratio, what would be the maximum number of elements we could add?
-    max_new_num_unconstrained = int(MAX_CHANGE_IN_VOLUME_RATIO * design_n_min_1.stent_params.divs.fully_populated_elem_count())
+    max_new_num_unconstrained = int(optim_params.active.max_change_in_vol_ratio * design_n_min_1.stent_params.divs.fully_populated_elem_count())
     max_new_num = min(max_new_num_unconstrained, max_new_num_unconstrained+delta_n_elems)
     if max_new_num < 0:
         max_new_num = 0
@@ -258,15 +188,14 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
     all_ranks = []
 
-    if REGION_GRADIENT_COMPONENT:
+    if optim_params.active.region_gradient_component:
         # Gradient tracking
         n_gradient_tracking = 5
         final_grad_track = iter_n
         first_grad_track = max(0, final_grad_track-n_gradient_tracking)
         grad_track_steps = range(first_grad_track, final_grad_track)
 
-        print(f"Iter {iter_n}, grad track = {list(grad_track_steps)}")
-        recent_gradient_input_data = get_gradient_input_data(working_dir, REGION_GRADIENT_COMPONENT, grad_track_steps)
+        recent_gradient_input_data = get_gradient_input_data(working_dir, optim_params.active.region_gradient_component, grad_track_steps)
         vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(recent_gradient_input_data, statistics.mean))
         all_ranks.append(vicinity_ranking)
 
@@ -291,7 +220,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
         raw_elem_rows = [
             list(score.get_primary_ranking_components(data.get_all_rows_at_frame(one_component, one_frame)))
-            for one_component in USED_ELEM_COMPONENTS
+            for one_component in optim_params.active.element_components
         ]
 
         pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
@@ -303,7 +232,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
     all_ranks.extend([
         # list(score.get_primary_ranking_element_distortion(design_n_min_1, pos_rows)), # Node position based scores
-        list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows)),
+        # list(score.get_primary_ranking_macro_deformation(design_n_min_1, pos_rows)),
     ])
 
     # Compute a secondary rank from all the first ones.
@@ -386,7 +315,6 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
 def make_plot_tests():
     # Bad import - just for testing
-    from stent_opt import make_stent
 
     history_iters = [0, 1]  # [0, 1]
     last_iter = history_iters[-1]

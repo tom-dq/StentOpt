@@ -15,7 +15,7 @@ from stent_opt.abaqus_model import interaction, node, boundary_condition, sectio
 
 from stent_opt.struct_opt import design
 from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalSurfNames, GlobalNodeSetNames, Actuation, StentParams, basic_stent_params
-from stent_opt.struct_opt import generation
+from stent_opt.struct_opt import generation, optim_params
 
 from stent_opt.struct_opt import history
 
@@ -52,7 +52,7 @@ if psutil.cpu_count(logical=False) == 2:
 
 elif psutil.cpu_count(logical=False) == 8:
     laptop = False
-    N_CPUS_ABAQUS = 12
+    N_CPUS_ABAQUS = 4  # 12 is good for bigger models
     working_dir = _get_next_free_dir(r"E:\Simulations\StentOpt")
 
 else:
@@ -735,11 +735,9 @@ def do_opt(stent_params: StentParams, in_path):
         print(f"Restarting from {restart_i}")
         main_loop_start_i = restart_i
 
-    done = False
     with history.History(history_db_fn) as hist:
         old_design = hist.get_most_recent_design()
 
-    first_permissable_stopping_iter = generation.NUM_REDUCE_ITERS + 1
     for i_current in range(main_loop_start_i, 1000):
         fn_inp = history.make_fn_in_dir(working_dir, ".inp", i_current)
         fn_odb = history.make_fn_in_dir(working_dir, ".odb", i_current)
@@ -748,15 +746,9 @@ def do_opt(stent_params: StentParams, in_path):
 
         new_elements = new_design.active_elements - old_design.active_elements
         removed_elements = old_design.active_elements - new_design.active_elements
-        num_new = len(new_elements)
-        num_removed = len(removed_elements)
-        print(f"Added: {num_new}\tRemoved: {num_removed}.")
-        # print(f"Added: {num_new}\t{sorted(new_elements)}\tRemoved: {num_removed}\t{sorted(removed_elements)}.")
-        same_design = new_design == old_design
-        not_on_first_iter = i_current != main_loop_start_i
-        volume_change_stabilised = i_current > first_permissable_stopping_iter
-        if same_design and not_on_first_iter and volume_change_stabilised:
-            done = True
+        print(f"Added: {len(new_elements)}\tRemoved: {len(removed_elements)}.")
+
+        done = optim_params.active.is_converged(old_design, new_design, i_current)
 
         make_stent_model(new_design, fn_inp)
         run_model(fn_inp)
