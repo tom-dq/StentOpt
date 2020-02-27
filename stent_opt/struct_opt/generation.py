@@ -188,14 +188,14 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
     all_ranks = []
 
-    if optim_params.active.region_gradient_component:
+    if optim_params.active.region_gradient.component:
         # Gradient tracking
         n_gradient_tracking = 5
         final_grad_track = iter_n
         first_grad_track = max(0, final_grad_track-n_gradient_tracking)
         grad_track_steps = range(first_grad_track, final_grad_track)
 
-        recent_gradient_input_data = get_gradient_input_data(working_dir, optim_params.active.region_gradient_component, grad_track_steps)
+        recent_gradient_input_data = get_gradient_input_data(working_dir, optim_params.active.region_gradient.component, grad_track_steps)
         vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(recent_gradient_input_data, statistics.mean))
         all_ranks.append(vicinity_ranking)
 
@@ -218,12 +218,17 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
         one_frame = data.get_last_frame_of_instance("STENT-1")
 
-        raw_elem_rows = [
-            list(score.get_primary_ranking_components(data.get_all_rows_at_frame(one_component, one_frame)))
-            for one_component in optim_params.active.element_components
-        ]
+        raw_elem_rows = []
+        # Element based funtions
+        for one_component in optim_params.active.element_components:
+            this_comp_rows = score.get_primary_ranking_components(data.get_all_rows_at_frame(one_component, one_frame))
+            raw_elem_rows.append( list(this_comp_rows) )
 
+        # Nodal position based functions
         pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
+        for one_func in optim_params.active.nodal_position_components:
+            this_comp_rows = one_func(design_n_min_1, pos_rows)
+            raw_elem_rows.append(list(this_comp_rows))
 
     pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in pos_rows}
 

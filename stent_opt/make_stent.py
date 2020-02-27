@@ -52,7 +52,7 @@ if psutil.cpu_count(logical=False) == 2:
 
 elif psutil.cpu_count(logical=False) == 8:
     laptop = False
-    N_CPUS_ABAQUS = 4  # 12 is good for bigger models
+    N_CPUS_ABAQUS = 12  # 12 is good for bigger models
     working_dir = _get_next_free_dir(r"E:\Simulations\StentOpt")
 
 else:
@@ -662,12 +662,14 @@ def run_model(inp_fn):
 
     os.chdir(path)
 
-    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     TIMEOUT = 3600 * 24  # 1 day
 
+    out, errs = [], []
     try:
-        ret_code = proc.wait(timeout=TIMEOUT)
+        out, errs = proc.communicate(timeout=TIMEOUT)
+        ret_code = proc.returncode
 
     except subprocess.TimeoutExpired:
         ret_code = 'TimeoutExpired on {0}'.format(args)
@@ -680,6 +682,8 @@ def run_model(inp_fn):
             pass
 
     if ret_code:
+        print(out.decode())
+        print(errs.decode())
         raise subprocess.SubprocessError(ret_code)
 
     os.chdir(old_working_dir)

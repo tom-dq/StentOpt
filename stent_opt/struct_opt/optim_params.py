@@ -1,7 +1,7 @@
 import typing
 
 from stent_opt.odb_interface import db_defs
-from stent_opt.struct_opt import common, design, history
+from stent_opt.struct_opt import common, design, history, score
 
 
 class VolumeTargetOpts(typing.NamedTuple):
@@ -35,7 +35,7 @@ class RegionGradient(typing.NamedTuple):
 
 
 T_vol_func = typing.Callable[[VolumeTargetOpts, int], float]
-
+T_nodal_pos_func = typing.Callable[["design.StentDesign", typing.Iterable[db_defs.NodePos]], typing.Iterable[score.PrimaryRankingComponent]]   # Accepts a design and some node positions, and generates ranking components.
 
 class OptimParams(typing.NamedTuple):
     """Parameters which control the optimisation."""
@@ -44,6 +44,7 @@ class OptimParams(typing.NamedTuple):
     volume_target_func: T_vol_func
     region_gradient: typing.Optional[RegionGradient]  # None to not have the region gradient included.
     element_components: typing.List[T_elem_result]
+    nodal_position_components: typing.List[T_nodal_pos_func]
     gaussian_sigma: float
 
     def _target_volume_ratio_clamped(self, stent_design: "design.StentDesign", iter_num: int) -> float:
@@ -98,9 +99,26 @@ def vol_reduce_then_flat(vol_target_opts: VolumeTargetOpts, iter_num: int) -> fl
 
     return target_ratio
 
-_for_db_funcs = [
-    vol_reduce_then_flat,
-]
+
+# Add all the functions from score which might be referenced
+def _get_for_db_funcs():
+    """These are the functions which can be serialised and deserialised when going into and out of History.db"""
+    working_list = [
+        vol_reduce_then_flat,
+    ]
+
+    all_names = dir(score)
+    good_names = [n for n in all_names if n.startswith("get_primary_ranking")]
+    for maybe_f_name in good_names:
+        maybe_f = getattr(score, maybe_f_name)
+        if not callable(maybe_f):
+            raise ValueError(f"Got shouldn't score.{maybe_f_name} be callable?")
+
+        working_list.append(maybe_f)
+
+    return working_list
+
+_for_db_funcs = _get_for_db_funcs()
 
 def _clamp_update(old, new, max_delta):
     """Go from old towards new, but by no more than max_delta"""
@@ -136,6 +154,10 @@ active = OptimParams(
     element_components=[
         db_defs.ElementPEEQ,
         db_defs.ElementStress,
+    ],
+    nodal_position_components=[
+        score.get_primary_ranking_element_distortion,
+        score.get_primary_ranking_macro_deformation,
     ],
     gaussian_sigma=2.0,
 )

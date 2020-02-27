@@ -250,40 +250,6 @@ class GlobalNodeSetNames(enum.Enum):
     PlanarStentZMin = enum.auto()
 
 
-dylan_r10n1_params = StentParams(
-    angle=60,
-    divs=PolarIndex(
-        R=1,
-        Th=200,  # 31
-        Z=1800,  # 120
-    ),
-    r_min=0.65,
-    r_max=0.75,
-    length=11.0,
-    stent_element_type=element.ElemType.CPS4R,
-    balloon=Balloon(
-        inner_radius_ratio=0.85,
-        overshoot_ratio=0.05,
-        foldover_param=0.4,
-        divs=PolarIndex(
-            R=1,
-            Th=20,
-            Z=30,
-        ),
-    ),
-    cylinder=Cylinder(
-        initial_radius_ratio=0.6,
-        overshoot_ratio=0.1,
-        divs=PolarIndex(
-            R=1,
-            Th=51,
-            Z=2,
-        ),
-    ),
-    expansion_ratio=3.0,
-)
-
-basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
 
 
 def _pairwise(iterable):
@@ -780,7 +746,7 @@ make_initial_design = make_initial_two_lines
 
 
 
-def make_design_from_snapshot(stent_params: StentParams, snapshot: history.Snapshot) -> StentDesign:
+def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snapshot") -> StentDesign:
     elem_num_to_idx = {iElem: idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs)}
     active_elements_idx = {elem_num_to_idx[iElem] for iElem in snapshot.active_elements}
 
@@ -799,6 +765,40 @@ def show_initial_model_test(stent_design: StentDesign):
 
 
 
+dylan_r10n1_params = StentParams(
+    angle=60,
+    divs=PolarIndex(
+        R=1,
+        Th=200,  # 31
+        Z=1800,  # 120
+    ),
+    r_min=0.65,
+    r_max=0.75,
+    length=11.0,
+    stent_element_type=element.ElemType.CPS4R,
+    balloon=Balloon(
+        inner_radius_ratio=0.85,
+        overshoot_ratio=0.05,
+        foldover_param=0.4,
+        divs=PolarIndex(
+            R=1,
+            Th=20,
+            Z=30,
+        ),
+    ),
+    cylinder=Cylinder(
+        initial_radius_ratio=0.6,
+        overshoot_ratio=0.1,
+        divs=PolarIndex(
+            R=1,
+            Th=51,
+            Z=2,
+        ),
+    ),
+    expansion_ratio=3.0,
+)
+
+basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
 
 
 
