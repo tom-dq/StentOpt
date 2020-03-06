@@ -301,10 +301,54 @@ def nodal_deformation_rmsd(nominal_length: float, orig: T_NodeMap, deformed: T_N
     return float(numpy.mean(deformation_norm) / nominal_length)
 
 
-if __name__ == "__main__":
+def nodal_deformation_unit_quaternion(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMap) -> float:
+    """
+    Eggert, David W., Adele Lorusso, and Robert B. Fisher. "Estimating 3-D rigid body transformations: a comparison of four major algorithms." Machine vision and applications 9.5-6 (1997): 272-290.
+    Algorithm 3.3
+    """
+
+    node_keys = tuple(sorted(set.union(set(orig.keys()), set(deformed.keys()))))
+
+    p_orig = _get_points_array(node_keys, orig)
+    q_deformed = _get_points_array(node_keys, deformed)
+
+    def s_matrix_term(a_ord: int, b_ord: int) -> float:
+        """Get a term in S_ab"""
+        m_c_i = p_orig[:, a_ord]
+        d_c_i = q_deformed[:, b_ord]
+        return numpy.dot(m_c_i, d_c_i)
+
+
+    x, y, z = 0, 1, 2  # convenience!
+    S = numpy.zeros(shape=(3, 3))
+    for a_ord in [0, 1, 2]:
+        for b_ord in [0, 1, 2]:
+            S[a_ord, b_ord] = s_matrix_term(a_ord, b_ord)
+
+    # Make P from the S terms
+    P = numpy.array([
+        [S[x, x] + S[y, y] + S[z, z],   S[y, z] - S[z, y],   S[z, x] - S[x, z],  S[x, y] - S[y, x]  ],
+        [S[y, z] - S[z, y],   S[x, x] - S[y, y] - S[z, z],   S[x, y] + S[y, z],  S[z, x] + S[x, z]  ],
+        [S[z, x] - S[x, z],  S[x, y] + S[y, x],  S[y, y] - S[x, x] - S[z, z],    S[y, z] + S[z, y]  ],
+        [S[x, y] - S[y, x],  S[z, x] + S[x, z],  S[y, z] + S[z, y],  S[z, z] - S[x, x] - S[y, y]]
+    ])
+
+    # Get the eigenvector associated with the maximum eigenvalue.
+    eig_vals, eig_vects = numpy.linalg.eig(P)
+    val_and_idx = [(eig_val, idx) for idx, eig_val in enumerate(eig_vals)]
+    val_and_idx.sort(reverse=True)
+    max_eig_idx = val_and_idx[0][1]
+
+    # TODO - up to here.
+    max_eig = eig_vects[]  # [:, max_eig_idx] or [max_eig_idx, :]?
+
+
+
+
+if __name__ == "__main2__":
     test_from_real_data_should_be_small()
 
-if False:
+if __name__ == "__main__":
     orig_points = {
         "a": XYZ(0.0, 0.0, 0.0),
         "b": XYZ(1.0, 0.0, 0.0),
@@ -337,9 +381,9 @@ if False:
         "e": XYZ(-0.5, 0.5, 0.0),
     }
 
-    print(nodal_deformation_rmsd(1.0, orig_points, move_in_z))
-    print(nodal_deformation_rmsd(1.0, orig_points, strain_in_x))
-    print(nodal_deformation_rmsd(1.0, orig_points, rotate_90_deg))
+    #print(nodal_deformation_rmsd(1.0, orig_points, move_in_z))
+    print(nodal_deformation_unit_quaternion(1.0, orig_points, strain_in_x))
+    #print(nodal_deformation_rmsd(1.0, orig_points, rotate_90_deg))
 
 
 
