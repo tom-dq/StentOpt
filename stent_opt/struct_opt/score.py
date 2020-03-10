@@ -237,8 +237,6 @@ def get_primary_ranking_macro_deformation(old_design: "design.StentDesign", nt_r
 
     STENCIL_LENGTH = 0.1  # mm
 
-    need_to_rotate = old_design.stent_params.stent_element_dimensions == 3
-
     elem_to_nodes_in_range = graph_connection.element_idx_to_nodes_within(STENCIL_LENGTH, old_design)
 
     idx_num_elem = [(idx, iElem, elem) for idx, iElem, elem in design.generate_stent_part_elements(old_design.stent_params) if idx in old_design.active_elements]
@@ -254,7 +252,7 @@ def get_primary_ranking_macro_deformation(old_design: "design.StentDesign", nt_r
 
     def prepare_node_patch(node_dict_xyz, patch_node_nums):
         raw = {iNode: xyz for iNode, xyz in node_dict_xyz.items() if iNode in patch_node_nums}
-        if need_to_rotate:
+        if old_design.stent_params.wrap_around_theta:
             return _transform_patch_over_boundary(old_design, raw)
 
         else:
@@ -266,7 +264,7 @@ def get_primary_ranking_macro_deformation(old_design: "design.StentDesign", nt_r
         orig = prepare_node_patch(node_to_pos_original, node_num_set)
         deformed = prepare_node_patch(node_to_pos_deformed, node_num_set)
 
-        this_val = deformation_grad.nodal_deformation_rmsd(STENCIL_LENGTH, orig, deformed)
+        this_val = deformation_grad.nodal_deformation(STENCIL_LENGTH, orig, deformed)
         for node_num in node_num_set:
             node_num_to_contribs[node_num].append(this_val)
 

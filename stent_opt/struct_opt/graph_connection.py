@@ -57,8 +57,9 @@ def _element_idx_to_something_within(entity: _Entity, distance: float, stent_des
         graph.add_edge(n1, n2, weight=d_xyz)
 
     # Add in the over-the-reflected-boundary nodes with zero weight.
-    for n1, n2 in design.gen_active_pairs(stent_design.stent_params, active_nodes):
-        graph.add_edge(n1, n2, weight=0.0)
+    if stent_design.stent_params.wrap_around_theta:
+        for n1, n2 in design.gen_active_pairs(stent_design.stent_params, active_nodes):
+            graph.add_edge(n1, n2, weight=0.0)
 
     # Get the node-to-nodes_within_radius
     node_to_nodes_within_radius = dict()

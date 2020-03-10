@@ -203,7 +203,7 @@ def nodal_deformation(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMa
     deformation_ratio = float(numpy.mean(norms) / nominal_length)
     print(f"deformation_ratio={deformation_ratio}")
 
-    DEBUG_MAKE_PLOT = True
+    DEBUG_MAKE_PLOT = False
     if DEBUG_MAKE_PLOT:
         _DEBUG_plot_rigid(p_orig, p_with_rigid, q_deformed)
 

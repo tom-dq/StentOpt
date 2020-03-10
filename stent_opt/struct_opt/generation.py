@@ -422,7 +422,12 @@ def evolve_decider_test():
 
 
 if __name__ == '__main__':
-    evolve_decider_test()
+    # evolve_decider_test()
     # make_plot_tests()
+
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-66")
+    i_current = 1
+    new_design = make_new_generation(working_dir, i_current)
+    print(new_design)
 
 

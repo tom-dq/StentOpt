@@ -150,6 +150,11 @@ class StentParams(typing.NamedTuple):
     def single_element_z_span(self) -> float:
         return self.length / self.divs.Z
 
+    @property
+    def wrap_around_theta(self) -> bool:
+        """Defines whether or not there are symmetrical boundary conditions between theta=0 and theta=th_max"""
+        return self.stent_element_dimensions == 3
+
 
 class StentDesign(typing.NamedTuple):
     stent_params: StentParams

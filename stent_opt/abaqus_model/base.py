@@ -122,7 +122,7 @@ class RThZ(typing.NamedTuple):
         return XYZ(
             x=self.r * math.radians(self.theta_deg),
             y=self.z,
-            z=self.r,
+            z=0.0,  # All on the flat plane
         )
 
     def __add__(self, other):
