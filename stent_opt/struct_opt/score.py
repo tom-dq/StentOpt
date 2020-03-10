@@ -41,6 +41,12 @@ class SecondaryRankingComponent(typing.NamedTuple):
     value: float
 
 
+T_PrimaryList = typing.List[PrimaryRankingComponent]
+T_SecondaryList = typing.List[SecondaryRankingComponent]
+T_AnyRankingComponent = typing.Union[PrimaryRankingComponent, SecondaryRankingComponent]
+T_ListOfComponentLists = typing.List[typing.List[T_AnyRankingComponent]]  # A list of lists, where the sub lists are all primary or all secondary
+
+
 class GradientInputData(typing.NamedTuple):
     """Used to encapsulate the design at a particular iteration."""
     iteration_num: int

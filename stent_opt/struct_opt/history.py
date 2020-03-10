@@ -11,7 +11,7 @@ from stent_opt.struct_opt.common import RegionReducer
 from stent_opt.abaqus_model import element
 from stent_opt.struct_opt import design
 from stent_opt.odb_interface import db_defs
-from stent_opt.struct_opt import optim_params
+from stent_opt.struct_opt import optimisation_parameters
 
 
 _enum_types = [
@@ -179,7 +179,7 @@ class History:
 
         return design.StentParams.from_db_strings(l_rows)
 
-    def set_optim_params(self, opt_params: optim_params.OptimParams):
+    def set_optim_params(self, opt_params: optimisation_parameters.OptimParams):
         """Save the optimisation parameters."""
         data_rows = list(opt_params.to_db_strings())
         ins_string = self._generate_insert_string_nt_class(OptParam)
@@ -187,13 +187,13 @@ class History:
             self.connection.executemany(ins_string, data_rows)
 
 
-    def get_opt_params(self) -> "optim_params.OptimParams":
+    def get_opt_params(self) -> "optimisation_parameters.OptimParams":
         """Get the model parameters"""
         with self.connection:
             rows = self.connection.execute("SELECT * FROM OptParam")
             l_rows = list(rows)
 
-        return optim_params.OptimParams.from_db_strings(l_rows)
+        return optimisation_parameters.OptimParams.from_db_strings(l_rows)
 
 
     def max_saved_iteration_num(self) -> int:
@@ -321,13 +321,13 @@ def history_write_read_test():
     with History(r"c:\temp\aaa234.db") as history:
         orig_stent_params = design.basic_stent_params
         history.set_stent_params(orig_stent_params)
-        history.set_optim_params(optim_params.active)
+        history.set_optim_params(optimisation_parameters.active)
 
         recreated_stent_params = history.get_stent_params()
         recreated_optim_params = history.get_opt_params()
 
         print(orig_stent_params == recreated_stent_params)
-        print(optim_params.active == recreated_optim_params)
+        print(optimisation_parameters.active == recreated_optim_params)
 
 
 def _nt_has_all_fields_as_property(maybe_nt):
@@ -369,7 +369,7 @@ def _item_to_db_strings(key, val, this_item_type) -> typing.Iterable[typing.Tupl
     matched_enum_types = [et for et in _enum_types if isinstance(val, et)]
     matched_nt_class_types = [nt for nt in _nt_class_types if nt is val]
 
-    if this_item_type in (int, float):
+    if this_item_type in (int, float, str):
         yield key, str(val)
 
     elif val is None:
@@ -415,7 +415,7 @@ def single_item_from_string(s):
     """Strings which may be named tuples classes, or functions"""
 
     matches_nt_class = [nt for nt in _nt_class_types if nt.__name__ == s]
-    matches_funcs = [f for f in optim_params._for_db_funcs if f.__name__ == s]
+    matches_funcs = [f for f in optimisation_parameters._for_db_funcs if f.__name__ == s]
     matches = matches_nt_class + matches_funcs
 
     if len(matches) == 1:

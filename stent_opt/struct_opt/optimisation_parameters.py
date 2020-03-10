@@ -46,6 +46,7 @@ class OptimParams(typing.NamedTuple):
     element_components: typing.List[T_elem_result]
     nodal_position_components: typing.List[T_nodal_pos_func]
     gaussian_sigma: float
+    working_dir: str
 
     def _target_volume_ratio_clamped(self, stent_design: "design.StentDesign", iter_num: int) -> float:
         existing_volume_ratio = stent_design.volume_ratio()
@@ -160,6 +161,7 @@ active = OptimParams(
         score.get_primary_ranking_macro_deformation,
     ],
     gaussian_sigma=2.0,
+    working_dir=r"c:\temp\ABCDE",
 )
 
 

@@ -14,8 +14,8 @@ from stent_opt.abaqus_model import instance, main, surface, load, interaction_pr
 from stent_opt.abaqus_model import interaction, node, boundary_condition, section
 
 from stent_opt.struct_opt import design
-from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalSurfNames, GlobalNodeSetNames, Actuation, StentParams, basic_stent_params
-from stent_opt.struct_opt import generation, optim_params
+from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalSurfNames, GlobalNodeSetNames, Actuation, StentParams
+from stent_opt.struct_opt import generation, optimisation_parameters
 
 from stent_opt.struct_opt import history
 
@@ -700,8 +700,8 @@ def perform_extraction(odb_fn, out_db_fn):
         raise subprocess.SubprocessError(ret_code)
 
 
-def do_opt(stent_params: StentParams, in_path):
-    working_dir = pathlib.Path(in_path)
+def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.OptimParams):
+    working_dir = pathlib.Path(optim_params.working_dir)
     history_db_fn = history.make_history_db(working_dir)
 
     os.makedirs(working_dir, exist_ok=True)
@@ -709,7 +709,7 @@ def do_opt(stent_params: StentParams, in_path):
     # If we've already started, use the most recent snapshot in the history.
     with history.History(history_db_fn) as hist:
         hist.set_stent_params(stent_params)
-        hist.set_optim_params(optim_params.active)
+        hist.set_optim_params(optim_params)
         restart_i = hist.max_saved_iteration_num()
 
     start_from_scratch = restart_i is None
@@ -742,7 +742,7 @@ def do_opt(stent_params: StentParams, in_path):
     with history.History(history_db_fn) as hist:
         old_design = hist.get_most_recent_design()
 
-    for i_current in range(main_loop_start_i, 1000):
+    for i_current in range(main_loop_start_i, 10000):
         fn_inp = history.make_fn_in_dir(working_dir, ".inp", i_current)
         fn_odb = history.make_fn_in_dir(working_dir, ".odb", i_current)
 
@@ -752,7 +752,7 @@ def do_opt(stent_params: StentParams, in_path):
         removed_elements = old_design.active_elements - new_design.active_elements
         print(f"Added: {len(new_elements)}\tRemoved: {len(removed_elements)}.")
 
-        done = optim_params.active.is_converged(old_design, new_design, i_current)
+        done = optim_params.is_converged(old_design, new_design, i_current)
 
         make_stent_model(new_design, fn_inp)
         run_model(fn_inp)
@@ -768,6 +768,10 @@ def do_opt(stent_params: StentParams, in_path):
 
 
 if __name__ == "__main__":
-    #with tempfile.TemporaryDirectory() as temp_dir:
-    do_opt(basic_stent_params, str(working_dir))
+
+    stent_params = design.basic_stent_params
+    optim_params = optimisation_parameters.active._replace(working_dir=str(working_dir))
+
+
+    do_opt(stent_params, optim_params)
 

@@ -40,10 +40,10 @@ def get_rigid_motion(orig: T_NodeMap, deformed: T_NodeMap) -> RigidMotion:
     p_orig = _get_points_array(node_keys, orig)
     q_deformed = _get_points_array(node_keys, deformed)
 
-    return _get_rigid_motion(p_orig, q_deformed)
+    return _get_rigid_motion_sorkine_hornung(p_orig, q_deformed)
 
 
-def _get_rigid_motion(p_orig: numpy.array, q_deformed: numpy.array) -> RigidMotion:
+def _get_rigid_motion_sorkine_hornung(p_orig: numpy.array, q_deformed: numpy.array) -> RigidMotion:
     """Least-Squares Rigid Motion Using SVD
     Olga Sorkine-Hornung and Michael Rabinovich
     https://igl.ethz.ch/projects/ARAP/svd_rot.pdf
@@ -78,6 +78,70 @@ def _get_rigid_motion(p_orig: numpy.array, q_deformed: numpy.array) -> RigidMoti
 
     # TODO - make this better - I don't think it's getting the best fit at the moment. OpenCV, for example, uses RANSAC
     #   see estimateRigidTransform here: https://github.com/opencv/opencv/blob/324851882ab95e02bb17ea3e67b80f6af677c9f8/modules/video/src/lkpyramid.cpp#L1490
+
+
+def _get_rigid_motion_horn_1987(p_orig: numpy.array, q_deformed: numpy.array) -> RigidMotion:
+    """
+    Eggert, David W., Adele Lorusso, and Robert B. Fisher. "Estimating 3-D rigid body transformations: a comparison of four major algorithms." Machine vision and applications 9.5-6 (1997): 272-290.
+    Algorithm 3.3
+    """
+
+    # Get the centroids
+    p_bar = numpy.mean(p_orig, axis=0)
+    q_bar = numpy.mean(q_deformed, axis=0)
+
+    # Centre the vectors
+    p_centered = p_orig - p_bar
+    q_centered = q_deformed - q_bar
+
+    def s_matrix_term(a_ord: int, b_ord: int) -> float:
+        """Get a term in S_ab"""
+        m_c_i = p_centered[:, a_ord]
+        d_c_i = q_centered[:, b_ord]
+        return numpy.dot(m_c_i, d_c_i)
+
+
+    x, y, z = 0, 1, 2  # convenience!
+    S = numpy.zeros(shape=(3, 3))
+    for a_ord in [0, 1, 2]:
+        for b_ord in [0, 1, 2]:
+            S[a_ord, b_ord] = s_matrix_term(a_ord, b_ord)
+
+    print(f"S={S}")
+    # Make P from the S terms
+    P = numpy.array([
+        [S[x, x] + S[y, y] + S[z, z],   S[y, z] - S[z, y],   S[z, x] - S[x, z],  S[x, y] - S[y, x]  ],
+        [S[y, z] - S[z, y],   S[x, x] - S[y, y] - S[z, z],   S[x, y] + S[y, z],  S[z, x] + S[x, z]  ],
+        [S[z, x] - S[x, z],  S[x, y] + S[y, x],  S[y, y] - S[x, x] - S[z, z],    S[y, z] + S[z, y]  ],
+        [S[x, y] - S[y, x],  S[z, x] + S[x, z],  S[y, z] + S[z, y],  S[z, z] - S[x, x] - S[y, y]]
+    ])
+
+    print(f"P={P}")
+
+    # Get the eigenvector associated with the maximum eigenvalue.
+    eig_vals, eig_vects = numpy.linalg.eig(P)
+    val_and_idx = [(eig_val, idx) for idx, eig_val in enumerate(eig_vals)]
+    val_and_idx.sort(reverse=True)
+    max_eig_idx = val_and_idx[0][1]
+    q_hat = eig_vects[:, max_eig_idx]
+
+    print(f"q_hat={q_hat}")
+
+    # Generate the rotation matrix
+    q0, q1, q2, q3 = q_hat[:]
+
+    R = numpy.array([
+        [q0**2 + q1**2 - q2**2 - q3**2,   2*(q1*q2 - q0*q3),   2*(q1*q3 + q0*q2)],
+        [2*(q2*q1 + q0*q3),   q0**2 - q1**2 + q2**2 - q3**2,  2*(q2*q3 - q0*q1)],
+        [2*(q3*q1 - q0*q2),   2*(q3*q2 + q0*q1),   q0**2 - q1**2 - q2**2 + q3**2],
+    ])
+
+    print(f"R={R}")
+
+    t = q_bar - R @ p_bar
+
+    return RigidMotion(R=R, t=t)
+
 
 
 def apply_rigid_motion(rigid_motion: RigidMotion, orig: T_NodeMap) -> T_NodeMap:
@@ -128,7 +192,7 @@ def nodal_deformation(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMa
     p_orig = _get_points_array(node_keys, orig)
     q_deformed = _get_points_array(node_keys, deformed)
 
-    rigid_motion = _get_rigid_motion(p_orig, q_deformed)
+    rigid_motion = _get_rigid_motion_horn_1987(p_orig, q_deformed)
     p_with_rigid = _apply_rigid_motion(rigid_motion, p_orig)
 
     deformation_only = q_deformed - p_with_rigid
@@ -136,12 +200,14 @@ def nodal_deformation(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMa
     if len(norms) != len(orig):
         raise ValueError("Looks like Tom got an index/axis wrong someplace...")
 
+    deformation_ratio = float(numpy.mean(norms) / nominal_length)
+    print(f"deformation_ratio={deformation_ratio}")
 
-    DEBUG_MAKE_PLOT = False
+    DEBUG_MAKE_PLOT = True
     if DEBUG_MAKE_PLOT:
         _DEBUG_plot_rigid(p_orig, p_with_rigid, q_deformed)
 
-    return float(numpy.mean(norms) / nominal_length)
+    return deformation_ratio
 
 
 def test_from_real_data_should_be_small():
@@ -208,7 +274,7 @@ def test_from_real_data_should_be_small():
                 9454: XYZ(x=1.4644388854503632, y=3.2165971398353577, z=2.47306090593338)}
 
     NOMINAL_LENGTH = 0.2
-    measure = nodal_deformation_rmsd(NOMINAL_LENGTH, orig, deformed)
+    measure = nodal_deformation(NOMINAL_LENGTH, orig, deformed)
     print(measure)
 
 
@@ -301,54 +367,11 @@ def nodal_deformation_rmsd(nominal_length: float, orig: T_NodeMap, deformed: T_N
     return float(numpy.mean(deformation_norm) / nominal_length)
 
 
-def nodal_deformation_unit_quaternion(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMap) -> float:
-    """
-    Eggert, David W., Adele Lorusso, and Robert B. Fisher. "Estimating 3-D rigid body transformations: a comparison of four major algorithms." Machine vision and applications 9.5-6 (1997): 272-290.
-    Algorithm 3.3
-    """
-
-    node_keys = tuple(sorted(set.union(set(orig.keys()), set(deformed.keys()))))
-
-    p_orig = _get_points_array(node_keys, orig)
-    q_deformed = _get_points_array(node_keys, deformed)
-
-    def s_matrix_term(a_ord: int, b_ord: int) -> float:
-        """Get a term in S_ab"""
-        m_c_i = p_orig[:, a_ord]
-        d_c_i = q_deformed[:, b_ord]
-        return numpy.dot(m_c_i, d_c_i)
-
-
-    x, y, z = 0, 1, 2  # convenience!
-    S = numpy.zeros(shape=(3, 3))
-    for a_ord in [0, 1, 2]:
-        for b_ord in [0, 1, 2]:
-            S[a_ord, b_ord] = s_matrix_term(a_ord, b_ord)
-
-    # Make P from the S terms
-    P = numpy.array([
-        [S[x, x] + S[y, y] + S[z, z],   S[y, z] - S[z, y],   S[z, x] - S[x, z],  S[x, y] - S[y, x]  ],
-        [S[y, z] - S[z, y],   S[x, x] - S[y, y] - S[z, z],   S[x, y] + S[y, z],  S[z, x] + S[x, z]  ],
-        [S[z, x] - S[x, z],  S[x, y] + S[y, x],  S[y, y] - S[x, x] - S[z, z],    S[y, z] + S[z, y]  ],
-        [S[x, y] - S[y, x],  S[z, x] + S[x, z],  S[y, z] + S[z, y],  S[z, z] - S[x, x] - S[y, y]]
-    ])
-
-    # Get the eigenvector associated with the maximum eigenvalue.
-    eig_vals, eig_vects = numpy.linalg.eig(P)
-    val_and_idx = [(eig_val, idx) for idx, eig_val in enumerate(eig_vals)]
-    val_and_idx.sort(reverse=True)
-    max_eig_idx = val_and_idx[0][1]
-
-    # TODO - up to here.
-    max_eig = eig_vects[]  # [:, max_eig_idx] or [max_eig_idx, :]?
-
-
-
-
-if __name__ == "__main2__":
-    test_from_real_data_should_be_small()
 
 if __name__ == "__main__":
+    test_from_real_data_should_be_small()
+
+if __name__ == "__main2__":
     orig_points = {
         "a": XYZ(0.0, 0.0, 0.0),
         "b": XYZ(1.0, 0.0, 0.0),
@@ -382,7 +405,7 @@ if __name__ == "__main__":
     }
 
     #print(nodal_deformation_rmsd(1.0, orig_points, move_in_z))
-    print(nodal_deformation_unit_quaternion(1.0, orig_points, strain_in_x))
+    print(nodal_deformation(1.0, orig_points, rotate_90_deg))
     #print(nodal_deformation_rmsd(1.0, orig_points, rotate_90_deg))
 
 
