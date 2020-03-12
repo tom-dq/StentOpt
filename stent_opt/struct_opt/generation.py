@@ -74,7 +74,17 @@ def gaussian_smooth(optim_params: optimisation_parameters.OptimParams, stent_par
         """Since the sigma depends on the mesh size, we have to normalise it."""
         nominal_element_length = 0.05  # mm
         elem_lengths = [stent_params.single_element_r_span, stent_params.single_element_theta_span, stent_params.single_element_z_span]
-        return [optim_params.gaussian_sigma * nominal_element_length / l for l in elem_lengths]
+
+        def make_sigmas():
+            for l in elem_lengths:
+                try:
+                    yield optim_params.gaussian_sigma * nominal_element_length / l
+
+                except ZeroDivisionError:
+                    yield 0.0
+
+        simgas = list(make_sigmas())
+        return sigmas
 
     # Gaussian smooth with wraparound in the Theta direction if required... 'nearest' just means use the closest
     theta_mode = 'wrap' if stent_params.wrap_around_theta else 'nearest'
