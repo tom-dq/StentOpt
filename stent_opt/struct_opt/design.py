@@ -125,14 +125,7 @@ class StentParams(typing.NamedTuple):
 
     @property
     def stent_element_dimensions(self) -> int:
-        if self.stent_element_type == element.ElemType.C3D8R:
-            return 3
-
-        elif self.stent_element_type in (element.ElemType.CPS4R, element.ElemType.CPE4R):
-            return 2
-
-        else:
-            raise ValueError("Invalid element type for stent.", self.stent_element_type)
+        return 2 if self._is_planar else 3
 
     @property
     def radial_thickness(self) -> float:
@@ -147,6 +140,18 @@ class StentParams(typing.NamedTuple):
         return self.radial_midplane_initial * math.radians(self.angle)
 
     @property
+    def single_element_r_span(self) -> float:
+        if self.stent_element_dimensions == 2:
+            return 0.0
+
+        else:
+            return self.radial_thickness / self.divs.R
+
+    @property
+    def single_element_theta_span(self) -> float:
+        return self.theta_arc_initial / self.divs.Th
+
+    @property
     def single_element_z_span(self) -> float:
         return self.length / self.divs.Z
 
@@ -155,6 +160,25 @@ class StentParams(typing.NamedTuple):
         """Defines whether or not there are symmetrical boundary conditions between theta=0 and theta=th_max"""
         return self.stent_element_dimensions == 3
 
+    @property
+    def nodal_z_override_in_odb(self) -> typing.Optional[float]:
+        """Sometimes we need to put the nodes back at a fixed z location."""
+        if self._is_planar:
+            return self.radial_midplane_initial
+
+        else:
+            return None
+
+    @property
+    def _is_planar(self) -> bool:
+        if self.stent_element_type in (element.ElemType.CPS4R, element.ElemType.CPE4R):
+            return True
+
+        elif self.stent_element_type == element.ElemType.C3D8R:
+            return False
+
+        else:
+            raise ValueError("Invalid element type for stent.", self.stent_element_type)
 
 class StentDesign(typing.NamedTuple):
     stent_params: StentParams
@@ -774,8 +798,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=20,  # 31
-        Z=180,  # 120
+        Th=80,  # 31
+        Z=720,  # 120
     ),
     r_min=0.65,
     r_max=0.75,

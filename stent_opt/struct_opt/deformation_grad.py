@@ -18,9 +18,8 @@ class RigidMotion(typing.NamedTuple):
 
 
 def _get_points_array(key_order, nodes: T_NodeMap) -> numpy.array:
-    points_in_order = (nodes[k] for k in key_order)
-    points_raw = tuple(sorted(points_in_order))
-    points_array = numpy.array(points_raw)
+    points_in_order = tuple(nodes[k] for k in key_order)
+    points_array = numpy.array(points_in_order)
     return points_array
 
 
@@ -82,6 +81,8 @@ def _get_rigid_motion_sorkine_hornung(p_orig: numpy.array, q_deformed: numpy.arr
 
 def _get_rigid_motion_horn_1987(p_orig: numpy.array, q_deformed: numpy.array) -> RigidMotion:
     """
+    This seems to be working well - uses quaternions and is robust.
+
     Eggert, David W., Adele Lorusso, and Robert B. Fisher. "Estimating 3-D rigid body transformations: a comparison of four major algorithms." Machine vision and applications 9.5-6 (1997): 272-290.
     Algorithm 3.3
     """
@@ -107,7 +108,6 @@ def _get_rigid_motion_horn_1987(p_orig: numpy.array, q_deformed: numpy.array) ->
         for b_ord in [0, 1, 2]:
             S[a_ord, b_ord] = s_matrix_term(a_ord, b_ord)
 
-    print(f"S={S}")
     # Make P from the S terms
     P = numpy.array([
         [S[x, x] + S[y, y] + S[z, z],   S[y, z] - S[z, y],   S[z, x] - S[x, z],  S[x, y] - S[y, x]  ],
@@ -116,16 +116,12 @@ def _get_rigid_motion_horn_1987(p_orig: numpy.array, q_deformed: numpy.array) ->
         [S[x, y] - S[y, x],  S[z, x] + S[x, z],  S[y, z] + S[z, y],  S[z, z] - S[x, x] - S[y, y]]
     ])
 
-    print(f"P={P}")
-
     # Get the eigenvector associated with the maximum eigenvalue.
     eig_vals, eig_vects = numpy.linalg.eig(P)
     val_and_idx = [(eig_val, idx) for idx, eig_val in enumerate(eig_vals)]
     val_and_idx.sort(reverse=True)
     max_eig_idx = val_and_idx[0][1]
     q_hat = eig_vects[:, max_eig_idx]
-
-    print(f"q_hat={q_hat}")
 
     # Generate the rotation matrix
     q0, q1, q2, q3 = q_hat[:]
@@ -135,8 +131,6 @@ def _get_rigid_motion_horn_1987(p_orig: numpy.array, q_deformed: numpy.array) ->
         [2*(q2*q1 + q0*q3),   q0**2 - q1**2 + q2**2 - q3**2,  2*(q2*q3 - q0*q1)],
         [2*(q3*q1 - q0*q2),   2*(q3*q2 + q0*q1),   q0**2 - q1**2 - q2**2 + q3**2],
     ])
-
-    print(f"R={R}")
 
     t = q_bar - R @ p_bar
 
@@ -183,6 +177,26 @@ def _DEBUG_plot_rigid(p_orig, p_with_rigid, q_deformed):
 
     plt.show()
 
+def _DEBUG_plot_rigid_points(node_keys, p_orig, p_with_rigid, q_deformed):
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    for iPoint in range(p_orig.shape[0]):
+
+        def plot_one_point(vect, style):
+            x, y, z = vect[iPoint, 0], vect[iPoint, 1], vect[iPoint, 2]
+            ax.plot([x], [y], [z], style)
+            ax.text(x, y, z, str(node_keys[iPoint]))
+
+        # Orig
+        plot_one_point(p_orig, 'kx')
+        plot_one_point(p_with_rigid, 'bx')
+        plot_one_point(q_deformed, 'bo')
+
+    plt.show()
+
 
 def nodal_deformation(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMap) -> float:
     """Gets some normalised deformation measure for the subset of nodes overall."""
@@ -197,15 +211,22 @@ def nodal_deformation(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMa
 
     deformation_only = q_deformed - p_with_rigid
     norms = numpy.linalg.norm(deformation_only, axis=1)
+
+    # TESTING CODE
+    # n_vect = numpy.array([norms]).T
+    # TESTING = numpy.hstack((p_orig, q_deformed, n_vect))
+    # print(TESTING)
+    # END TESTING CODE
+
     if len(norms) != len(orig):
         raise ValueError("Looks like Tom got an index/axis wrong someplace...")
 
     deformation_ratio = float(numpy.mean(norms) / nominal_length)
-    print(f"deformation_ratio={deformation_ratio}")
 
     DEBUG_MAKE_PLOT = False
     if DEBUG_MAKE_PLOT:
         _DEBUG_plot_rigid(p_orig, p_with_rigid, q_deformed)
+        #_DEBUG_plot_rigid_points(node_keys, p_orig, p_with_rigid, q_deformed)
 
     return deformation_ratio
 

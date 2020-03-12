@@ -689,10 +689,10 @@ def run_model(inp_fn):
     os.chdir(old_working_dir)
 
 
-def perform_extraction(odb_fn, out_db_fn):
+def perform_extraction(odb_fn, out_db_fn, override_z_val):
     old_working_dir = os.getcwd()
     os.chdir(working_dir_extract)
-    args = ["abaqus.bat", "cae", "noGui=odb_extract.py", "--", str(odb_fn), str(out_db_fn)]
+    args = ["abaqus.bat", "cae", "noGui=odb_extract.py", "--", str(odb_fn), str(out_db_fn), str(override_z_val)]
 
     proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     ret_code = proc.wait()
@@ -722,7 +722,11 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         make_stent_model(current_design, fn_inp)
 
         run_model(fn_inp)
-        perform_extraction(history.make_fn_in_dir(working_dir, ".odb", starting_i), history.make_fn_in_dir(working_dir, ".db", starting_i))
+        perform_extraction(
+            history.make_fn_in_dir(working_dir, ".odb", starting_i),
+            history.make_fn_in_dir(working_dir, ".db", starting_i),
+            current_design.stent_params.nodal_z_override_in_odb
+        )
 
         with history.History(history_db_fn) as hist:
             elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
@@ -758,7 +762,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         run_model(fn_inp)
 
         fn_db_current = history.make_fn_in_dir(working_dir, ".db", i_current)
-        perform_extraction(fn_odb, fn_db_current)
+        perform_extraction(fn_odb, fn_db_current, new_design.stent_params.nodal_z_override_in_odb)
 
         old_design = new_design
 

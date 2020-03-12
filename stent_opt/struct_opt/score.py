@@ -235,6 +235,11 @@ def get_primary_ranking_local_region_gradient(
 def get_primary_ranking_macro_deformation(old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets the local-ish deformation within a given number of elements, by removing the rigid body rotation/translation."""
 
+    # TODO - speed this up! Need to:
+    #  - Cache the connectivity somehow
+    #  - Prepare one big matrix and submit sub-matrices to nodal_deformation
+
+
     STENCIL_LENGTH = 0.1  # mm
 
     elem_to_nodes_in_range = graph_connection.element_idx_to_nodes_within(STENCIL_LENGTH, old_design)

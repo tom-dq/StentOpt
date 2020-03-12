@@ -62,10 +62,21 @@ def _element_idx_to_something_within(entity: _Entity, distance: float, stent_des
             graph.add_edge(n1, n2, weight=0.0)
 
     # Get the node-to-nodes_within_radius
+
+    OPT = 1
+
     node_to_nodes_within_radius = dict()
-    for iNode in active_nodes:
-        node_to_dist = networkx.single_source_dijkstra_path_length(graph, iNode, cutoff=distance)
-        node_to_nodes_within_radius[iNode] = set(node_to_dist.keys())
+    if OPT == 0:
+        for iNode in active_nodes:
+            node_to_dist = networkx.single_source_dijkstra_path_length(graph, iNode, cutoff=distance)
+            node_to_nodes_within_radius[iNode] = set(node_to_dist.keys())
+
+    elif OPT == 1:
+        for iSourceNode, iTargetNodes in networkx.all_pairs_dijkstra_path_length(graph, cutoff=distance):
+            node_to_nodes_within_radius[iSourceNode] = set(iTargetNodes)
+
+    else:
+        raise ValueError()
 
     # Get the nodes within the range.
     elem_idx_to_nodes_in_range = {}

@@ -60,22 +60,37 @@ def get_gradient_input_data(
 
 
 T_index_to_val = typing.Dict[design.PolarIndex, float]
-def gaussian_smooth(optim_params: optimisation_parameters.OptimParams, design_space: design.PolarIndex, unsmoothed: T_index_to_val) -> T_index_to_val:
+def gaussian_smooth(optim_params: optimisation_parameters.OptimParams, stent_params: design.StentParams, unsmoothed: T_index_to_val) -> T_index_to_val:
     # Make a 3D array
+
+    design_space = stent_params.divs
+
     design_space_elements = design.node_to_elem_design_space(design_space)
     raw = numpy.zeros(shape=design_space_elements)
     for (r, th, z), val in unsmoothed.items():
         raw[r, th, z] = val
 
-    # Gaussian smooth with wraparound in the Theta direction...
-    step1 = scipy.ndimage.gaussian_filter1d(raw, sigma=optim_params.gaussian_sigma, axis=1, mode='wrap')
+    def normalised_sigma():
+        """Since the sigma depends on the mesh size, we have to normalise it."""
+        nominal_element_length = 0.05  # mm
+        elem_lengths = [stent_params.single_element_r_span, stent_params.single_element_theta_span, stent_params.single_element_z_span]
+        return [optim_params.gaussian_sigma * nominal_element_length / l for l in elem_lengths]
 
-    # With the other two ordinates, replicate the closest cell we have.
-    step2 = scipy.ndimage.gaussian_filter1d(step1, sigma=optim_params.gaussian_sigma, axis=0, mode='nearest')
-    step3 = scipy.ndimage.gaussian_filter1d(step2, sigma=optim_params.gaussian_sigma, axis=2, mode='nearest')
+    # Gaussian smooth with wraparound in the Theta direction if required... 'nearest' just means use the closest
+    theta_mode = 'wrap' if stent_params.wrap_around_theta else 'nearest'
+
+    modes = ('nearest', theta_mode, 'nearest')
+    sigmas = normalised_sigma()
+
+    out_nd_array = scipy.ndimage.gaussian_filter(raw, sigma=sigmas, mode=modes)
+
+    #step1 = scipy.ndimage.gaussian_filter1d(raw, sigma=optim_params.gaussian_sigma, axis=0, mode='nearest')
+    #step2 = scipy.ndimage.gaussian_filter1d(step1, sigma=optim_params.gaussian_sigma, axis=1, mode=theta_mode)
+    #step3 = scipy.ndimage.gaussian_filter1d(step2, sigma=optim_params.gaussian_sigma, axis=2, mode='nearest')
 
     # Put it back and return
-    out_nd_array = step3
+    #out_nd_array = step3
+
     non_zero_inds = numpy.nonzero(out_nd_array)
     out_dict = {}
     for r, th, z in zip(*non_zero_inds):
@@ -232,19 +247,48 @@ def _get_ranking_functions(
 
     overall_rank = {one.elem_id: one.value for one in sec_rank_unsmoothed}
     unsmoothed = {elem_num_to_indices[iElem]: val for iElem, val in overall_rank.items()}
-    smoothed = gaussian_smooth(optim_params, design_n_min_1.stent_params.divs, unsmoothed)
+    smoothed = gaussian_smooth(optim_params, design_n_min_1.stent_params, unsmoothed)
+
+    def append_additional_output(idx_to_val: typing.Dict[design.PolarIndex, float], comp_name: str):
+        additional_ranking = [
+            score.SecondaryRankingComponent(
+                comp_name=comp_name,
+                elem_id=elem_indices_to_num[elem_id],
+                value=value
+            ) for elem_id, value in idx_to_val.items()
+        ]
+
+        all_ranks.append(additional_ranking)
 
     # Save the smoothed form so it can go in the database.
     sec_rank_name = sec_rank_unsmoothed[0].comp_name + " Smoothed"
-    sec_rank_smoothed = [
-        score.SecondaryRankingComponent(
-            comp_name=sec_rank_name,
-            elem_id=elem_indices_to_num[elem_id],
-            value=value
-        ) for elem_id, value in smoothed.items()
-    ]
+    append_additional_output(smoothed, sec_rank_name)
 
-    all_ranks.append(sec_rank_smoothed)
+    def add_TESTING_gaussian():
+        """Add a TESTING Gaussian distribution"""
+        theta_idx_vals = [idx.Th for idx in unsmoothed.keys()]
+        z_idx_vals = [idx.Z for idx in unsmoothed.keys()]
+
+        th_mid = 0.5 * (min(theta_idx_vals) + max(theta_idx_vals))
+        z_mid = 0.5 * (min(z_idx_vals) + max(z_idx_vals))
+
+        def testing_val(elem_idx: design.PolarIndex) -> float:
+            lower_theta = elem_idx.Th < th_mid
+            lower_z = elem_idx.Z < z_mid
+
+            return (
+                1.0 +
+                (0.0 if lower_theta else 1.0) +
+                (0.0 if lower_z else 1.0)
+            )
+
+        unsmoothed_checkerboard = {idx: testing_val(idx) for idx in unsmoothed.keys()}
+        smoothed_checkerboard = gaussian_smooth(optim_params, design_n_min_1.stent_params, unsmoothed_checkerboard)
+
+        append_additional_output(unsmoothed_checkerboard, "Checkerboard Raw")
+        append_additional_output(smoothed_checkerboard, "Checkerboard Smoothed")
+
+    add_TESTING_gaussian()
 
     return RankingResults(
         all_ranks=all_ranks,
@@ -425,9 +469,9 @@ if __name__ == '__main__':
     # evolve_decider_test()
     # make_plot_tests()
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-66")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-91")
     i_current = 1
     new_design = make_new_generation(working_dir, i_current)
-    print(new_design)
+    # print(new_design)
 
 

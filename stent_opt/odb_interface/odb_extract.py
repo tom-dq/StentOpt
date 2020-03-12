@@ -4,7 +4,7 @@
 
 # Rule of thumb - make everything a double!
 
-SAVE_IMAGES = True
+SAVE_IMAGES = False
 
 import sys
 import collections
@@ -24,8 +24,17 @@ from datastore import Datastore
 from db_defs import Frame, NodePos, ElementStress, ElementPEEQ
 
 # Get the command line option (should be last!).
-fn_odb = sys.argv[-2]
-db_fn = sys.argv[-1]
+fn_odb = sys.argv[-3]
+db_fn = sys.argv[-2]
+_override_z_val_str = sys.argv[-1]
+
+# If we are doing a planar analysis and we put the nodes at z=NomRadius, in the .odb file they're
+# back at the origin. Since we depend on them being at real z for later post-processing, put them back.
+if _override_z_val_str == str(None):
+    override_z_val = None
+
+else:
+    override_z_val = float(_override_z_val_str)
 
 
 #fn_odb = r"C:\TEMP\aba\stent-36.odb"
@@ -52,12 +61,18 @@ def _get_nodes_on_elements(elements, ):
     return frozenset(all_nodes)
 
 
-def _get_node_initial_pos(instance):
+def _get_node_initial_pos(override_z_val, instance):
     out_dict = {}
     for one_node in instance.nodes:
-        out_dict[one_node.label] = one_node.coordinates.astype("d")
+        coords_working = one_node.coordinates.astype("d")
+
+        if override_z_val is not None:
+            coords_working[2] = override_z_val
+
+        out_dict[one_node.label] = coords_working
 
     return out_dict
+
 
 def _get_data_array_as_double(one_value):
     if one_value.precision == abaqusConstants.SINGLE_PRECISION:
@@ -70,7 +85,7 @@ def _get_data_array_as_double(one_value):
         raise TypeError(one_value.precision)
 
 
-def walk_file_frames(fn_odb):
+def walk_file_frames(fn_odb, override_z_val):
     """
     :return type: Iterable[Frame, ExtractionMeta]
     """
@@ -79,7 +94,7 @@ def walk_file_frames(fn_odb):
     for one_instance_name, instance in this_odb.rootAssembly.instances.items():
         this_part_elem_labels = frozenset(elem.label for elem in instance.elements)
         this_part_node_labels = _get_nodes_on_elements(instance.elements)
-        this_part_node_initial_pos = _get_node_initial_pos(instance)
+        this_part_node_initial_pos = _get_node_initial_pos(override_z_val, instance)
         previous_step_time = 0.0
         for step_num, (step_name, one_step) in enumerate(this_odb.steps.items()):
 
@@ -206,7 +221,7 @@ def get_results_one_frame(extraction_meta):
 
 def extract_file_results(fn_odb):
     with Datastore(fn=db_fn) as datastore:
-        for frame_db, extraction_meta in walk_file_frames(fn_odb):
+        for frame_db, extraction_meta in walk_file_frames(fn_odb, override_z_val):
             print_in_term(frame_db)
             all_results = get_results_one_frame(extraction_meta)
             datastore.add_frame_and_results(frame_db, all_results)
