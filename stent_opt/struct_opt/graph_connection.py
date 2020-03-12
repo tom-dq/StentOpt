@@ -65,7 +65,7 @@ def _element_idx_to_something_within(entity: _Entity, distance: float, stent_des
 
     # Get the node-to-nodes_within_radius
 
-    OPT = 2
+    OPT = 1
 
     node_to_nodes_within_radius = dict()
     if OPT == 0:
