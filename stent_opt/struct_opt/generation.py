@@ -274,32 +274,6 @@ def _get_ranking_functions(
     sec_rank_name = sec_rank_unsmoothed[0].comp_name + " Smoothed"
     append_additional_output(smoothed, sec_rank_name)
 
-    def add_TESTING_gaussian():
-        """Add a TESTING Gaussian distribution"""
-        theta_idx_vals = [idx.Th for idx in unsmoothed.keys()]
-        z_idx_vals = [idx.Z for idx in unsmoothed.keys()]
-
-        th_mid = 0.5 * (min(theta_idx_vals) + max(theta_idx_vals))
-        z_mid = 0.5 * (min(z_idx_vals) + max(z_idx_vals))
-
-        def testing_val(elem_idx: design.PolarIndex) -> float:
-            lower_theta = elem_idx.Th < th_mid
-            lower_z = elem_idx.Z < z_mid
-
-            return (
-                1.0 +
-                (0.0 if lower_theta else 1.0) +
-                (0.0 if lower_z else 1.0)
-            )
-
-        unsmoothed_checkerboard = {idx: testing_val(idx) for idx in unsmoothed.keys()}
-        smoothed_checkerboard = gaussian_smooth(optim_params, design_n_min_1.stent_params, unsmoothed_checkerboard)
-
-        append_additional_output(unsmoothed_checkerboard, "Checkerboard Raw")
-        append_additional_output(smoothed_checkerboard, "Checkerboard Smoothed")
-
-    add_TESTING_gaussian()
-
     return RankingResults(
         all_ranks=all_ranks,
         final_ranking_component=smoothed,
@@ -392,8 +366,6 @@ def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
     vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(recent_gradient_input_data, statistics.mean))
     for idx, x in enumerate(vicinity_ranking):
         print(idx, x, sep='\t')
-
-    # TODO - make the vicinity stuff look right!!
 
     all_ranks.append(vicinity_ranking)
 
