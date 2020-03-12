@@ -9,35 +9,23 @@ import rmsd
 
 from stent_opt.abaqus_model.base import XYZ
 
-T_NodeKey = typing.TypeVar("T_NodeKey")
-T_NodeMap = typing.Dict[T_NodeKey, XYZ]
 
 class RigidMotion(typing.NamedTuple):
     R: numpy.array  # Rotation matrix, 3x3
     t: numpy.array  # Deformation vector.
 
 
-def _get_points_array(key_order, nodes: T_NodeMap) -> numpy.array:
-    points_in_order = tuple(nodes[k] for k in key_order)
-    points_array = numpy.array(points_in_order)
-    return points_array
+T_NodeKey = typing.TypeVar("T_NodeKey")
+T_NodeMap = typing.Dict[T_NodeKey, XYZ]
 
+def OLD_get_rigid_motion(orig: T_NodeMap, deformed: T_NodeMap) -> RigidMotion:
+    from stent_opt.struct_opt.score import get_points_array
 
-def _get_node_map(key_order, points: numpy.array) -> T_NodeMap:
-    out_points = {}
-    for idx, k in enumerate(key_order):
-        x, y, z = [float(_x) for _x in points[idx, :]]
-        out_points[k] = XYZ(x, y, z)
-
-    return out_points
-
-
-def get_rigid_motion(orig: T_NodeMap, deformed: T_NodeMap) -> RigidMotion:
     # Assume all points are weighted equally, and put them in the same order.
     node_keys = tuple(sorted(set.union(set(orig.keys()), set(deformed.keys()))))
 
-    p_orig = _get_points_array(node_keys, orig)
-    q_deformed = _get_points_array(node_keys, deformed)
+    p_orig = get_points_array(node_keys, orig)
+    q_deformed = get_points_array(node_keys, deformed)
 
     return _get_rigid_motion_sorkine_hornung(p_orig, q_deformed)
 
@@ -138,13 +126,15 @@ def _get_rigid_motion_horn_1987(p_orig: numpy.array, q_deformed: numpy.array) ->
 
 
 
-def apply_rigid_motion(rigid_motion: RigidMotion, orig: T_NodeMap) -> T_NodeMap:
+def OLD_apply_rigid_motion(rigid_motion: RigidMotion, orig: T_NodeMap) -> T_NodeMap:
     """Apply the rigid body motion to some undeformed nodes."""
 
+    from stent_opt.struct_opt.score import get_points_array, get_node_map
+
     node_keys = tuple(sorted(orig.keys()))
-    p_orig = _get_points_array(node_keys, orig)
+    p_orig = get_points_array(node_keys, orig)
     p_def = _apply_rigid_motion(rigid_motion, p_orig)
-    return _get_node_map(node_keys, p_def)
+    return get_node_map(node_keys, p_def)
 
 
 def _apply_rigid_motion(rigid_motion: RigidMotion, p_orig: numpy.array) -> numpy.array:
@@ -158,7 +148,6 @@ def _apply_rigid_motion(rigid_motion: RigidMotion, p_orig: numpy.array) -> numpy
 
 def _DEBUG_plot_rigid(p_orig, p_with_rigid, q_deformed):
     import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
@@ -179,7 +168,6 @@ def _DEBUG_plot_rigid(p_orig, p_with_rigid, q_deformed):
 
 def _DEBUG_plot_rigid_points(node_keys, p_orig, p_with_rigid, q_deformed):
     import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
@@ -198,13 +186,8 @@ def _DEBUG_plot_rigid_points(node_keys, p_orig, p_with_rigid, q_deformed):
     plt.show()
 
 
-def nodal_deformation(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMap) -> float:
+def nodal_deformation(nominal_length: float, p_orig: numpy.array, q_deformed: numpy.array) -> float:
     """Gets some normalised deformation measure for the subset of nodes overall."""
-
-    node_keys = tuple(sorted(set.union(set(orig.keys()), set(deformed.keys()))))
-
-    p_orig = _get_points_array(node_keys, orig)
-    q_deformed = _get_points_array(node_keys, deformed)
 
     rigid_motion = _get_rigid_motion_horn_1987(p_orig, q_deformed)
     p_with_rigid = _apply_rigid_motion(rigid_motion, p_orig)
@@ -212,13 +195,7 @@ def nodal_deformation(nominal_length: float, orig: T_NodeMap, deformed: T_NodeMa
     deformation_only = q_deformed - p_with_rigid
     norms = numpy.linalg.norm(deformation_only, axis=1)
 
-    # TESTING CODE
-    # n_vect = numpy.array([norms]).T
-    # TESTING = numpy.hstack((p_orig, q_deformed, n_vect))
-    # print(TESTING)
-    # END TESTING CODE
-
-    if len(norms) != len(orig):
+    if len(norms) != p_orig.shape[0]:
         raise ValueError("Looks like Tom got an index/axis wrong someplace...")
 
     deformation_ratio = float(numpy.mean(norms) / nominal_length)
@@ -321,8 +298,8 @@ def nodal_deformation_least_squares(nominal_length: float, orig: T_NodeMap, defo
 
     node_keys = tuple(sorted(set.union(set(orig.keys()), set(deformed.keys()))))
 
-    p_orig = _get_points_array(node_keys, orig)
-    q_deformed = _get_points_array(node_keys, deformed)
+    p_orig = get_points_array(node_keys, orig)
+    q_deformed = get_points_array(node_keys, deformed)
 
     # Step 1 - get the centroids
     p_bar = numpy.mean(p_orig, axis=0)
@@ -363,8 +340,8 @@ def nodal_deformation_rmsd(nominal_length: float, orig: T_NodeMap, deformed: T_N
 
     node_keys = tuple(sorted(set.union(set(orig.keys()), set(deformed.keys()))))
 
-    p_orig = _get_points_array(node_keys, orig)
-    q_deformed = _get_points_array(node_keys, deformed)
+    p_orig = get_points_array(node_keys, orig)
+    q_deformed = get_points_array(node_keys, deformed)
 
     # Step 1 - get the centroids
     p_bar = numpy.mean(p_orig, axis=0)
@@ -428,23 +405,4 @@ if __name__ == "__main2__":
     #print(nodal_deformation_rmsd(1.0, orig_points, move_in_z))
     print(nodal_deformation(1.0, orig_points, rotate_90_deg))
     #print(nodal_deformation_rmsd(1.0, orig_points, rotate_90_deg))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

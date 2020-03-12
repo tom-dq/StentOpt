@@ -6,9 +6,10 @@ import typing
 import numpy
 
 from stent_opt.abaqus_model import base, element
+from stent_opt.abaqus_model.base import XYZ
 from stent_opt.odb_interface import db_defs
 from stent_opt.struct_opt import design, deformation_grad, graph_connection
-
+from stent_opt.struct_opt.deformation_grad import T_NodeMap
 
 _FACES_OF_QUAD = (
     (0, 1, 2, 3,),
@@ -239,7 +240,6 @@ def get_primary_ranking_macro_deformation(old_design: "design.StentDesign", nt_r
     #  - Cache the connectivity somehow
     #  - Prepare one big matrix and submit sub-matrices to nodal_deformation
 
-
     STENCIL_LENGTH = 0.1  # mm
 
     elem_to_nodes_in_range = graph_connection.element_idx_to_nodes_within(STENCIL_LENGTH, old_design)
@@ -255,6 +255,31 @@ def get_primary_ranking_macro_deformation(old_design: "design.StentDesign", nt_r
         iNode in node_to_pos_deformed
     }
 
+    # Make big numpy arrays of all the positions.
+    if old_design.stent_params.wrap_around_theta:
+        """Here's what I'm thinking for wrap-around theta node patches:
+        - Have "raw" data with theta indices like this:
+           raw = [0, 1, 2, 3]
+        
+        - Make a "padded" array which repeats the wrap-around data like this:
+           padded = [0, 1, 2, 3, 4, 5, -2, -1]
+        
+         - The padded array would have entries 4 and 5 as a bit above ThetaMax, and
+           entries -2 and -1 as a bit below 0.
+           
+         - Use numpy.take with mode='wrap', just with the indices from "raw".
+         
+         - I have not thought this all the way through!
+        """
+
+        raise ValueError("Time to write this bit!")
+
+    node_key_order = sorted(node_to_pos_deformed.keys())
+    node_key_to_index = {node_key: idx for idx, node_key in enumerate(node_key_order)}
+    np_orig = get_points_array(node_key_order, node_to_pos_original)
+    np_deformed = get_points_array(node_key_order, node_to_pos_deformed)
+
+
     def prepare_node_patch(node_dict_xyz, patch_node_nums):
         raw = {iNode: xyz for iNode, xyz in node_dict_xyz.items() if iNode in patch_node_nums}
         if old_design.stent_params.wrap_around_theta:
@@ -264,12 +289,17 @@ def get_primary_ranking_macro_deformation(old_design: "design.StentDesign", nt_r
             return raw
 
     node_num_to_contribs = collections.defaultdict(list)
+
     for elem_idx, node_num_set in elem_to_nodes_in_range.items():
 
-        orig = prepare_node_patch(node_to_pos_original, node_num_set)
-        deformed = prepare_node_patch(node_to_pos_deformed, node_num_set)
+        node_indices = [node_key_to_index[node_key] for node_key in node_num_set]
+        np_orig_sub = np_orig.take(node_indices, axis=0)
+        np_def_sub = np_deformed.take(node_indices, axis=0)
 
-        this_val = deformation_grad.nodal_deformation(STENCIL_LENGTH, orig, deformed)
+        #orig = prepare_node_patch(node_to_pos_original, node_num_set)
+        #deformed = prepare_node_patch(node_to_pos_deformed, node_num_set)
+
+        this_val = deformation_grad.nodal_deformation(STENCIL_LENGTH, np_orig_sub, np_def_sub)
         for node_num in node_num_set:
             node_num_to_contribs[node_num].append(this_val)
 
@@ -371,3 +401,18 @@ def get_relevant_measure(nt_row):
 
     else:
         raise ValueError(nt_row)
+
+
+def get_points_array(key_order, nodes: T_NodeMap) -> numpy.array:
+    points_in_order = tuple(nodes[k] for k in key_order)
+    points_array = numpy.array(points_in_order)
+    return points_array
+
+
+def get_node_map(key_order, points: numpy.array) -> T_NodeMap:
+    out_points = {}
+    for idx, k in enumerate(key_order):
+        x, y, z = [float(_x) for _x in points[idx, :]]
+        out_points[k] = XYZ(x, y, z)
+
+    return out_points
