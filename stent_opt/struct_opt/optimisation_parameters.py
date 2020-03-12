@@ -160,7 +160,7 @@ active = OptimParams(
         # score.get_primary_ranking_element_distortion,
         score.get_primary_ranking_macro_deformation,
     ],
-    gaussian_sigma=2.0,
+    gaussian_sigma=0.75,
     working_dir=r"c:\temp\ABCDE",
 )
 

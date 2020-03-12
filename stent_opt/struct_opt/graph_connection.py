@@ -23,6 +23,8 @@ def element_idx_to_elems_within(distance: float, stent_design: "design.StentDesi
 
 
 def _element_idx_to_something_within(entity: _Entity, distance: float, stent_design: "design.StentDesign"):
+    # TODO - do this a different way, with meshgrid and indices, for example.
+
     elem_num_to_idx = {
         iElem: idx for iElem, idx in
         design.generate_elem_indices(stent_design.stent_params.divs) if
@@ -63,7 +65,7 @@ def _element_idx_to_something_within(entity: _Entity, distance: float, stent_des
 
     # Get the node-to-nodes_within_radius
 
-    OPT = 1
+    OPT = 2
 
     node_to_nodes_within_radius = dict()
     if OPT == 0:
@@ -74,6 +76,9 @@ def _element_idx_to_something_within(entity: _Entity, distance: float, stent_des
     elif OPT == 1:
         for iSourceNode, iTargetNodes in networkx.all_pairs_dijkstra_path_length(graph, cutoff=distance):
             node_to_nodes_within_radius[iSourceNode] = set(iTargetNodes)
+
+    elif OPT == 2:
+        raise ValueError("Do this with meshgrid!")
 
     else:
         raise ValueError()
