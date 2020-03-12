@@ -83,7 +83,7 @@ def gaussian_smooth(optim_params: optimisation_parameters.OptimParams, stent_par
                 except ZeroDivisionError:
                     yield 0.0
 
-        simgas = list(make_sigmas())
+        sigmas = list(make_sigmas())
         return sigmas
 
     # Gaussian smooth with wraparound in the Theta direction if required... 'nearest' just means use the closest
