@@ -165,7 +165,7 @@ active = OptimParams(
     ],
     gaussian_sigma=0.75,
     working_dir=r"c:\temp\ABCDE",
-    use_double_precision=False,
+    use_double_precision=True,
 )
 
 
