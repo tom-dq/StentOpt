@@ -27,14 +27,10 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 
 
 WORKING_DIR_TEMP = _get_most_recent_working_dir()
-# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-103")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
-FIG_SIZE_UNI = (2000, 1350)
-FIG_SIZE_LAPTOP = (1200, 750)
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
 STOP_AT_INCREMENT = 2
 
-FIG_SIZE = FIG_SIZE_UNI
 
 class ContourView(typing.NamedTuple):
     iteration_num: int
@@ -82,7 +78,7 @@ def make_contour(
     poly_data = [gen_poly_data(elem, value) for elem, value in element_to_value.items()]
 
     polys = holoviews.Polygons(poly_data, vdims='level', group=contour_view.metric_name)
-    polys.opts(color='level', aspect='equal', line_width=0.1, padding=0.1, width=FIG_SIZE[0], height=FIG_SIZE[1], invert_axes=True)
+    polys.opts(color='level', aspect='equal', line_width=0.1, padding=0.1, width=this_computer.fig_size[0], height=this_computer.fig_size[1], invert_axes=True)
 
     return polys
 
@@ -150,7 +146,7 @@ def make_quadmesh(
         qmesh_list.append(qmesh_ghost)
 
     for qmesh in qmesh_list:
-        qmesh.opts(aspect='equal', line_width=0.1, padding=0.1, width=FIG_SIZE[0], height=FIG_SIZE[1], colorbar=True)
+        qmesh.opts(aspect='equal', line_width=0.1, padding=0.1, width=this_computer.fig_size[0], height=this_computer.fig_size[1], colorbar=True)
 
     return holoviews.Overlay(qmesh_list)
 
