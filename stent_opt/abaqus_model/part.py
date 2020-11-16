@@ -113,7 +113,8 @@ def make_part_test() -> Part:
 
     common_section = section.SolidSection(
         name="Solid",
-        mat=common_material
+        mat=common_material,
+        enhanced_hourglass=None,
     )
 
     part = Part(name="Part-1", common_section=common_section)

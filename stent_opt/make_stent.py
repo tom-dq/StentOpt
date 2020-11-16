@@ -77,7 +77,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
             name="SolidSteel",
             mat=steel,
             thickness=section_thickness,
-            enhanced_hourglass=True,
+            enhanced_hourglass=section.HourglassControlEnhanced(name="EC-1"),
         )
 
         stent_part = part.Part(
@@ -142,6 +142,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
             name="RubberMembrane",
             mat=rubber,
             thickness=0.02,
+            enhanced_hourglass=None,
         )
 
         balloon_part = part.Part(
@@ -186,6 +187,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
             name="CylSurf",
             mat=None,
             surf_density=1e-3,
+            enhanced_hourglass=None,
         )
 
         cyl_inner_part = part.Part(

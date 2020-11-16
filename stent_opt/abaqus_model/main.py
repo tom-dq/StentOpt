@@ -89,6 +89,7 @@ class AbaqusModel:
             yield from part.produce_inp_lines()
 
         yield from self._produce_inp_lines_assembly()
+        yield from self._product_inp_lines_section_control()
         yield from self._produce_inp_lines_amplitude()
         yield from self._produce_inp_lines_material()
         yield from self._produce_inp_lines_interaction_properties()
@@ -116,6 +117,22 @@ class AbaqusModel:
             yield from one_instance.produce_equation_inp_line()
 
         yield "*End Assembly"
+
+
+    def _product_inp_lines_section_control(self) -> typing.Iterable[str]:
+        def gen_section_controls():
+            seen = set()
+
+            seen.add(None)
+
+            for one_part in self.get_parts():
+                sec_control = one_part.common_section.enhanced_hourglass
+                if sec_control not in seen:
+                    yield sec_control
+                    seen.add(sec_control)
+
+        for sec_control in gen_section_controls():
+            yield from sec_control.produce_inp_lines()
 
 
     def _produce_inp_lines_amplitude(self) -> typing.Iterable[str]:

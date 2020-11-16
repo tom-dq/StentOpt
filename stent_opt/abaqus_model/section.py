@@ -5,9 +5,18 @@ from stent_opt.abaqus_model import base, material, element
 
 
 @dataclasses.dataclass(frozen=True)
+class HourglassControlEnhanced:
+    name: str
+
+    def produce_inp_lines(self) -> typing.Iterable[str]:
+        yield f"*SECTION CONTROLS, NAME={self.name}, HOURGLASS=ENHANCED"
+
+
+@dataclasses.dataclass(frozen=True)
 class SectionBase:
     name: str
     mat: material.MaterialBase
+    enhanced_hourglass: typing.Optional[HourglassControlEnhanced]
 
     def produce_inp_lines(self, elset: element.ElementSet):
         raise NotImplementedError()
@@ -18,23 +27,17 @@ class SolidSection(SectionBase):
     name: str
     mat: material.MaterialBase
     thickness: typing.Optional[float]
-    enhanced_hourglass: bool
 
     def produce_inp_lines(self, elset: element.ElementSet) -> typing.Iterable[str]:
         yield f"** Section: {self.name}"
 
-        hg_name = f"cd-{self.name}" if self.enhanced_hourglass else ""
-
         if self.enhanced_hourglass:
-            yield f"*Solid Section, elset={elset.get_name(base.SetContext.part)}, controls={hg_name}, material={self.mat.name}"
+            yield f"*Solid Section, elset={elset.get_name(base.SetContext.part)}, controls={self.enhanced_hourglass.name}, material={self.mat.name}"
         else:
             yield f"*Solid Section, elset={elset.get_name(base.SetContext.part)}, material={self.mat.name}"
 
         if self.thickness is not None:
             yield base.abaqus_float(self.thickness) + ", "
-
-        if self.enhanced_hourglass:
-            yield f"*SECTION CONTROLS, NAME={hg_name}, HOURGLASS=ENHANCED"
 
 
 @dataclasses.dataclass(frozen=True)

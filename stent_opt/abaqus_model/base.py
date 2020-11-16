@@ -266,7 +266,9 @@ def abaqus_float(x) -> str:
     maybe_float = str(x)
     if "e" in maybe_float.lower():
         if "." not in maybe_float:
-            raise ValueError(maybe_float)
+            pre, post = maybe_float.split('e')
+            pre_dot = pre + ".0"
+            return pre_dot + 'e' + post
 
     else:
         if "." not in maybe_float:
