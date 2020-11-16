@@ -31,12 +31,13 @@ general_components = [
 ]
 
 
-def produce_inp_lines(output_components: typing.Iterable[T_OutputRequest]) -> typing.Iterable[str]:
+def produce_inp_lines(abaqus_output_time_interval: float, output_components: typing.Iterable[T_OutputRequest]) -> typing.Iterable[str]:
     # Output requests
     yield from base.inp_heading("OUTPUT REQUESTS")
     yield "*Restart, write, overlay, number interval=1, time marks=YES"
     yield from base.inp_heading("FIELD OUTPUT: F-Output-1")
-    yield "*Output, field, time interval=0.1"
+
+    yield f"*Output, field, time interval={base.abaqus_float(abaqus_output_time_interval)}"
 
     out_comps = list(output_components)
 

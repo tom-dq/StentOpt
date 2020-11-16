@@ -32,13 +32,15 @@ except KeyError:
 
 
 
-def make_a_stent(stent_design: StentDesign):
+def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign):
 
     model = main.AbaqusModel("StentModel")
 
     element_dimensions = stent_design.stent_params.stent_element_dimensions
     node_num_idx_pos = design.generate_nodes(stent_design.stent_params)
     node_pos = {iNode: xyz for iNode, _, xyz in node_num_idx_pos}
+    model.abaqus_output_time_interval = optim_params.abaqus_output_time_interval
+    model.abaqus_target_increment = optim_params.abaqus_target_increment
 
     # Potentially modify the parameters if it's 2D
     if element_dimensions == 3:
@@ -75,6 +77,7 @@ def make_a_stent(stent_design: StentDesign):
             name="SolidSteel",
             mat=steel,
             thickness=section_thickness,
+            enhanced_hourglass=True,
         )
 
         stent_part = part.Part(
@@ -312,7 +315,7 @@ def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.
     t2 = 3.0
 
     step_expand = step.StepDynamicExplicit(
-        name=f"Expand",
+        name=f"ExpandHold",
         step_time=t1,
         bulk_visc_b1=step.FALLBACK_VISC_B1,
         bulk_visc_b2=step.FALLBACK_VISC_B2,
@@ -333,6 +336,7 @@ def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.
 
     amp_data = (
         amplitude.XY(0.0, 0.0),
+        amplitude.XY(0.8*t1, 1.0),
         amplitude.XY(t1, 1.0),
     )
     amp = amplitude.Amplitude("Amp-1", amp_data)
@@ -606,8 +610,8 @@ def write_model(model: main.AbaqusModel, fn_inp):
             fOut.write(l + "\n")
 
 
-def make_stent_model(stent_design: StentDesign, fn_inp: str):
-    model = make_a_stent(stent_design)
+def make_stent_model(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign, fn_inp: str):
+    model = make_a_stent(optim_params, stent_design)
     create_surfaces(stent_design.stent_params, model)
     apply_loads(stent_design.stent_params, model)
     add_interaction(stent_design.stent_params, model)
@@ -697,7 +701,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         starting_i = 0
         fn_inp = history.make_fn_in_dir(working_dir, ".inp", starting_i)
         current_design = design.make_initial_design(stent_params)
-        make_stent_model(current_design, fn_inp)
+        make_stent_model(optim_params, current_design, fn_inp)
 
         run_model(optim_params, fn_inp)
         perform_extraction(
@@ -736,7 +740,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
         done = optim_params.is_converged(old_design, new_design, i_current)
 
-        make_stent_model(new_design, fn_inp)
+        make_stent_model(optim_params, new_design, fn_inp)
         run_model(optim_params, fn_inp)
 
         fn_db_current = history.make_fn_in_dir(working_dir, ".db", i_current)

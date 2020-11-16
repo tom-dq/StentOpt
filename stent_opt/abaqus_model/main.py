@@ -14,6 +14,8 @@ class AbaqusModel:
     step_loads: typing.Set[typing.Tuple[step.StepBase, base.LoadBoundaryBase]]
     interactions: typing.Set[interaction.InteractionBase]
     boundary_conditions: typing.Set[boundary_condition.BoundaryBase]
+    abaqus_output_time_interval: float
+    abaqus_target_increment: float
 
     _main_sep_line: str = "** -----------------------------"
 
@@ -24,6 +26,8 @@ class AbaqusModel:
         self.step_loads = set()
         self.interactions = set()
         self.boundary_conditions = set()
+        self.abaqus_output_time_interval = 0.1
+        self.abaqus_target_increment = 1e-5
 
     def add_instance(self, one_instance: instance.Instance):
         if one_instance.name in self.instances:
@@ -187,7 +191,7 @@ class AbaqusModel:
             if is_first_step:
                 yield "** Mass Scaling: Semi-Automatic"
                 yield "**               Whole Model"
-                yield "*Variable Mass Scaling, dt=1e-05, type=set equal dt, frequency=1"
+                yield f"*Variable Mass Scaling, dt={base.abaqus_float(self.abaqus_target_increment)}, type=set equal dt, frequency=1"
 
             yield from base.inp_heading("LOADS")
 
@@ -206,7 +210,7 @@ class AbaqusModel:
 
             yield from self._produce_inp_lines_interactions(step_dependent=True)
 
-            yield from output_requests.produce_inp_lines(output_requests.general_components)
+            yield from output_requests.produce_inp_lines(self.abaqus_output_time_interval, output_requests.general_components)
 
             # Have to end the step here, after the loads have been output.
 

@@ -18,12 +18,24 @@ class SolidSection(SectionBase):
     name: str
     mat: material.MaterialBase
     thickness: typing.Optional[float]
+    enhanced_hourglass: bool
 
     def produce_inp_lines(self, elset: element.ElementSet) -> typing.Iterable[str]:
         yield f"** Section: {self.name}"
-        yield f"*Solid Section, elset={elset.get_name(base.SetContext.part)}, material={self.mat.name}"
+
+        hg_name = f"cd-{self.name}" if self.enhanced_hourglass else ""
+
+        if self.enhanced_hourglass:
+            yield f"*Solid Section, elset={elset.get_name(base.SetContext.part)}, controls={hg_name}, material={self.mat.name}"
+        else:
+            yield f"*Solid Section, elset={elset.get_name(base.SetContext.part)}, material={self.mat.name}"
+
         if self.thickness is not None:
             yield base.abaqus_float(self.thickness) + ", "
+
+        if self.enhanced_hourglass:
+            yield f"*SECTION CONTROLS, NAME={hg_name}, HOURGLASS=ENHANCED"
+
 
 @dataclasses.dataclass(frozen=True)
 class MembraneSection(SectionBase):
