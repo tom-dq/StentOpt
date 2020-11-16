@@ -623,7 +623,7 @@ def kill_process_id(proc_id: int):
 
     process.kill()
 
-def run_model(inp_fn):
+def run_model(optim_params, inp_fn):
     old_working_dir = os.getcwd()
 
 
@@ -631,6 +631,9 @@ def run_model(inp_fn):
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
     args = ['abaqus.bat', f'cpus={this_computer.n_cpus_abaqus}', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+
+    if optim_params.use_double_precision:
+        args.append('double')
 
     os.chdir(path)
 
@@ -693,7 +696,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         current_design = design.make_initial_design(stent_params)
         make_stent_model(current_design, fn_inp)
 
-        run_model(fn_inp)
+        run_model(optim_params, fn_inp)
         perform_extraction(
             history.make_fn_in_dir(working_dir, ".odb", starting_i),
             history.make_fn_in_dir(working_dir, ".db", starting_i),
@@ -731,7 +734,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         done = optim_params.is_converged(old_design, new_design, i_current)
 
         make_stent_model(new_design, fn_inp)
-        run_model(fn_inp)
+        run_model(optim_params, fn_inp)
 
         fn_db_current = history.make_fn_in_dir(working_dir, ".db", i_current)
         perform_extraction(fn_odb, fn_db_current, new_design.stent_params.nodal_z_override_in_odb)

@@ -372,6 +372,9 @@ def _item_to_db_strings(key, val, this_item_type) -> typing.Iterable[typing.Tupl
     if this_item_type in (int, float, str):
         yield key, str(val)
 
+    elif this_item_type == bool:
+        yield key, val
+
     elif val is None:
         # Actual null in the DB.
         yield key, None
