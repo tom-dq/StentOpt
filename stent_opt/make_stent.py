@@ -18,6 +18,8 @@ from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalSurf
 from stent_opt.struct_opt import generation, optimisation_parameters
 
 from stent_opt.struct_opt import history
+from stent_opt.struct_opt.computer import this_computer
+
 
 working_dir_orig = os.getcwd()
 working_dir_extract = os.path.join(working_dir_orig, "odb_interface")
@@ -27,36 +29,6 @@ try:
     os.environ.pop('PYTHONIOENCODING')
 except KeyError:
     pass
-
-
-def _get_next_free_dir(base_dir):
-    def idea(i):
-        return f"AA-{i}"
-
-    existing_stuff = set(os.listdir(base_dir))
-
-    def is_already_there(f):
-        return f in existing_stuff
-
-    all_proposals = (idea(x) for x in itertools.count())
-    good_proposals = itertools.dropwhile(is_already_there, all_proposals)
-    one_good_propsal = next(good_proposals)
-    return os.path.join(base_dir, one_good_propsal)
-
-
-# Different stuff for which computer we're on
-if psutil.cpu_count(logical=False) == 2:
-    laptop = True
-    N_CPUS_ABAQUS = 1  # Make this 1 on my laptop so I don't get the firewall message.
-    working_dir = _get_next_free_dir(r"C:\TEMP\aba")
-
-elif psutil.cpu_count(logical=False) == 8:
-    laptop = False
-    N_CPUS_ABAQUS = 12  # 12 is good for bigger models
-    working_dir = _get_next_free_dir(r"E:\Simulations\StentOpt")
-
-else:
-    raise ValueError()
 
 
 
@@ -658,7 +630,7 @@ def run_model(inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', f'cpus={N_CPUS_ABAQUS}', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
+    args = ['abaqus.bat', f'cpus={this_computer.n_cpus_abaqus}', f'job={fn_solo}', "ask_delete=OFF", 'interactive']
 
     os.chdir(path)
 
@@ -774,8 +746,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 if __name__ == "__main__":
 
     stent_params = design.basic_stent_params
-    optim_params = optimisation_parameters.active._replace(working_dir=str(working_dir))
-
+    optim_params = optimisation_parameters.active._replace(working_dir=str(this_computer.working_dir))
 
     do_opt(stent_params, optim_params)
 

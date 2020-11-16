@@ -10,19 +10,24 @@ import numpy
 
 from stent_opt.abaqus_model import base, element
 from stent_opt.struct_opt import history, design
+from stent_opt.struct_opt.computer import this_computer
 
 holoviews.extension('bokeh')
 
 def _get_most_recent_working_dir() -> pathlib.Path:
-    subdirs = (p for p in pathlib.Path(r"C:\TEMP\aba").iterdir() if p.is_dir())
+
+    subdirs = (p for p in pathlib.Path(this_computer.base_working_dir).iterdir() if p.is_dir())
 
     def most_recent(p: pathlib.Path):
         return p.stat().st_ctime
+        #text, num = p.name.split('-')[0:2]
+        #return text, int(num), p.stat().st_ctime
 
     return max(subdirs, key=most_recent)
 
 
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-103")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
+WORKING_DIR_TEMP = _get_most_recent_working_dir()
+# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-103")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
 FIG_SIZE_UNI = (2000, 1350)
 FIG_SIZE_LAPTOP = (1200, 750)
 
