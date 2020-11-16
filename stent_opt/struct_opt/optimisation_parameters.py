@@ -52,6 +52,7 @@ class OptimParams(typing.NamedTuple):
     use_double_precision: bool
     abaqus_output_time_interval: float
     abaqus_target_increment: float
+    release_stent_after_expansion: bool
 
     def _target_volume_ratio_clamped(self, stent_design: "design.StentDesign", iter_num: int) -> float:
         existing_volume_ratio = stent_design.volume_ratio()
@@ -168,8 +169,9 @@ active = OptimParams(
     gaussian_sigma=0.75,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
-    abaqus_output_time_interval=0.02,
+    abaqus_output_time_interval=0.1,
     abaqus_target_increment=1e-6,
+    release_stent_after_expansion=False,
 )
 
 

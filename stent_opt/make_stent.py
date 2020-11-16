@@ -301,18 +301,18 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
             create_elem_surface(instance_cyl, all_cyl_elements, GlobalSurfNames.CYL_INNER, surface.SurfaceFace.SNEG)
 
 
-def apply_loads(stent_params: StentParams, model: main.AbaqusModel):
+def apply_loads(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
     if stent_params.actuation == Actuation.rigid_cylinder:
         _apply_loads_enforced_disp_rigid_cyl(stent_params, model)
 
     elif stent_params.actuation == Actuation.enforced_displacement_plane:
-        _apply_loads_enforced_disp_2d_planar(stent_params, model)
+        _apply_loads_enforced_disp_2d_planar(optim_params, stent_params, model)
 
     else:
         _apply_loads_pressure(stent_params, model)
 
 
-def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.AbaqusModel):
+def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
     t1 = 2.0
     t2 = 3.0
 
@@ -323,15 +323,17 @@ def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.
         bulk_visc_b2=step.FALLBACK_VISC_B2,
     )
 
-    step_release = step.StepDynamicExplicit(
-        name=f"Release",
-        step_time=t2,
-        bulk_visc_b1=step.FALLBACK_VISC_B1,
-        bulk_visc_b2=step.FALLBACK_VISC_B2,
-    )
+    if optim_params.release_stent_after_expansion:
+        step_release = step.StepDynamicExplicit(
+            name=f"Release",
+            step_time=t2,
+            bulk_visc_b1=step.FALLBACK_VISC_B1,
+            bulk_visc_b2=step.FALLBACK_VISC_B2,
+        )
 
     model.add_step(step_expand)
-    model.add_step(step_release)
+    if optim_params.release_stent_after_expansion:
+        model.add_step(step_release)
 
     # Maximum displacement
     max_displacement = stent_params.theta_arc_initial * (stent_params.expansion_ratio - 1.0)
@@ -380,9 +382,9 @@ def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.
 
 
     model.add_load_specific_steps([step_expand], expand_disp)
-    model.add_load_specific_steps([step_release], let_go_disp)
+    if optim_params.release_stent_after_expansion: model.add_load_specific_steps([step_release], let_go_disp)
     model.add_load_specific_steps([step_expand], hold_base1)
-    model.add_load_specific_steps([step_release], hold_base2)
+    if optim_params.release_stent_after_expansion: model.add_load_specific_steps([step_release], hold_base2)
     
     # Rebound pressure (kind of like the blood vessel squeezing in).
 
@@ -406,7 +408,7 @@ def _apply_loads_enforced_disp_2d_planar(stent_params: StentParams, model: main.
         value=pressure_load,
     )
 
-    model.add_load_specific_steps([step_release], inner_pressure)
+    if optim_params.release_stent_after_expansion: model.add_load_specific_steps([step_release], inner_pressure)
 
 
 def _apply_loads_enforced_disp_rigid_cyl(stent_params: StentParams, model: main.AbaqusModel):
@@ -615,7 +617,7 @@ def write_model(model: main.AbaqusModel, fn_inp):
 def make_stent_model(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign, fn_inp: str):
     model = make_a_stent(optim_params, stent_design)
     create_surfaces(stent_design.stent_params, model)
-    apply_loads(stent_design.stent_params, model)
+    apply_loads(optim_params, stent_design.stent_params, model)
     add_interaction(stent_design.stent_params, model)
     apply_boundaries(stent_design.stent_params, model)
     print(fn_inp, f"Volume Ratio={stent_design.volume_ratio()}", sep='\t')
