@@ -17,6 +17,7 @@ class VolumeTargetOpts(typing.NamedTuple):
     def from_db_strings(cls, data):
         return history.nt_from_db_strings(cls, data)
 
+
 T_elem_result = typing.Union[db_defs.ElementStress, db_defs.ElementPEEQ]
 
 
@@ -36,6 +37,7 @@ class RegionGradient(typing.NamedTuple):
 
 T_vol_func = typing.Callable[[VolumeTargetOpts, int], float]
 T_nodal_pos_func = typing.Callable[["design.StentDesign", typing.Iterable[db_defs.NodePos]], typing.Iterable[score.PrimaryRankingComponent]]   # Accepts a design and some node positions, and generates ranking components.
+
 
 class OptimParams(typing.NamedTuple):
     """Parameters which control the optimisation."""

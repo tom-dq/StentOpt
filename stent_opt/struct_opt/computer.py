@@ -36,7 +36,7 @@ if psutil.cpu_count(logical=False) == 2:
 elif psutil.cpu_count(logical=False) == 8:
     n_cpus = 8
     base_working_dir = r"E:\Simulations\StentOpt"
-    fig_size = (2000, 1350)
+    fig_size = (1200, 750)  # (2000, 1350)
 
 else:
     raise ValueError()
