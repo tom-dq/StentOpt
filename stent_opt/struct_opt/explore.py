@@ -22,9 +22,12 @@ def _get_most_recent_working_dir() -> pathlib.Path:
     return max(subdirs, key=most_recent)
 
 
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-101")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-103")  # _get_most_recent_working_dir() # pathlib.Path(r"E:\Simulations\StentOpt\AA-33")
 FIG_SIZE_UNI = (2000, 1350)
 FIG_SIZE_LAPTOP = (1200, 750)
+
+UNLIMITED = 1_000_000_000_000  # Should be enough
+STOP_AT_INCREMENT = 2
 
 FIG_SIZE = FIG_SIZE_UNI
 
@@ -37,7 +40,7 @@ class ContourView(typing.NamedTuple):
 def get_status_checks() -> typing.List["history.StatusCheck"]:
     history_db = history.make_history_db(WORKING_DIR_TEMP)
     with history.History(history_db) as hist:
-        return list(hist.get_status_checks(iter_greater_than=0))
+        return list(hist.get_status_checks(iter_greater_than=0, iter_less_than_equal=UNLIMITED))
 
 
 def _build_contour_view_data(hist: history.History) -> typing.Iterable[typing.Tuple[ContourView, typing.Dict[int, float]]]:
@@ -50,7 +53,7 @@ def _build_contour_view_data(hist: history.History) -> typing.Iterable[typing.Tu
             deformed=None,
         )
 
-    for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(0), make_contour_view):
+    for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(0, STOP_AT_INCREMENT), make_contour_view):
         elem_vals = {status_check.elem_num: status_check.metric_val for status_check in sub_iter}
         yield contour_view, elem_vals
 

@@ -434,7 +434,7 @@ def evolve_decider_test():
             active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements))
         )
 
-        status_checks = hist.get_status_checks(0)
+        status_checks = hist.get_status_checks(0, 1_000_000_000)
         smoothed_checks = [st for st in status_checks if st.stage == history.StatusCheckStage.smoothed]
         smoothed = {elem_num_to_indices[st.elem_num]: st.metric_val for st in smoothed_checks}
 

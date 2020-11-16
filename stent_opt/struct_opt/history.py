@@ -247,9 +247,9 @@ class History:
                 active_elements=frozenset( (elem_num_to_idx[iElem] for iElem in maybe_snapshot.active_elements)),
             )
 
-    def get_status_checks(self, iter_greater_than: int) -> typing.Iterable[StatusCheck]:
+    def get_status_checks(self, iter_greater_than: int, iter_less_than_equal: int) -> typing.Iterable[StatusCheck]:
         with self.connection:
-            rows = self.connection.execute("SELECT * FROM StatusCheck WHERE iteration_num >= ? ORDER BY iteration_num, metric_name ", (iter_greater_than,))
+            rows = self.connection.execute("SELECT * FROM StatusCheck WHERE iteration_num >= ? AND ? >= iteration_num ORDER BY iteration_num, metric_name ", (iter_greater_than,iter_less_than_equal))
             yield from (StatusCheck(*row).from_db() for row in rows)
 
     def get_node_positions(self) -> typing.Iterable[NodePosition]:
@@ -407,7 +407,7 @@ def _item_to_db_strings(key, val, this_item_type) -> typing.Iterable[typing.Tupl
 def nt_to_db_strings(nt_instance) -> typing.Iterable[typing.Tuple[str, typing.Optional[str]]]:
     """(key, value) pairs which can go into a database"""
     for key, val in nt_instance._asdict().items():
-        this_item_type = _get_type_ignoring_nones(nt_instance._field_types[key])
+        this_item_type = _get_type_ignoring_nones(nt_instance.__annotations__[key])
         yield from _item_to_db_strings(key, val, this_item_type)
 
 
@@ -451,7 +451,7 @@ def nt_from_db_strings(nt_class, data):
             # Have to delegate to a child class to create.
             without_prefix_data = [remove_prefix(one_data) for one_data in data_sublist]
 
-            nt_subclass = nt_class._field_types[prefix]
+            nt_subclass = nt_class.__annotations__[prefix]
             single_type = _get_type_ignoring_nones(nt_subclass)
 
             # Is a sub-branch namedtuple or list of items.
@@ -468,7 +468,7 @@ def nt_from_db_strings(nt_class, data):
         else:
             # Should be able to create it directly.
             for name, value in data_sublist:
-                base_type = _get_type_ignoring_nones(nt_class._field_types[name])
+                base_type = _get_type_ignoring_nones(nt_class.__annotations__[name])
 
                 if value is None:
                     working_data[name] = None

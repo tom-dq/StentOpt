@@ -1,0 +1,10 @@
+holoviews
+panel
+numpy==1.19.3
+bokeh
+psutil
+matplotlib
+scipy
+rmsd
+networkx
+
