@@ -3,6 +3,7 @@ import typing
 from stent_opt.odb_interface import db_defs
 from stent_opt.struct_opt import common, design, history, score
 
+from stent_opt.abaqus_model import step
 
 class VolumeTargetOpts(typing.NamedTuple):
     """Sets a target volume ratio, at a given iteration."""
@@ -53,6 +54,7 @@ class OptimParams(typing.NamedTuple):
     abaqus_output_time_interval: float
     abaqus_target_increment: float
     release_stent_after_expansion: bool
+    analysis_step_type: typing.Type[step.StepBase]
 
     def _target_volume_ratio_clamped(self, stent_design: "design.StentDesign", iter_num: int) -> float:
         existing_volume_ratio = stent_design.volume_ratio()
@@ -172,6 +174,7 @@ active = OptimParams(
     abaqus_output_time_interval=0.1,
     abaqus_target_increment=1e-6,
     release_stent_after_expansion=False,
+    analysis_step_type=step.StepDynamicImplicit,
 )
 
 

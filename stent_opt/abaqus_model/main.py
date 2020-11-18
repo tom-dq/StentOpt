@@ -199,13 +199,16 @@ class AbaqusModel:
 
     def _produce_inp_lines_steps(self) ->  typing.Iterable[str]:
         yield self._main_sep_line
+
+        is_explicit = step.analysis_is_explicit(self.steps)
         for idx_step, one_step in enumerate(self.steps):
 
             yield from base.inp_heading(f"STEP: {one_step.name}")
             yield from one_step.produce_inp_lines()
 
             is_first_step = idx_step == 0
-            if is_first_step:
+
+            if is_first_step and is_explicit:
                 yield "** Mass Scaling: Semi-Automatic"
                 yield "**               Whole Model"
                 yield f"*Variable Mass Scaling, dt={base.abaqus_float(self.abaqus_target_increment)}, type=set equal dt, frequency=1"

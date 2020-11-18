@@ -465,6 +465,26 @@ def nt_from_db_strings(nt_class, data):
         else:
             return None, one_data
 
+    def get_class_or_none(base_type):
+        """If base_type is typing.Type[AAA], returns AAA. Otherwise, None."""
+        if getattr(base_type, "_name", None) != "Type":
+            return None
+
+        if not base_type.__args__:
+            return None
+
+        if len(base_type.__args__) != 1:
+            raise ValueError("Not sure how to deal with this case!")
+
+        return base_type.__args__[0]
+
+    def is_typing_type(base_type):
+        if get_class_or_none(base_type) is None:
+            return False
+
+        else:
+            return True
+
     working_data = {}
     for prefix, data_sublist in itertools.groupby(sorted(data), key=get_prefix):
         if prefix:
@@ -496,6 +516,20 @@ def nt_from_db_strings(nt_class, data):
                 elif base_type in _enum_types:
                     # Is an enum, lookup from the dictionary.
                     working_data[name] = base_type[value]
+
+                elif is_typing_type(base_type):
+                    base_class = get_class_or_none(base_type)
+                    # Could be any one of the subclasses...
+
+                    match_subclasses = [sc for sc in base_class.__subclasses__() if sc.__name__ == value]
+                    if not match_subclasses:
+                        raise ValueError(f"Did not find anything called {value} among the subclasses of {base_class}.")
+
+                    elif len(match_subclasses) == 1:
+                        working_data[name] = match_subclasses[0]
+
+                    else:
+                        raise ValueError("What?")
 
                 elif single_item_from_string(value):
                     working_data[name] = single_item_from_string(value)

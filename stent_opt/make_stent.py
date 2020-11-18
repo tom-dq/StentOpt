@@ -316,19 +316,15 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
     t1 = 2.0
     t2 = 3.0
 
-    step_expand = step.StepDynamicExplicit(
+    step_expand = optim_params.analysis_step_type(
         name=f"ExpandHold",
         step_time=t1,
-        bulk_visc_b1=step.FALLBACK_VISC_B1,
-        bulk_visc_b2=step.FALLBACK_VISC_B2,
     )
 
     if optim_params.release_stent_after_expansion:
-        step_release = step.StepDynamicExplicit(
+        step_release = optim_params.analysis_step_type(
             name=f"Release",
             step_time=t2,
-            bulk_visc_b1=step.FALLBACK_VISC_B1,
-            bulk_visc_b2=step.FALLBACK_VISC_B2,
         )
 
     model.add_step(step_expand)
@@ -668,6 +664,7 @@ def run_model(optim_params, inp_fn):
             pass
 
     if ret_code:
+        print(path)
         print(out.decode())
         print(errs.decode())
         raise subprocess.SubprocessError(ret_code)

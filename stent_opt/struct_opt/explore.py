@@ -2,6 +2,7 @@ import collections
 import itertools
 import pathlib
 import typing
+import enum
 
 import holoviews
 import panel
@@ -13,6 +14,21 @@ from stent_opt.struct_opt import history, design
 from stent_opt.struct_opt.computer import this_computer
 
 holoviews.extension('bokeh')
+
+
+class DeformationView(enum.Enum):
+    undeformed = enum.auto()
+    deformed = enum.auto()
+    both = enum.auto()
+
+    @property
+    def create_def(self) -> bool:
+        return self in (DeformationView.deformed, DeformationView.both)
+
+    @property
+    def create_undef(self) -> bool:
+        return self in (DeformationView.undeformed, DeformationView.both)
+
 
 def _get_most_recent_working_dir() -> pathlib.Path:
 
@@ -27,9 +43,10 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 
 
 WORKING_DIR_TEMP = _get_most_recent_working_dir()
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-124")
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
-STOP_AT_INCREMENT = 5
+STOP_AT_INCREMENT = UNLIMITED
 
 
 class ContourView(typing.NamedTuple):
@@ -57,8 +74,8 @@ def _build_contour_view_data(hist: history.History) -> typing.Iterable[typing.Tu
     metric_names = hist.get_metric_names()
 
     print(metric_names)
-    good_metric_names = ["NormSum[RegionGradient+ElementPEEQ+ElementStress+LocalDeformation]"]
     good_metric_names = metric_names
+    good_metric_names = ["ElementStress"]
 
     for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(0, STOP_AT_INCREMENT, good_metric_names), make_contour_view):
         elem_vals = {status_check.elem_num: status_check.metric_val for status_check in sub_iter}
@@ -156,7 +173,8 @@ def make_quadmesh(
 
     return holoviews.Overlay(qmesh_list)
 
-def make_dashboard(working_dir: pathlib.Path):
+
+def make_dashboard(working_dir: pathlib.Path, deformation_view: DeformationView):
     # Get the data from the
     print(working_dir)
 
@@ -178,11 +196,11 @@ def make_dashboard(working_dir: pathlib.Path):
         plot_dict = {}
         for contour_view_raw, elem_data in _build_contour_view_data(hist):
 
-            for deformed, node_pos in (
-                    (False, node_pos_undeformed),
-                    (True, node_pos_deformed_all_iters[contour_view_raw.iteration_num]),
+            deformation_options = []
+            if deformation_view.create_undef: deformation_options.append( (False, node_pos_undeformed) )
+            if deformation_view.create_def: deformation_options.append( (True, node_pos_deformed_all_iters[contour_view_raw.iteration_num]) )
 
-            ):
+            for deformed, node_pos in deformation_options:
                 contour_view = contour_view_raw._replace(deformed=deformed)
                 active_elements = frozenset(num_to_idx[iElem] for iElem in snapshots[contour_view.iteration_num].active_elements)
                 print(contour_view)
@@ -248,4 +266,4 @@ def main():
 
 
 if __name__ == '__main__':
-    make_dashboard(WORKING_DIR_TEMP)
+    make_dashboard(WORKING_DIR_TEMP, DeformationView.deformed)
