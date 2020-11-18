@@ -58,6 +58,7 @@ def _build_contour_view_data(hist: history.History) -> typing.Iterable[typing.Tu
 
     print(metric_names)
     good_metric_names = ["NormSum[RegionGradient+ElementPEEQ+ElementStress+LocalDeformation]"]
+    good_metric_names = metric_names
 
     for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(0, STOP_AT_INCREMENT, good_metric_names), make_contour_view):
         elem_vals = {status_check.elem_num: status_check.metric_val for status_check in sub_iter}
@@ -151,10 +152,9 @@ def make_quadmesh(
         qmesh_list.append(qmesh_ghost)
 
     for qmesh in qmesh_list:
-        qmesh.opts(aspect='equal', line_width=0.1, padding=0.1, width=this_computer.fig_size[0], height=this_computer.fig_size[1], colorbar=True)
+        qmesh.opts(aspect='equal', line_width=0.1, padding=0.1, width=this_computer.fig_size[0], height=this_computer.fig_size[1], colorbar=True, bgcolor='lightgray')
 
     return holoviews.Overlay(qmesh_list)
-
 
 def make_dashboard(working_dir: pathlib.Path):
     # Get the data from the
