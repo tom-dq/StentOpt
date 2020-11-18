@@ -234,10 +234,11 @@ class AbaqusModel:
 
             # Have to end the step here, after the loads have been output.
 
-            # This outputs stuff we can read without starting CAE
-            yield "*FILE OUTPUT, NUMBER INTERVAL=1"
-            yield "*EL FILE"
-            yield "S"
+            if is_explicit:
+                # This outputs stuff we can read without starting CAE
+                yield "*FILE OUTPUT, NUMBER INTERVAL=1"
+                yield "*EL FILE"
+                yield "S"
 
             # abaqus.bat job=job-12 interactive     >>> Run
             # abaqus.bat job=job-12 convert=select  >>> Make .fil from .sel

@@ -7,7 +7,8 @@ import psutil
 
 
 class Computer(typing.NamedTuple):
-    n_cpus_abaqus: int
+    n_cpus_abaqus_explicit: int
+    n_cpus_abaqus_implicit: int
     base_working_dir: str
     working_dir: str
     fig_size: typing.Tuple[int, int]
@@ -48,7 +49,8 @@ else:
     raise ValueError()
 
 this_computer = Computer(
-    n_cpus_abaqus=n_cpus,
+    n_cpus_abaqus_explicit=n_cpus,
+    n_cpus_abaqus_implicit=1,
     base_working_dir=base_working_dir,
     working_dir=_get_next_free_dir(base_working_dir),
     fig_size=fig_size,

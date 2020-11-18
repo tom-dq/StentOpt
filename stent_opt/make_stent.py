@@ -634,7 +634,8 @@ def run_model(optim_params, inp_fn):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    args = ['abaqus.bat', f'cpus={this_computer.n_cpus_abaqus}', f'job={fn_solo}']
+    n_cpus = this_computer.n_cpus_abaqus_explicit if optim_params.is_explicit else this_computer.n_cpus_abaqus_implicit
+    args = ['abaqus.bat', f'cpus={n_cpus}', f'job={fn_solo}']
 
     # This seems to need to come right after "job" in the argument list
     if optim_params.use_double_precision:

@@ -99,6 +99,11 @@ class OptimParams(typing.NamedTuple):
 
         return list(self.to_db_strings()) == list(other.to_db_strings())
 
+    @property
+    def is_explicit(self) -> bool:
+        return step.is_explicit(self.analysis_step_type)
+
+
 # Functions which set a target volume ratio. These are idealised.
 def vol_reduce_then_flat(vol_target_opts: VolumeTargetOpts, iter_num: int) -> float:
 

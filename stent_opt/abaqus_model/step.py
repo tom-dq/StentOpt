@@ -45,11 +45,12 @@ class StepDynamicExplicit(StepBase):
         yield base.abaqus_float(self.bulk_visc_b1) + ", " + base.abaqus_float(self.bulk_visc_b2)
 
 
-def step_is_explicit(step: StepBase) -> bool:
-    if isinstance(step, StepDynamicImplicit):
+def is_explicit(step: typing.Union[StepBase, typing.Type[StepBase]]) -> bool:
+    """Should work for the dataclass or an instance thereof."""
+    if isinstance(step, StepDynamicImplicit) or step == StepDynamicImplicit:
         return False
 
-    elif isinstance(step, StepDynamicExplicit):
+    elif isinstance(step, StepDynamicExplicit) or step == StepDynamicExplicit:
         return True
 
     else:
@@ -60,7 +61,7 @@ def analysis_is_explicit(steps: typing.List[StepBase]) -> bool:
     if not steps:
         raise ValueError("No step!")
 
-    opts = {step_is_explicit(step) for step in steps}
+    opts = {is_explicit(step) for step in steps}
     if len(opts) != 1:
         raise ValueError("Ambiguous steps")
 
@@ -80,3 +81,9 @@ def make_test_step(n: int) -> StepDynamicExplicit:
 if __name__ == "__main__":
     for l in make_test_step(1).produce_inp_lines():
         print(l)
+
+    aaa = StepDynamicExplicit("aaa", 1.2)
+    bbb = StepDynamicImplicit("bbb", 1.4)
+
+    for x in [aaa, StepDynamicExplicit, bbb, StepDynamicImplicit]:
+        print(x, is_explicit(x))
