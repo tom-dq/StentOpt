@@ -2,6 +2,3 @@ abaqus*.rec
 abaqus.rpy*
 abaqus_pde.deps
 .idea
- __pycache__/
- *.pyc
- **/*.pyc
