@@ -29,7 +29,7 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 WORKING_DIR_TEMP = _get_most_recent_working_dir()
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
-STOP_AT_INCREMENT = UNLIMITED
+STOP_AT_INCREMENT = 5
 
 
 class ContourView(typing.NamedTuple):
