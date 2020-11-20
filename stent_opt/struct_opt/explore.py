@@ -43,7 +43,7 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 
 
 WORKING_DIR_TEMP = _get_most_recent_working_dir()
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-124")
+# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-124")
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
 STOP_AT_INCREMENT = UNLIMITED
@@ -75,7 +75,7 @@ def _build_contour_view_data(hist: history.History) -> typing.Iterable[typing.Tu
 
     print(metric_names)
     good_metric_names = metric_names
-    good_metric_names = ["ElementStress"]
+    good_metric_names = ["LocalDeformation"]
 
     for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(0, STOP_AT_INCREMENT, good_metric_names), make_contour_view):
         elem_vals = {status_check.elem_num: status_check.metric_val for status_check in sub_iter}

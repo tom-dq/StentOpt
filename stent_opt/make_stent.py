@@ -692,11 +692,17 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
     # If we've already started, use the most recent snapshot in the history.
     with history.History(history_db_fn) as hist:
-        hist.set_stent_params(stent_params)
-        hist.set_optim_params(optim_params)
         restart_i = hist.max_saved_iteration_num()
+        start_from_scratch = restart_i is None
 
-    start_from_scratch = restart_i is None
+        if start_from_scratch:
+            hist.set_stent_params(stent_params)
+            hist.set_optim_params(optim_params)
+
+        else:
+            old_stent_params = hist.get_stent_params()
+            if stent_params != old_stent_params:
+                raise ValueError(r"Something changed with the stent params - can't use this one!")
 
     if start_from_scratch:
         # Do the initial setup from a first model.

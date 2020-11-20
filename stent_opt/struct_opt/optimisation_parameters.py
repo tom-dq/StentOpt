@@ -153,11 +153,11 @@ def _clamp_update(old, new, max_delta):
 
 
 active = OptimParams(
-    max_change_in_vol_ratio=0.0015,  # Was 0.0025
+    max_change_in_vol_ratio=0.0025,  # Was 0.0025
     volume_target_opts=VolumeTargetOpts(
         initial_ratio=0.12,
-        floor_ratio=0.05,
-        reduction_iters=100,
+        floor_ratio=0.025,
+        reduction_iters=135,
     ),
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
@@ -179,7 +179,7 @@ active = OptimParams(
     abaqus_output_time_interval=0.1,
     abaqus_target_increment=1e-6,
     release_stent_after_expansion=False,
-    analysis_step_type=step.StepDynamicExplicit,
+    analysis_step_type=step.StepDynamicImplicit,
 )
 
 
