@@ -179,7 +179,7 @@ active = OptimParams(
     abaqus_output_time_interval=0.1,
     abaqus_target_increment=1e-6,
     release_stent_after_expansion=False,
-    analysis_step_type=step.StepDynamicImplicit,
+    analysis_step_type=step.StepDynamicExplicit,
 )
 
 
