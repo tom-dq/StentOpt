@@ -10,6 +10,7 @@ class HourglassControlEnhanced:
 
     def produce_inp_lines(self) -> typing.Iterable[str]:
         yield f"*SECTION CONTROLS, NAME={self.name}, HOURGLASS=ENHANCED"
+        yield "1., 1., 1."
 
 
 @dataclasses.dataclass(frozen=True)

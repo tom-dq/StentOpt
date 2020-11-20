@@ -52,7 +52,7 @@ this_computer = Computer(
     n_cpus_abaqus_explicit=n_cpus,
     n_cpus_abaqus_implicit=1,
     base_working_dir=base_working_dir,
-    # working_dir=_get_next_free_dir(base_working_dir),
-    working_dir=r"E:\Simulations\StentOpt\AA-134",
+    working_dir=_get_next_free_dir(base_working_dir),
+    # working_dir=r"E:\Simulations\StentOpt\AA-134",
     fig_size=fig_size,
 )

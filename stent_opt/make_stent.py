@@ -724,11 +724,13 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
             snapshot = history.Snapshot(
                 iteration_num=starting_i,
                 filename=str(fn_inp),
-                active_elements=frozenset(active_elem_nums))
+                active_elements=frozenset(active_elem_nums),
+            )
 
             hist.add_snapshot(snapshot)
 
         main_loop_start_i = 1
+
     else:
         print(f"Restarting from {restart_i}")
         main_loop_start_i = restart_i

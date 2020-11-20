@@ -6,6 +6,7 @@ from stent_opt.abaqus_model import base
 FALLBACK_VISC_B1 = 0.2  # Linear Bulk Viscosity Paramter - default in Abaqus is 0.06
 FALLBACK_VISC_B2 = 5.0  # Quadratic ... - default in Abaqus is 1.2
 
+
 @dataclasses.dataclass(frozen=True)
 class StepBase:
     name: str  # All materials have to have this!
@@ -20,8 +21,8 @@ class StepDynamicImplicit(StepBase):
     name: str
     step_time: float
     step_init: float = 0.1
-    step_minimum: float = 1e-5
-    max_incs: int = 10_000
+    step_minimum: float = 1e-7
+    max_incs: int = 100_000
 
     def produce_inp_lines(self) -> typing.Iterable[str]:
         yield f"*Step, name={self.name}, nlgeom=YES, inc={self.max_incs}"

@@ -216,8 +216,6 @@ def _get_ranking_functions(
 ) -> RankingResults:
     """Gets the abaqus results out of the sqlite DB and returns the optimsation element-wise effort results."""
 
-    iter_n_min_1 = iter_n - 1
-
     all_ranks = []
 
     # Gradient tracking

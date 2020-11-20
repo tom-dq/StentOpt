@@ -153,11 +153,11 @@ def _clamp_update(old, new, max_delta):
 
 
 active = OptimParams(
-    max_change_in_vol_ratio=0.0025,  # Was 0.0025
+    max_change_in_vol_ratio=0.005,  # Was 0.0025
     volume_target_opts=VolumeTargetOpts(
         initial_ratio=0.12,
-        floor_ratio=0.025,
-        reduction_iters=135,
+        floor_ratio=0.05,
+        reduction_iters=25,
     ),
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
