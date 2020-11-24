@@ -771,6 +771,35 @@ def make_initial_two_lines(stent_params: StentParams) -> StentDesign:
     return _make_design_from_line_segments(stent_params, xyz_point, width, nominal_radius)
 
 
+def _radius_test_param_curve(x_k=0.0, y_k=0.0) -> typing.Callable[[float], base.RThZ]:
+
+    def _make_param_polar_point_radius_test(t: float) -> base.RThZ:
+        # https://math.stackexchange.com/a/3324260
+        if t > 0.5:
+            mirror_point = _make_param_polar_point_radius_test(1.0 - t)
+            return mirror_point._replace(theta_deg=t)
+
+        k = int( (t+1) / 2 )
+        alpha = math.radians(150)
+        a = 0.4
+        r = a / math.sin(alpha)
+        return base.RThZ(
+            r=0.7,
+            theta_deg=x_k + r * math.sin(t - 2*k) * alpha,
+            z=y_k + (-1)**k * r * math.cos(t-2*k) * alpha,
+        )
+
+    return _make_param_polar_point_radius_test
+
+
+def make_initial_design_radius_test(stent_params: StentParams) -> StentDesign:
+    """Simple outline for testing the radius of curvature"""
+
+    width = 0.1
+    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
+
+
+
 make_initial_design = make_initial_two_lines
 
 
@@ -832,5 +861,19 @@ basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
 
 
 if __name__ == "__main__":
-    stent_design = make_initial_all_in(basic_stent_params)
-    show_initial_model_test(stent_design)
+
+    x = [x * 0.01 for x in range(101)]
+    f = _radius_test_param_curve()
+
+    ps = [f(xx) for xx in x ]
+    print(ps)
+
+    xxx = [p.to_planar_unrolled().x for p in ps]
+    yyy = [p.to_planar_unrolled().y for p in ps]
+
+    import matplotlib.pyplot as plt
+    plt.plot(xxx, yyy)
+    plt.show()
+
+    #stent_design = make_initial_all_in(basic_stent_params)
+    #show_initial_model_test(stent_design)
