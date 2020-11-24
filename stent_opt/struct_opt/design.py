@@ -771,7 +771,16 @@ def make_initial_two_lines(stent_params: StentParams) -> StentDesign:
     return _make_design_from_line_segments(stent_params, xyz_point, width, nominal_radius)
 
 
-def _radius_test_param_curve(x_k=0.0, y_k=0.0) -> typing.Callable[[float], base.RThZ]:
+def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major: float, D: float) -> typing.Callable[[float], base.RThZ]:
+
+
+    minor_centroid = (0.5 * stent_params.angle - D/2, r_minor)
+
+    phi = math.acos( D / (2 * (r_minor + r_major)))
+
+    major_centroid = (0.5 * stent_params.angle, r_minor + math.sin(phi) * (r_minor + r_major))
+
+    # TODO - up to here
 
     def _make_param_polar_point_radius_test(t: float) -> base.RThZ:
         # https://math.stackexchange.com/a/3324260
