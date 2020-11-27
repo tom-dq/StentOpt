@@ -749,7 +749,7 @@ def make_initial_all_in(stent_params: StentParams) -> StentDesign:
 def make_initial_two_lines(stent_params: StentParams) -> StentDesign:
     """Make a simpler sharp corner with straight edges."""
     width = 0.25
-    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
+    nominal_radius = stent_params.radial_midplane_initial
 
     z_left = 0.4 * stent_params.length
     z_right = 0.6 * stent_params.length
@@ -773,14 +773,25 @@ def make_initial_two_lines(stent_params: StentParams) -> StentDesign:
 
 def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major: float, D: float) -> typing.Callable[[float], base.RThZ]:
 
+    phi = math.acos(D / (2 * (r_minor + r_major)))
+    z_span_total_centreline = r_minor + math.sin(phi) * (r_minor + r_major) + r_major
+    z_left = 0.5 * (stent_params.length - z_span_total_centreline)
+    z_right = 0.5 * (stent_params.length + z_span_total_centreline)
 
-    minor_centroid = (0.5 * stent_params.angle - D/2, r_minor)
+    nominal_radius = stent_params.radial_midplane_initial
 
-    phi = math.acos( D / (2 * (r_minor + r_major)))
+    minor_centroid = base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle - D/2, z=r_minor)
+    major_centroid = base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=z_right-r_major)
 
-    major_centroid = (0.5 * stent_params.angle, r_minor + math.sin(phi) * (r_minor + r_major))
+    P1 = base.RThZ(r=nominal_radius, theta_deg=0.0, z=z_left)
+    P2 = base.RThZ(r=nominal_radius, theta_deg=minor_centroid.theta_deg, z=minor_centroid.z)
+    P3 = minor_centroid + base.RThZ(r=r_minor * math.sin(phi), theta_deg=r_minor * math.cos(phi), z=0)
+    P4 = base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=z_right)
 
-    # TODO - up to here
+    # TODO -plot and check
+    # TODO -interpolate
+
+
 
     def _make_param_polar_point_radius_test(t: float) -> base.RThZ:
         # https://math.stackexchange.com/a/3324260
@@ -788,15 +799,9 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
             mirror_point = _make_param_polar_point_radius_test(1.0 - t)
             return mirror_point._replace(theta_deg=t)
 
-        k = int( (t+1) / 2 )
-        alpha = math.radians(150)
-        a = 0.4
-        r = a / math.sin(alpha)
-        return base.RThZ(
-            r=0.7,
-            theta_deg=x_k + r * math.sin(t - 2*k) * alpha,
-            z=y_k + (-1)**k * r * math.cos(t-2*k) * alpha,
-        )
+        if t < 1/6:
+            # First segment - on the flat
+
 
     return _make_param_polar_point_radius_test
 
@@ -836,8 +841,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=150,  # 31
-        Z=1500,  # 120
+        Th=300,  # 31
+        Z=3000,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
