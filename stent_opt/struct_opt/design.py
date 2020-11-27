@@ -771,7 +771,7 @@ def make_initial_two_lines(stent_params: StentParams) -> StentDesign:
     return _make_design_from_line_segments(stent_params, xyz_point, width, nominal_radius)
 
 
-def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major: float, D: float) -> typing.Callable[[float], base.RThZ]:
+def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major: float, D: float) -> typing.Callable[[float], base.XYZ]:
 
     if (D/2) >= (r_major + r_minor):
         raise ValueError("Need larger radius or smaller gap")
@@ -826,9 +826,6 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
             angle_delta = ang_end - ang_start
             if flipped:
                 angle_delta = -1 * (math.pi * 2 - angle_delta)
-                #angle_delta = math.pi * 2 - angle_delta
-                #rat = 1-rat
-            
 
             ang_out = ang_start + rat * angle_delta
 
@@ -857,56 +854,58 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
 
 
     # TEMP - just while getting this going...
-    import matplotlib.pyplot as plt
-    def plot_point(p, label):
-        loc = f"{p.x}, {p.y}"
-        plt.text(p.x, p.y, f"{label}")
+    TEMP_TESTING_PLOT = True
+
+    if TEMP_TESTING_PLOT:
+        import matplotlib.pyplot as plt
+        def plot_point(p, label):
+            loc = f"{p.x}, {p.y}"
+            plt.text(p.x, p.y, f"{label}")
 
 
-    def plot_bounds():
-        points = (
-            base.RThZ(r=nominal_radius, theta_deg=0.0, z=y_left - 0.2 * y_span_total_centreline),
-            base.RThZ(r=nominal_radius, theta_deg=stent_params.angle, z=y_left - 0.2 * y_span_total_centreline),
-            base.RThZ(r=nominal_radius, theta_deg=stent_params.angle, z=y_right + 0.2 * y_span_total_centreline),
-            base.RThZ(r=nominal_radius, theta_deg=0.0, z=y_right + 0.2 * y_span_total_centreline),
-            base.RThZ(r=nominal_radius, theta_deg=0.0, z=y_left - 0.2 * y_span_total_centreline),
-        )
+        def plot_bounds():
+            points = (
+                base.RThZ(r=nominal_radius, theta_deg=0.0, z=y_left - 0.2 * y_span_total_centreline),
+                base.RThZ(r=nominal_radius, theta_deg=stent_params.angle, z=y_left - 0.2 * y_span_total_centreline),
+                base.RThZ(r=nominal_radius, theta_deg=stent_params.angle, z=y_right + 0.2 * y_span_total_centreline),
+                base.RThZ(r=nominal_radius, theta_deg=0.0, z=y_right + 0.2 * y_span_total_centreline),
+                base.RThZ(r=nominal_radius, theta_deg=0.0, z=y_left - 0.2 * y_span_total_centreline),
+            )
 
-        xx = [p.to_planar_unrolled().x for p in points]
-        yy = [p.to_planar_unrolled().y  for p in points]
-        plt.plot(xx, yy)
+            xx = [p.to_planar_unrolled().x for p in points]
+            yy = [p.to_planar_unrolled().y  for p in points]
+            plt.plot(xx, yy)
 
-        # Centreline
-        points_cline = (
-            base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=y_left - 0.2 * y_span_total_centreline),
-            base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=y_right + 0.2 * y_span_total_centreline),
-        )
-        xx_c = [p.to_planar_unrolled().x for p in points_cline]
-        yy_c = [p.to_planar_unrolled().y for p in points_cline]
+            # Centreline
+            points_cline = (
+                base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=y_left - 0.2 * y_span_total_centreline),
+                base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=y_right + 0.2 * y_span_total_centreline),
+            )
+            xx_c = [p.to_planar_unrolled().x for p in points_cline]
+            yy_c = [p.to_planar_unrolled().y for p in points_cline]
 
-        plt.plot( xx_c, yy_c, '--')
+            plt.plot( xx_c, yy_c, '--')
 
-    plot_point(P1, "P1")
-    plot_point(P2, "P2")
-    plot_point(P3, "P3")
-    plot_point(P4, "P4")
-    plot_point(minor_centroid, "Min")
-    plot_point(major_centroid, "Maj")
+        plot_point(P1, "P1")
+        plot_point(P2, "P2")
+        plot_point(P3, "P3")
+        plot_point(P4, "P4")
+        plot_point(minor_centroid, "Min")
+        plot_point(major_centroid, "Maj")
 
-    plot_bounds()
+        plot_bounds()
 
-    def plot_cent_line():
-        ts = [x / 100 for x in range(51)]
-        points = [_make_param_polar_point_radius_test(t) for t in ts]
-        xx = [p.x for p in points]
-        yy = [p.y for p in points]
-        plt.plot(xx, yy, 'k')
+        def plot_cent_line():
+            ts = [x / 100 for x in range(51)]
+            points = [_make_param_polar_point_radius_test(t) for t in ts]
+            xx = [p.x for p in points]
+            yy = [p.y for p in points]
+            plt.plot(xx, yy, 'k')
 
-    plot_cent_line()
+        plot_cent_line()
 
-    plt.gca().axis('equal')
-    plt.show()
-
+        plt.gca().axis('equal')
+        plt.show()
 
 
     return _make_param_polar_point_radius_test
@@ -918,9 +917,16 @@ def make_initial_design_radius_test(stent_params: StentParams) -> StentDesign:
     width = 0.1
     nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
 
+    ref_length = basic_stent_params.theta_arc_initial / 6
+    f = _radius_test_param_curve(basic_stent_params, r_minor=ref_length, r_major=2*ref_length, D=3*ref_length )
+
+    N = 60
+    xyz_point = [f(t/N) for t in range(N+1)]
+
+    return _make_design_from_line_segments(stent_params, xyz_point, width, nominal_radius)
 
 
-make_initial_design = make_initial_two_lines
+make_initial_design = make_initial_design_radius_test
 
 
 
@@ -947,8 +953,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=300,  # 31
-        Z=3000,  # 120
+        Th=30,  # 31
+        Z=300,  # 120
     ),
     r_min=0.65,
     r_max=0.75,

@@ -27,6 +27,18 @@
             "env":{
                 "PYTHONPATH": "${workspaceRoot}:${PYTHONPATH}"
             }
+        },
+        {
+            "name": "Make Stent",
+            "type": "python",
+            "request": "launch",
+            "program": "make_stent.py",
+            "console": "integratedTerminal",
+            "cwd":"${workspaceRoot}/stent_opt",
+            "justMyCode": false,
+            "env":{
+                "PYTHONPATH": "${workspaceRoot}:${PYTHONPATH}"
+            }
         }
     ]
 }
