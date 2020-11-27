@@ -15,6 +15,18 @@
             "env":{
                 "PYTHONPATH": "${workspaceRoot}:${PYTHONPATH}"
             }
+        },
+        {
+            "name": "Design",
+            "type": "python",
+            "request": "launch",
+            "program": "design.py",
+            "console": "integratedTerminal",
+            "cwd":"${workspaceRoot}/stent_opt/struct_opt",
+            "justMyCode": false,
+            "env":{
+                "PYTHONPATH": "${workspaceRoot}:${PYTHONPATH}"
+            }
         }
     ]
 }

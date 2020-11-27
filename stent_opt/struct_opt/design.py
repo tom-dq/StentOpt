@@ -777,56 +777,68 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
         raise ValueError("Need larger radius or smaller gap")
 
     phi = math.acos(D / (2 * (r_minor + r_major)))
-    z_span_total_centreline = r_minor + math.sin(phi) * (r_minor + r_major) + r_major
-    z_left = 0.5 * (stent_params.length - z_span_total_centreline)
-    z_right = 0.5 * (stent_params.length + z_span_total_centreline)
+    y_span_total_centreline = r_minor + math.sin(phi) * (r_minor + r_major) + r_major
+    y_left = 0.5 * (stent_params.length - y_span_total_centreline)
+    y_right = 0.5 * (stent_params.length + y_span_total_centreline)
 
     nominal_radius = stent_params.radial_midplane_initial
 
-    minor_centroid = base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle - D/2, z=r_minor)
-    major_centroid = base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=z_right-r_major)
+    top_bound = base.RThZ(r=nominal_radius, theta_deg=stent_params.angle, z=stent_params.length).to_planar_unrolled()
 
-    P1 = base.RThZ(r=nominal_radius, theta_deg=0.0, z=z_left)
-    P2 = base.RThZ(r=nominal_radius, theta_deg=minor_centroid.theta_deg, z=z_left)
-    P3 = minor_centroid + base.RThZ(r=0, theta_deg=r_minor * math.sin(phi), z=z_left + r_minor * math.cos(phi))
-    P4 = base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=z_right)
+    # Do all this work in the "unrolled XYZ" coordinate system so the circles are circles
+    minor_cent_theta_deg = 0.5 * stent_params.angle - D/2
+    minor_centroid = base.XYZ(x=0.5*top_bound.x - D/2, y=y_left+r_minor, z=nominal_radius)
+    major_centroid = base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=y_right-r_major).to_planar_unrolled()
+
+    P1 = base.RThZ(r=nominal_radius, theta_deg=0.0, z=y_left).to_planar_unrolled()
+    P2 = base.XYZ(x=0.5*top_bound.x - D/2, y=y_left, z=nominal_radius)
+    #P2 = base.RThZ(r=nominal_radius, theta_deg=minor_cent_theta_deg, z=y_left).to_planar_unrolled()
+    P3 = minor_centroid + base.XYZ(x=r_minor * math.sin(phi), y=r_minor * math.cos(phi), z=0.0)
+    P4 = base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=y_right).to_planar_unrolled()
 
     #To fix - make the circles circles on the real domain (so, taking into account the raduis and theta). Either set an appropriate radius? or unroll-reroll?
     # TODO -plot and check
     # TODO -interpolate
 
-    def _make_param_polar_point_radius_test(t: float) -> base.RThZ:
+    def _make_param_polar_point_radius_test(t: float) -> base.XYZ:
         # https://math.stackexchange.com/a/3324260
 
         if t > 0.5:
             mirror_point = _make_param_polar_point_radius_test(1.0 - t)
-            return mirror_point._replace(theta_deg=t)
+            return mirror_point._replace(x=t)
 
 
         def line_between(p_start, p_end, r):
             delta = (p_end - p_start)
             return p_start + (r * delta)
 
-        def circle_between(p_mid, p_start, p_end, rat):
+        def circle_between(flipped, p_mid, p_start, p_end, rat):
             def angle(p):
                 p_from_cent = p - p_mid
-                return math.atan2(p_from_cent.z, p_from_cent.theta_deg)
+                return math.atan2(p_from_cent.y, p_from_cent.x)
 
             def radius(p):
                 p_from_cent = p - p_mid
-                return math.sqrt(p_from_cent.theta_deg ** 2 + p_from_cent.z ** 2)
+                return math.sqrt(p_from_cent.x ** 2 + p_from_cent.y ** 2)
 
             ang_start = angle(p_start)
             ang_end = angle(p_end)
 
-            ang_out = ang_start + rat * (ang_end - ang_start)
+            if flipped:
+                angle_delta = ang_start - ang_end
+                rat = 1-rat
+            
+            else:
+                angle_delta = ang_end - ang_start
+
+            ang_out = ang_start + rat * angle_delta
 
             rad_start = radius(p_start)
             rad_end = radius(p_end)
 
             rad_out = rad_start + rat * (rad_end-rad_start)
 
-            this_p_from_cent = base.RThZ(r=nominal_radius, theta_deg=rad_out * math.cos(ang_out), z=rad_out * math.sin(ang_out))
+            this_p_from_cent = base.XYZ(x=rad_out * math.cos(ang_out), y=rad_out * math.sin(ang_out), z=nominal_radius)
             return p_mid + this_p_from_cent
 
         if t < 1/6:
@@ -837,35 +849,43 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
         elif t < 2/6:
             # Minor circle
             r = (t - 1/6) * 6
-            return circle_between(minor_centroid, P2, P3, r)
+            return circle_between(False, minor_centroid, P2, P3, r)
 
         else:
             # Major circle
             r = (t - 2/6) * 6
-            return circle_between(major_centroid, P3, P4, r)
+            return circle_between(True, major_centroid, P3, P4, r)
 
 
     # TEMP - just while getting this going...
     import matplotlib.pyplot as plt
     def plot_point(p, label):
-        loc = f"{p.theta_deg}, {p.z}"
-        plt.text(p.theta_deg, p.z, f"{label}: ({loc}")
+        loc = f"{p.x}, {p.y}"
+        plt.text(p.x, p.y, f"{label}")
 
 
     def plot_bounds():
         points = (
-            (0.0, 0.0),
-            (stent_params.angle, 0.0),
-            (stent_params.angle, stent_params.length),
-            (0, stent_params.length),
-            (0, 0),
+            base.RThZ(r=nominal_radius, theta_deg=0.0, z=y_left - 0.2 * y_span_total_centreline),
+            base.RThZ(r=nominal_radius, theta_deg=stent_params.angle, z=y_left - 0.2 * y_span_total_centreline),
+            base.RThZ(r=nominal_radius, theta_deg=stent_params.angle, z=y_right + 0.2 * y_span_total_centreline),
+            base.RThZ(r=nominal_radius, theta_deg=0.0, z=y_right + 0.2 * y_span_total_centreline),
+            base.RThZ(r=nominal_radius, theta_deg=0.0, z=y_left - 0.2 * y_span_total_centreline),
         )
-        xx = [x[0] for x in points]
-        yy = [x[1] for x in points]
+
+        xx = [p.to_planar_unrolled().x for p in points]
+        yy = [p.to_planar_unrolled().y  for p in points]
         plt.plot(xx, yy)
 
         # Centreline
-        plt.plot( (0.5 * stent_params.angle, 0.5 * stent_params.angle), (0.0, stent_params.length), '--')
+        points_cline = (
+            base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=y_left - 0.2 * y_span_total_centreline),
+            base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=y_right + 0.2 * y_span_total_centreline),
+        )
+        xx_c = [p.to_planar_unrolled().x for p in points_cline]
+        yy_c = [p.to_planar_unrolled().y for p in points_cline]
+
+        plt.plot( xx_c, yy_c, '--')
 
     plot_point(P1, "P1")
     plot_point(P2, "P2")
@@ -877,14 +897,15 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
     plot_bounds()
 
     def plot_cent_line():
-        ts = [x / 100 for x in range(51)]
+        ts = [x / 100 for x in range(101)]
         points = [_make_param_polar_point_radius_test(t) for t in ts]
-        xx = [p.theta_deg for p in points]
-        yy = [p.z for p in points]
+        xx = [p.x for p in points]
+        yy = [p.y for p in points]
         plt.plot(xx, yy, 'k')
 
     plot_cent_line()
 
+    plt.gca().axis('equal')
     plt.show()
 
 
@@ -962,8 +983,8 @@ basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
 
 if __name__ == "__main__":
 
-    ref_length = basic_stent_params.angle / 6
-    f = _radius_test_param_curve(basic_stent_params, r_minor=ref_length, r_major=2*ref_length, D=ref_length )
+    ref_length = basic_stent_params.theta_arc_initial / 6
+    f = _radius_test_param_curve(basic_stent_params, r_minor=ref_length, r_major=ref_length, D=3*ref_length )
 
 if 111 == 345/456:
     x = [x * 0.01 for x in range(101)]

@@ -85,6 +85,16 @@ class XYZ(typing.NamedTuple):
             z=self.y,
         )
 
+    def to_r_th_z_from_planar(self, radius: float) -> "RThZ":
+        """Reverse of the RThZ.to_planar_unrolled"""
+
+        return RThZ(
+            r=radius,
+            theta_deg=math.degrees(self.x / radius),
+            z=self.y,
+        )
+
+
     def __add__(self, other):
         return _operator_dot(operator.add, self, other)
 
