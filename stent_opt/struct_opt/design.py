@@ -786,14 +786,13 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
     top_bound = base.RThZ(r=nominal_radius, theta_deg=stent_params.angle, z=stent_params.length).to_planar_unrolled()
 
     # Do all this work in the "unrolled XYZ" coordinate system so the circles are circles
-    minor_cent_theta_deg = 0.5 * stent_params.angle - D/2
     minor_centroid = base.XYZ(x=0.5*top_bound.x - D/2, y=y_left+r_minor, z=nominal_radius)
-    major_centroid = base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=y_right-r_major).to_planar_unrolled()
+    major_centroid = base.XYZ(x=0.5*top_bound.x, y=y_right-r_major, z=nominal_radius)
 
     P1 = base.RThZ(r=nominal_radius, theta_deg=0.0, z=y_left).to_planar_unrolled()
     P2 = base.XYZ(x=0.5*top_bound.x - D/2, y=y_left, z=nominal_radius)
     #P2 = base.RThZ(r=nominal_radius, theta_deg=minor_cent_theta_deg, z=y_left).to_planar_unrolled()
-    P3 = minor_centroid + base.XYZ(x=r_minor * math.sin(phi), y=r_minor * math.cos(phi), z=0.0)
+    P3 = minor_centroid + base.XYZ(x=r_minor * math.cos(phi), y=r_minor * math.sin(phi), z=0.0)
     P4 = base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=y_right).to_planar_unrolled()
 
     #To fix - make the circles circles on the real domain (so, taking into account the raduis and theta). Either set an appropriate radius? or unroll-reroll?
@@ -824,12 +823,12 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
             ang_start = angle(p_start)
             ang_end = angle(p_end)
 
+            angle_delta = ang_end - ang_start
             if flipped:
-                angle_delta = ang_start - ang_end
-                rat = 1-rat
+                angle_delta = -1 * (math.pi * 2 - angle_delta)
+                #angle_delta = math.pi * 2 - angle_delta
+                #rat = 1-rat
             
-            else:
-                angle_delta = ang_end - ang_start
 
             ang_out = ang_start + rat * angle_delta
 
@@ -897,7 +896,7 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
     plot_bounds()
 
     def plot_cent_line():
-        ts = [x / 100 for x in range(101)]
+        ts = [x / 100 for x in range(51)]
         points = [_make_param_polar_point_radius_test(t) for t in ts]
         xx = [p.x for p in points]
         yy = [p.y for p in points]
@@ -984,7 +983,7 @@ basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
 if __name__ == "__main__":
 
     ref_length = basic_stent_params.theta_arc_initial / 6
-    f = _radius_test_param_curve(basic_stent_params, r_minor=ref_length, r_major=ref_length, D=3*ref_length )
+    f = _radius_test_param_curve(basic_stent_params, r_minor=ref_length, r_major=2*ref_length, D=3*ref_length )
 
 if 111 == 345/456:
     x = [x * 0.01 for x in range(101)]
