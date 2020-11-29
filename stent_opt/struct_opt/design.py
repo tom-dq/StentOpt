@@ -804,8 +804,7 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
 
         if t > 0.5:
             mirror_point = _make_param_polar_point_radius_test(1.0 - t)
-            return mirror_point._replace(x=t)
-
+            return mirror_point._replace(x=top_bound.x - mirror_point.x)
 
         def line_between(p_start, p_end, r):
             delta = (p_end - p_start)
@@ -854,7 +853,7 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
 
 
     # TEMP - just while getting this going...
-    TEMP_TESTING_PLOT = True
+    TEMP_TESTING_PLOT = False
 
     if TEMP_TESTING_PLOT:
         import matplotlib.pyplot as plt
@@ -896,7 +895,7 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
         plot_bounds()
 
         def plot_cent_line():
-            ts = [x / 100 for x in range(51)]
+            ts = [x / 100 for x in range(101)]
             points = [_make_param_polar_point_radius_test(t) for t in ts]
             xx = [p.x for p in points]
             yy = [p.y for p in points]
@@ -914,13 +913,13 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
 def make_initial_design_radius_test(stent_params: StentParams) -> StentDesign:
     """Simple outline for testing the radius of curvature"""
 
-    width = 0.1
+    width = 0.02
     nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
 
     ref_length = basic_stent_params.theta_arc_initial / 6
-    f = _radius_test_param_curve(basic_stent_params, r_minor=ref_length, r_major=2*ref_length, D=3*ref_length )
+    f = _radius_test_param_curve(basic_stent_params, r_minor=ref_length, r_major=2*ref_length, D=4*ref_length )
 
-    N = 60
+    N = 200
     xyz_point = [f(t/N) for t in range(N+1)]
 
     return _make_design_from_line_segments(stent_params, xyz_point, width, nominal_radius)
@@ -953,8 +952,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=30,  # 31
-        Z=300,  # 120
+        Th=300,  # 31
+        Z=3000,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
