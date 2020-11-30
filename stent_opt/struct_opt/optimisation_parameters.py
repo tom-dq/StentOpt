@@ -155,7 +155,7 @@ def _clamp_update(old, new, max_delta):
 active = OptimParams(
     max_change_in_vol_ratio=0.0001,  # Was 0.0025
     volume_target_opts=VolumeTargetOpts(
-        initial_ratio=0.005,
+        initial_ratio=0.0035,
         floor_ratio=0.002,
         reduction_iters=50,
     ),
@@ -173,7 +173,7 @@ active = OptimParams(
         # score.get_primary_ranking_element_distortion,
         score.get_primary_ranking_macro_deformation,
     ],
-    gaussian_sigma=0.75,
+    gaussian_sigma=0.15,  # TODO - make this proporional to the element length or something? Was 0.75
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
     abaqus_output_time_interval=0.1,
