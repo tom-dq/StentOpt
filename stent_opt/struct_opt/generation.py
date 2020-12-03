@@ -161,11 +161,54 @@ def display_design_flat(design_space: design.PolarIndex, data: T_index_to_val):
     plt.show()
 
 
+class CandidatesFor(typing.NamedTuple):
+    removal: typing.FrozenSet[design.PolarIndex]
+    introduction: typing.FrozenSet[design.PolarIndex]
+
+
+def _get_candidate_elements(
+        optim_params: optimisation_parameters.OptimParams,
+        design_n_min_1: design.StentDesign,
+) -> CandidatesFor:
+
+    """Figure out which elements can come and go for the next iteration"""
+
+    fully_populated = design.generate_elem_indices(design_n_min_1.stent_params.divs)
+    fully_populated_indices = frozenset(elemIdx for _, elemIdx in fully_populated)
+
+    def get_adj_elements(last_iter_elems, threshold: int):
+        nodes_on_last = set()
+        connections = (design.get_single_element_connection(design_n_min_1.stent_params, elemIdx) for elemIdx in last_iter_elems)
+        for connection in connections:
+            nodes_on_last.update(connection)
+
+        working_set = set()
+        for elemIdx in fully_populated_indices:
+            this_elem_nodes = design.get_single_element_connection(design_n_min_1.stent_params, elemIdx)
+            node_with_shared_interface = [iNode for iNode in this_elem_nodes if iNode in nodes_on_last]
+
+            # Say, two or more nodes touching the old stent
+            eligible = len(node_with_shared_interface) >= threshold
+            if eligible:
+                working_set.add(elemIdx)
+
+        return frozenset(working_set)
+
+    indicies_holes = fully_populated_indices - design_n_min_1.active_elements
+
+    return CandidatesFor(
+        removal=get_adj_elements(indicies_holes, optim_params.nodes_shared_with_old_design_to_contract),
+        introduction=get_adj_elements(design_n_min_1.active_elements, optim_params.nodes_shared_with_old_design_to_expand),
+    )
+
+
 def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_min_1, sensitivity_result, iter_n) -> typing.Set[design.PolarIndex]:
     """Decides which elements are coming in and going out."""
 
     target_count = optim_params.target_num_elems(design_n_min_1, iter_n)
     delta_n_elems = target_count - len(design_n_min_1.active_elements)
+
+    candidates_for = _get_candidate_elements(optim_params, design_n_min_1)
 
     # If there was no change in volume ratio, what would be the maximum number of elements we could add?
     max_new_num_unconstrained = int(optim_params.max_change_in_vol_ratio * design_n_min_1.stent_params.divs.fully_populated_elem_count())
@@ -173,7 +216,8 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
     if max_new_num < 0:
         max_new_num = 0
 
-    top_new_potential_elems = get_top_n_elements(sensitivity_result, Tail.top, max_new_num)
+    top_new_potential_elems_all = get_top_n_elements(sensitivity_result, Tail.top, max_new_num)
+    top_new_potential_elems = {idx for idx in top_new_potential_elems_all if idx in candidates_for.introduction}
     actual_new_elems = top_new_potential_elems - design_n_min_1.active_elements
     num_new = len(actual_new_elems)
 
@@ -181,7 +225,7 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
     num_to_go = max(num_with_new_additions - target_count, 0)
 
     # Remove however many we added.
-    existing_elems_only_ranked = {idx: val for idx,val in sensitivity_result.items() if idx in design_n_min_1.active_elements}
+    existing_elems_only_ranked = {idx: val for idx,val in sensitivity_result.items() if idx in design_n_min_1.active_elements and idx in candidates_for.removal}
     to_go = get_top_n_elements(existing_elems_only_ranked, Tail.bottom, num_to_go)
 
     new_active_elems = (design_n_min_1.active_elements | top_new_potential_elems) - to_go

@@ -55,6 +55,8 @@ class OptimParams(typing.NamedTuple):
     abaqus_target_increment: float
     release_stent_after_expansion: bool
     analysis_step_type: typing.Type[step.StepBase]
+    nodes_shared_with_old_design_to_expand: int    # Only let new elements come in which are attached to existing elements with at least this many nodes. Zero to allow all elements.
+    nodes_shared_with_old_design_to_contract: int  # Only let new elements go out which are attached to existing elements with at least this many nodes. Zero to allow all elements.
 
     def _target_volume_ratio_clamped(self, stent_design: "design.StentDesign", iter_num: int) -> float:
         existing_volume_ratio = stent_design.volume_ratio()
@@ -153,7 +155,7 @@ def _clamp_update(old, new, max_delta):
 
 
 active = OptimParams(
-    max_change_in_vol_ratio=0.000025,  # Was 0.0025
+    max_change_in_vol_ratio=0.0025,  # Was 0.0025
     volume_target_opts=VolumeTargetOpts(
         initial_ratio=0.0035,
         floor_ratio=0.002,
@@ -180,6 +182,8 @@ active = OptimParams(
     abaqus_target_increment=1e-6,
     release_stent_after_expansion=False,
     analysis_step_type=step.StepDynamicExplicit,
+    nodes_shared_with_old_design_to_expand=2,
+    nodes_shared_with_old_design_to_contract=2,
 )
 
 
