@@ -313,8 +313,8 @@ def apply_loads(optim_params: optimisation_parameters.OptimParams, stent_params:
 
 
 def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
-    t1 = 2.0
-    t2 = 3.0
+    t1 = 0.5  # TODO - back to 2.0
+    t2 = 0.5  # TODO - back to 3.0
 
     step_expand = optim_params.analysis_step_type(
         name=f"ExpandHold",
@@ -412,7 +412,7 @@ def _apply_loads_enforced_disp_rigid_cyl(stent_params: StentParams, model: main.
     final_radius = stent_params.r_min * stent_params.expansion_ratio
     dr = final_radius - init_radius
 
-    total_time = .3  # TODO! Back to 3.0
+    total_time = .2  # TODO! Back to 3.0
 
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
