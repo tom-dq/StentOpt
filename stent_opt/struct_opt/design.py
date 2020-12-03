@@ -219,6 +219,19 @@ def generate_node_indices(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int,
         yield iNode, PolarIndex(R=iR, Th=iTh, Z=iZ)
 
 
+def generate_stent_boundary_nodes(stent_params: StentParams) -> typing.Iterable[PolarIndex]:
+    """Not in order!"""
+
+    if stent_params.stent_element_dimensions == 2:
+        for theta_limit in (0, stent_params.divs.Th-1):
+            yield from (PolarIndex(R=0, Th=theta_limit, Z=z) for z in range(stent_params.divs.Z))
+
+        for z_limit in (0, stent_params.divs.Z-1):
+            yield from (PolarIndex(R=0, Th=th, Z=z_limit) for th in range(1, stent_params.divs.Th-1))
+
+    else:
+        raise ValueError("3D Code Writing Time!")
+
 def generate_elem_indices(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int, PolarIndex]]:
     divs_minus_one = node_to_elem_design_space(divs)
     yield from generate_node_indices(divs_minus_one)
@@ -917,7 +930,7 @@ def make_initial_design_radius_test(stent_params: StentParams) -> StentDesign:
     nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
 
     ref_length = basic_stent_params.theta_arc_initial / 6
-    f = _radius_test_param_curve(basic_stent_params, r_minor=0.3 * ref_length, r_major=2*ref_length, D=4*ref_length )
+    f = _radius_test_param_curve(basic_stent_params, r_minor=0.3 * ref_length, r_major=2.8*ref_length, D=5.5*ref_length )
 
     N = 100
     xyz_point = [f(t/N) for t in range(N+1)]

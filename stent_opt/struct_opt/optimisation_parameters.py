@@ -8,8 +8,8 @@ from stent_opt.abaqus_model import step
 class VolumeTargetOpts(typing.NamedTuple):
     """Sets a target volume ratio, at a given iteration."""
     initial_ratio: float
-    floor_ratio: float
-    reduction_iters: int
+    final_ratio: float
+    num_iters: int
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
@@ -71,7 +71,7 @@ class OptimParams(typing.NamedTuple):
 
     def is_converged(self, previous_design: "design.StentDesign", this_design: "design.StentDesign", iter_num: int) -> bool:
         """Have we converged?"""
-        target_stabilised = iter_num > self.volume_target_opts.reduction_iters + 1
+        target_stabilised = iter_num > self.volume_target_opts.num_iters + 1
         if not target_stabilised:
             return False
 
@@ -109,9 +109,9 @@ class OptimParams(typing.NamedTuple):
 # Functions which set a target volume ratio. These are idealised.
 def vol_reduce_then_flat(vol_target_opts: VolumeTargetOpts, iter_num: int) -> float:
 
-    delta = vol_target_opts.initial_ratio - vol_target_opts.floor_ratio
-    reducing = delta * (vol_target_opts.reduction_iters - iter_num)/vol_target_opts.reduction_iters + vol_target_opts.floor_ratio
-    target_ratio = max(vol_target_opts.floor_ratio, reducing)
+    delta = vol_target_opts.initial_ratio - vol_target_opts.final_ratio
+    reducing = delta * (vol_target_opts.num_iters - iter_num) / vol_target_opts.num_iters + vol_target_opts.final_ratio
+    target_ratio = max(vol_target_opts.final_ratio, reducing)
 
     return target_ratio
 
@@ -155,11 +155,11 @@ def _clamp_update(old, new, max_delta):
 
 
 active = OptimParams(
-    max_change_in_vol_ratio=0.0025,  # Was 0.0025
+    max_change_in_vol_ratio=0.00025,  # Was 0.0025
     volume_target_opts=VolumeTargetOpts(
         initial_ratio=0.0035,
-        floor_ratio=0.002,
-        reduction_iters=50,
+        final_ratio=0.01,
+        num_iters=50,
     ),
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(

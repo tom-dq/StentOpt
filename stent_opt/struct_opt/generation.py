@@ -1,3 +1,4 @@
+import collections
 import pathlib
 import statistics
 import typing
@@ -177,10 +178,20 @@ def _get_candidate_elements(
     fully_populated_indices = frozenset(elemIdx for _, elemIdx in fully_populated)
 
     def get_adj_elements(last_iter_elems, threshold: int):
-        nodes_on_last = set()
+        # Prepare the set of nodes to which eligible elements are attached.
         connections = (design.get_single_element_connection(design_n_min_1.stent_params, elemIdx) for elemIdx in last_iter_elems)
-        for connection in connections:
-            nodes_on_last.update(connection)
+        nodes = (iNode for connection in connections for iNode in connection)
+        nodes_on_last = collections.Counter(nodes)
+
+        # Hacky fix - do not consider nodes which are entirely encased on a boundary interface.
+        some_kind_of_limits_here = threshold > 0
+        if some_kind_of_limits_here:
+            fully_encased_node_connection = 2 if design_n_min_1.stent_params.stent_element_dimensions == 2 else 4
+            boundary_nodes = design.generate_stent_boundary_nodes(design_n_min_1.stent_params)
+            pretend_nodes_werent_there = {iNodeIdx for iNodeIdx, n_attached_elems in nodes_on_last.items() if iNodeIdx in boundary_nodes and n_attached_elems == fully_encased_node_connection}
+            for iNodeIdx in pretend_nodes_werent_there:
+                if iNodeIdx in nodes_on_last:
+                    del nodes_on_last[iNodeIdx]
 
         working_set = set()
         for elemIdx in fully_populated_indices:
