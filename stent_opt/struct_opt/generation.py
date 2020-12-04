@@ -280,7 +280,7 @@ def _get_ranking_functions(
         grad_track_steps = range(first_grad_track, final_grad_track)
 
         recent_gradient_input_data = get_gradient_input_data(optim_params.working_dir, optim_params.region_gradient.component, grad_track_steps)
-        vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(recent_gradient_input_data, statistics.mean))
+        vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(design_n_min_1.stent_params, recent_gradient_input_data, statistics.mean))
         all_ranks.append(vicinity_ranking)
 
     one_frame = data.get_last_frame_of_instance("STENT-1")
@@ -400,15 +400,15 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
 def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
 
-    first_iter = max(0, )
-    history_iters = [0, 1]  # [0, 1]
-    last_iter = history_iters[-1]
-
     history_db = history.make_history_db(working_dir)
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
 
+
+    first_iter = max(0, iter_n - optim_params.region_gradient.n_past_increments)
+    history_iters = list(range(first_iter, iter_n+1))
+    last_iter = history_iters[-1]
 
     all_ranks = []
     iter_to_pos = {}
@@ -416,7 +416,7 @@ def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
     # Gradient tracking test
     recent_gradient_input_data = list(get_gradient_input_data(working_dir, db_defs.ElementStress, history_iters))
 
-    vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(recent_gradient_input_data, statistics.mean))
+    vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(stent_params, recent_gradient_input_data, statistics.mean))
     for idx, x in enumerate(vicinity_ranking):
         print(idx, x, sep='\t')
 
@@ -424,7 +424,7 @@ def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
 
     for one_iter in history_iters:
         db_fn = history.make_fn_in_dir(working_dir, ".db", one_iter)
-        with history.History(db_history) as hist:
+        with history.History(history_db) as hist:
             stent_params = hist.get_stent_params()
             old_snapshot = hist.get_snapshot(one_iter)
             old_design = design.make_design_from_snapshot(stent_params, old_snapshot)
@@ -460,20 +460,37 @@ def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
         display.render_status(old_design, pos_lookup, one_rank, "Testing")
 
 
-def track_history_checks_test():
-    working_dir = r"E:\Simulations\StentOpt\aba-98"
+def plot_history_gradient():
+    working_dir = r"E:\Simulations\StentOpt\AA-178"
 
-    old_data = get_gradient_input_data(working_dir, db_defs.ElementStress, [0,1])
-    for x in old_data:
-        print(x)
+    quant = db_defs.ElementStress
+    elems_of_interest = {30942, 40937}  # {28943, 42936, 30942, 40937}
 
+    old_data = list(get_gradient_input_data(working_dir, quant, [0, 1]))
+
+    for elem_id in elems_of_interest:
+        x, y = [], []
+        for grad_input_data in old_data:
+
+            try:
+                val = grad_input_data.element_ranking_components[elem_id].value
+                x.append(grad_input_data.iteration_num)
+                y.append(val)
+
+            except KeyError:
+                pass
+
+        plt.plot(x, y, label=f"{elem_id}-{quant.__name__}")
+
+    plt.legend()
+    plt.show()
 
 
 def evolve_decider_test():
     iter_n_min_1 = 0
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"C:\TEMP\aba\AA-49\History.db")
+    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-178")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -501,11 +518,16 @@ def evolve_decider_test():
 
 
 if __name__ == '__main__':
+
+    # plot_history_gradient()
+
     # evolve_decider_test()
     # make_plot_tests()
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-89")  # 89
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-179")  # 89
     i_current = 1
+    make_plot_tests(working_dir, i_current)
+
     new_design = make_new_generation(working_dir, i_current)
     # print(new_design)
 

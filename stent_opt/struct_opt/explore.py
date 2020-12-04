@@ -264,6 +264,5 @@ def main():
     panel.panel(scatter).show()
 
 
-
 if __name__ == '__main__':
-    make_dashboard(WORKING_DIR_TEMP, DeformationView.deformed)
+    make_dashboard(WORKING_DIR_TEMP, DeformationView.undeformed)

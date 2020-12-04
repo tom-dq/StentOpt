@@ -155,9 +155,9 @@ def _clamp_update(old, new, max_delta):
 
 
 active = OptimParams(
-    max_change_in_vol_ratio=0.00025,  # Was 0.0025
+    max_change_in_vol_ratio=0.0025,  # Was 0.0025
     volume_target_opts=VolumeTargetOpts(
-        initial_ratio=0.0035,
+        initial_ratio=0.004,
         final_ratio=0.01,
         num_iters=50,
     ),

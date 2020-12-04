@@ -330,8 +330,9 @@ def make_fn_in_dir(working_dir: pathlib.Path, ext: str, iter_num: int):
     intermediary = working_dir / f'It-{str(iter_num).rjust(6, "0")}.XXX'
     return intermediary.with_suffix(ext)
 
-def make_history_db(working_dir: pathlib.Path) -> pathlib.Path:
-    return working_dir / "History.db"
+
+def make_history_db(working_dir: typing.Union[str, pathlib.Path]) -> pathlib.Path:
+    return pathlib.Path(working_dir) / "History.db"
 
 
 def history_write_read_test():
