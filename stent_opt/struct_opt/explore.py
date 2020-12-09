@@ -8,6 +8,11 @@ import holoviews
 import panel
 import numpy
 
+# TODO:
+#  - Rasterize the output plots or something - make them snappier!
+#  - Make an auto-animation?
+#  - Something to do with stopping disconnections?
+
 
 from stent_opt.abaqus_model import base, element
 from stent_opt.struct_opt import history, design
@@ -43,10 +48,10 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 
 
 WORKING_DIR_TEMP = _get_most_recent_working_dir()
-# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-124")
+# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-190")
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
-STOP_AT_INCREMENT = UNLIMITED
+STOP_AT_INCREMENT = 10
 
 
 class ContourView(typing.NamedTuple):
