@@ -962,7 +962,7 @@ def make_initial_design_radius_test(stent_params: StentParams) -> StentDesign:
     ref_length = basic_stent_params.theta_arc_initial / 6
     f = _radius_test_param_curve(basic_stent_params, r_minor=0.3 * ref_length, r_major=2.8*ref_length, D=5.5*ref_length )
 
-    N = 100
+    N = 500
     xyz_point = [(f(t/N), width(t/N)) for t in range(N+1)]
 
     return _make_design_from_line_segments(stent_params, xyz_point, nominal_radius)
@@ -995,8 +995,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=1000,  # 31
-        Z=10000,  # 120
+        Th=500,  # 31
+        Z=5000,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
