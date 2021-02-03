@@ -163,7 +163,7 @@ active = OptimParams(
     ),
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
-        component=db_defs.ElementStress,  # TODO - make the code respect all these settings rather than whatever's littered around the place.
+        component=db_defs.ElementEnergyElastic,  # TODO - make the code respect all these settings rather than whatever's littered around the place.
         reduce_type=common.RegionReducer.mean_val,
         n_past_increments=5,
     ),

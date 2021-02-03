@@ -47,11 +47,11 @@ def _get_most_recent_working_dir() -> pathlib.Path:
     return max(subdirs, key=most_recent)
 
 
-WORKING_DIR_TEMP = _get_most_recent_working_dir()
-# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-190")
+# WORKING_DIR_TEMP = _get_most_recent_working_dir()
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-207")
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
-STOP_AT_INCREMENT = 10
+STOP_AT_INCREMENT = 100
 
 
 class ContourView(typing.NamedTuple):
@@ -270,4 +270,4 @@ def main():
 
 
 if __name__ == '__main__':
-    make_dashboard(WORKING_DIR_TEMP, DeformationView.both)
+    make_dashboard(WORKING_DIR_TEMP, DeformationView.deformed)
