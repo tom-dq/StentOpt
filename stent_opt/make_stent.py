@@ -30,7 +30,10 @@ try:
 except KeyError:
     pass
 
-
+# TODO 2021-02-03
+# - Graphs of global compliance / energy dissipated / etc...
+# - Graphs of min/median/mean/max of elemental objective functions
+# - Rasterise and build (offline) the images of each step.
 
 
 
