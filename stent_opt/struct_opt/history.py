@@ -22,6 +22,8 @@ _enum_types = [
 _nt_class_types = [
     db_defs.ElementStress,
     db_defs.ElementPEEQ,
+    db_defs.ElementEnergyElastic,
+    db_defs.ElementEnergyPlastic,
 ]
 
 class Snapshot(typing.NamedTuple):
@@ -549,6 +551,10 @@ def nt_from_db_strings(nt_class, data):
 
                 elif single_item_from_string(value):
                     working_data[name] = single_item_from_string(value)
+
+                elif base_type == bool:
+                    # Get a "0" string for false here...
+                    working_data[name] = base_type(int(value))
 
                 else:
                     working_data[name] = base_type(value)

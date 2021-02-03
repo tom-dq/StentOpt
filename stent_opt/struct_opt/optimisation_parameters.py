@@ -19,7 +19,7 @@ class VolumeTargetOpts(typing.NamedTuple):
         return history.nt_from_db_strings(cls, data)
 
 
-T_elem_result = typing.Union[db_defs.ElementStress, db_defs.ElementPEEQ]
+T_elem_result = typing.Union[db_defs.ElementStress, db_defs.ElementPEEQ, db_defs.ElementEnergyElastic, db_defs.ElementEnergyPlastic]
 
 
 class RegionGradient(typing.NamedTuple):

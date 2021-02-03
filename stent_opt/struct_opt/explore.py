@@ -270,4 +270,4 @@ def main():
 
 
 if __name__ == '__main__':
-    make_dashboard(WORKING_DIR_TEMP, DeformationView.undeformed)
+    make_dashboard(WORKING_DIR_TEMP, DeformationView.both)
