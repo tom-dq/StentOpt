@@ -167,11 +167,7 @@ volume_ratio_increase = VolumeTargetOpts(
 
 active = OptimParams(
     max_change_in_vol_ratio=0.0025,  # Was 0.0025
-    volume_target_opts=VolumeTargetOpts(
-        initial_ratio=0.004,
-        final_ratio=0.01,
-        num_iters=50,
-    ),
+    volume_target_opts=volume_ratio_decrease,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
         component=db_defs.ElementEnergyElastic,  # TODO - make the code respect all these settings rather than whatever's littered around the place.

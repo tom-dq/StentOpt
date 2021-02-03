@@ -33,6 +33,7 @@ except KeyError:
 # TODO 2021-02-03
 # - Graphs of global compliance / energy dissipated / etc...
 # - Graphs of min/median/mean/max of elemental objective functions
+# - Graphs of volume ratios and target volume ratio
 # - Rasterise and build (offline) the images of each step.
 
 
@@ -318,8 +319,8 @@ def apply_loads(optim_params: optimisation_parameters.OptimParams, stent_params:
 
 
 def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
-    t1 = 0.5  # TODO - back to 2.0
-    t2 = 0.5  # TODO - back to 3.0
+    t1 = 2.0  # TODO - back to 2.0
+    t2 = 3.0  # TODO - back to 3.0
 
     step_expand = optim_params.analysis_step_type(
         name=f"ExpandHold",
