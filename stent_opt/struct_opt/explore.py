@@ -47,8 +47,8 @@ def _get_most_recent_working_dir() -> pathlib.Path:
     return max(subdirs, key=most_recent)
 
 
-# WORKING_DIR_TEMP = _get_most_recent_working_dir()
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-207")
+WORKING_DIR_TEMP = _get_most_recent_working_dir()
+# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-207")
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
 STOP_AT_INCREMENT = 100

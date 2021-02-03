@@ -153,6 +153,17 @@ def _clamp_update(old, new, max_delta):
     else:
         return new
 
+volume_ratio_decrease = VolumeTargetOpts(
+    initial_ratio=0.12,
+    final_ratio=0.025,
+    num_iters=100,
+)
+
+volume_ratio_increase = VolumeTargetOpts(
+    initial_ratio=0.004,
+    final_ratio=0.01,
+    num_iters=50,
+)
 
 active = OptimParams(
     max_change_in_vol_ratio=0.0025,  # Was 0.0025
