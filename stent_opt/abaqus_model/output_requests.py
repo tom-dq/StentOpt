@@ -15,21 +15,13 @@ class ElementOutputs(enum.Enum):
     SP = "All principal stress components"
     LE = "All logarithmic strain components"
     PEEQ = "Equivalent plastic strain"
+    ESEDEN = "Total elastic strain energy density in the element."
+    EPDDEN = "Total energy dissipated per unit volume in the element by rate-independent and rate-dependent plastic deformation."
 
 
 T_OutputRequest = typing.Union[NodeOutputs, ElementOutputs]
 
-general_components = [
-    NodeOutputs.RF,
-    NodeOutputs.U,
-    ElementOutputs.S,
-    ElementOutputs.SP,
-    ElementOutputs.LE,
-    ElementOutputs.PEEQ,
-    ElementOutputs.ELSE,
-    ElementOutputs.ELPD,
-]
-
+general_components = list(NodeOutputs) + list(ElementOutputs)
 
 def produce_inp_lines(abaqus_output_time_interval: float, output_components: typing.Iterable[T_OutputRequest]) -> typing.Iterable[str]:
     # Output requests

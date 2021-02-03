@@ -448,6 +448,21 @@ def single_item_from_string(s):
     return None
 
 
+def _prepopulate_with_empty_lists(nt_class) -> dict:
+    """If this is a named tuple subclass which has some potentially empty lists, need to put them in so it can be de-serialised without any problems from the DB."""
+
+    EMPTY_ITERABLE_TYPES = [list, set, tuple]
+
+    working_dict = {}
+
+    for field_name, annotation in nt_class.__annotations__.items():
+        maybe_origin = getattr(annotation, '__origin__', None)
+        if maybe_origin in EMPTY_ITERABLE_TYPES:
+            working_dict[field_name] = maybe_origin()
+
+    return working_dict
+
+
 def nt_from_db_strings(nt_class, data):
 
     def get_prefix(one_string_and_data: str):
@@ -486,7 +501,7 @@ def nt_from_db_strings(nt_class, data):
         else:
             return True
 
-    working_data = {}
+    working_data = _prepopulate_with_empty_lists(nt_class)
     for prefix, data_sublist in itertools.groupby(sorted(data), key=get_prefix):
         if prefix:
             # Have to delegate to a child class to create.

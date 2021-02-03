@@ -968,7 +968,8 @@ def make_initial_design_radius_test(stent_params: StentParams) -> StentDesign:
     return _make_design_from_line_segments(stent_params, xyz_point, nominal_radius)
 
 
-make_initial_design = make_initial_design_radius_test
+# make_initial_design = make_initial_design_radius_test
+make_initial_design = make_initial_two_lines
 
 
 

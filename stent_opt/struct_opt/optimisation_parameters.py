@@ -168,12 +168,14 @@ active = OptimParams(
         n_past_increments=5,
     ),
     element_components=[
-        db_defs.ElementPEEQ,
-        db_defs.ElementStress,
+        # db_defs.ElementPEEQ,
+        # db_defs.ElementStress,
+        db_defs.ElementEnergyElastic,
+        # db_defs.ElementEnergyPlastic,
     ],
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
-        score.get_primary_ranking_macro_deformation,
+        # score.get_primary_ranking_macro_deformation,
     ],
     gaussian_sigma=0.15,  # TODO - make this proporional to the element length or something? Was 0.75
     working_dir=r"c:\temp\ABCDE",

@@ -64,6 +64,8 @@ frame_rowid REFERENCES Frame(rowid),
 NodePos = _make_nt_and_table_create("NodePos", ResultEntity.node_num, ("X", "Y", "Z"))
 ElementStress = _make_nt_and_table_create("ElementStress", ResultEntity.elem_num, ("SP1", "SP2", "SP3", "von_mises"))
 ElementPEEQ = _make_nt_and_table_create("ElementPEEQ", ResultEntity.elem_num, ("PEEQ", ))
+ElementEnergyElastic = _make_nt_and_table_create("ElementEnergy", ResultEntity.elem_num, ("ESEDEN", ))
+ElementEnergyPlastic = _make_nt_and_table_create("ElementEnergy", ResultEntity.elem_num, ("EPDDEN",))
 
 
 

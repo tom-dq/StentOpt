@@ -21,7 +21,7 @@ if SAVE_IMAGES:
 LAST_FRAME_OF_STEP = True
 
 from datastore import Datastore
-from db_defs import Frame, NodePos, ElementStress, ElementPEEQ
+from db_defs import Frame, NodePos, ElementStress, ElementPEEQ, ElementEnergyElastic, ElementEnergyPlastic
 
 # Get the command line option (should be last!).
 fn_odb = sys.argv[-3]
@@ -171,6 +171,39 @@ def get_strain_results_PEEQ_one_frame(extraction_meta):
             PEEQ=one_value.data,
         )
 
+def get_strain_results_ESEDEN_one_frame(extraction_meta):
+    relevant_peeq_field = (
+        extraction_meta
+            .frame
+            .fieldOutputs['ESEDEN']
+            .getSubset(position=abaqusConstants.WHOLE_ELEMENT)
+            .getSubset(region=extraction_meta.odb_instance)
+    )
+
+    for one_value in relevant_peeq_field.values:
+        yield ElementEnergyElastic(
+            frame_rowid=None,
+            elem_num=one_value.elementLabel,
+            ESEDEN=one_value.data,
+        )
+
+def get_strain_results_EPDDEN_one_frame(extraction_meta):
+    relevant_peeq_field = (
+        extraction_meta
+            .frame
+            .fieldOutputs['EPDDEN']
+            .getSubset(position=abaqusConstants.WHOLE_ELEMENT)
+            .getSubset(region=extraction_meta.odb_instance)
+    )
+
+    for one_value in relevant_peeq_field.values:
+        yield ElementEnergyPlastic(
+            frame_rowid=None,
+            elem_num=one_value.elementLabel,
+            EPDDEN=one_value.data,
+        )
+
+
 
 def _add_with_zero_pad(a, b):
     """Add two numpy arrays together, zero padding as needed."""
@@ -212,6 +245,8 @@ def get_results_one_frame(extraction_meta):
     res_funcs = [
         get_stresses_one_frame,
         get_strain_results_PEEQ_one_frame,
+        get_strain_results_ESEDEN_one_frame,
+        get_strain_results_EPDDEN_one_frame,
         get_node_position_one_frame,
     ]
     for f in res_funcs:

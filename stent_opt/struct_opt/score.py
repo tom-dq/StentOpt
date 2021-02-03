@@ -93,6 +93,22 @@ def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingCom
                 value=row.von_mises
             )
 
+    elif isinstance(nt_row, db_defs.ElementEnergyElastic):
+        for row in nt_rows:
+            yield PrimaryRankingComponent(
+                comp_name=row.__class__.__name__,
+                elem_id=row.elem_num,
+                value=row.ESEDEN
+            )
+
+    elif isinstance(nt_row, db_defs.ElementEnergyPlastic):
+        for row in nt_rows:
+            yield PrimaryRankingComponent(
+                comp_name=row.__class__.__name__,
+                elem_id=row.elem_num,
+                value=row.EPDDEN
+            )
+
     else:
         raise ValueError(nt_row)
 
