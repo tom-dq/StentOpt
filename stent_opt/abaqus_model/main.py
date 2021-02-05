@@ -27,6 +27,7 @@ class AbaqusModel:
         self.interactions = set()
         self.boundary_conditions = set()
         self.abaqus_output_time_interval = 0.1
+        self.abaqus_history_time_interval = 0.002
         self.abaqus_target_increment = 1e-5
 
     def add_instance(self, one_instance: instance.Instance):
@@ -230,7 +231,12 @@ class AbaqusModel:
 
             yield from self._produce_inp_lines_interactions(step_dependent=True)
 
-            yield from output_requests.produce_inp_lines(self.abaqus_output_time_interval, output_requests.general_components)
+            yield from output_requests.produce_inp_lines(
+                self.abaqus_output_time_interval,
+                output_requests.general_components,
+                self.abaqus_history_time_interval,
+                output_requests.history_components,
+            )
 
             # Have to end the step here, after the loads have been output.
 
