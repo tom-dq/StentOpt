@@ -80,6 +80,25 @@ class NodePosition(typing.NamedTuple):
     z: float
 
 
+class GlobalStatusType(enum.Enum):
+    abaqus_history_result = enum.auto()
+    current_volume_ratio = enum.auto()
+    target_volume_ratio = enum.auto()
+    aggregate_min = enum.auto()
+    aggregate_mean = enum.auto()
+    aggregate_median = enum.auto()
+    aggregate_max = enum.auto()
+    aggregate_st_dev = enum.auto()
+
+
+class GlobalStatus(typing.NamedTuple):
+    # TODO - get these values into the DB and graph them
+    iteration_num: int
+    global_status_type: GlobalStatusType
+    global_status_sub_type: str
+    global_status_value: float
+
+
 _make_snapshot_table = """CREATE TABLE IF NOT EXISTS Snapshot(
 iteration_num INTEGER,
 filename TEXT,
@@ -110,12 +129,20 @@ x REAL,
 y REAL,
 z REAL)"""
 
+_make_global_status_table = """CREATE TABLE IF NOT EXISTS GlobalStatus(
+iteration_num INTEGER,
+global_status_type TEXT,
+global_status_sub_type TEXT,
+global_status_value REAL
+)"""
+
 _make_tables = [
     _make_snapshot_table,
     _make_status_check_table,
     _make_design_parameters_table_,
     _make_opt_parameters_table_,
     _make_node_pos_table_,
+    _make_global_status_table,
 ]
 
 class History:
