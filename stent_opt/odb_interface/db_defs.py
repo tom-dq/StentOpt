@@ -31,8 +31,34 @@ simulation_time REAL
 """
 
 
+HistoryResult = collections.namedtuple("HistoryResult", (
+    "rowid",
+    "fn_odb",
+    "step_num",
+    "step_name",
+    "history_region",
+    "history_identifier",
+    "simulation_time",
+    "history_value",
+))
+
+make_history = """CREATE TABLE IF NOT EXISTS HistoryResult(
+rowid INTEGER PRIMARY KEY,
+fn_odb TEXT,
+step_num INTEGER,
+step_name TEXT,
+history_region TEXT,
+history_identifier TEXT,
+simulation_time REAL,
+history_value REAL
+);
+"""
+
+
+
 all_nt_and_table_defs = [
-    (Frame, make_frame)
+    (Frame, make_frame),
+    (HistoryResult, make_history)
 ]
 
 class ResultEntity:
@@ -67,7 +93,7 @@ ElementPEEQ = _make_nt_and_table_create("ElementPEEQ", ResultEntity.elem_num, ("
 ElementEnergyElastic = _make_nt_and_table_create("ElementEnergyElastic", ResultEntity.elem_num, ("ESEDEN", ))
 ElementEnergyPlastic = _make_nt_and_table_create("ElementEnergyPlastic", ResultEntity.elem_num, ("EPDDEN",))
 
-
+expected_history_results = ["ALLSE", "ALLPD", "ALLKE", "ALLWK"]
 
 
 if __name__ == "__main__":

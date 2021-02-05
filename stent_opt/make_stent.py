@@ -319,8 +319,8 @@ def apply_loads(optim_params: optimisation_parameters.OptimParams, stent_params:
 
 
 def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
-    t1 = 2.0  # TODO - back to 2.0
-    t2 = 3.0  # TODO - back to 3.0
+    t1 = 0.2  # TODO - back to 2.0
+    t2 = 0.3  # TODO - back to 3.0
 
     step_expand = optim_params.analysis_step_type(
         name=f"ExpandHold",

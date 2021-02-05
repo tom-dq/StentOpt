@@ -53,6 +53,17 @@ class Datastore:
                 with_row_id = (nt._replace(frame_rowid=frame_rowid) for nt in iter_of_nts)
                 cursor.executemany(insert_data, with_row_id)
 
+    def add_many_history_results(self, history_results):
+        """
+        Insert a history result rows
+        :param history_results: History results for this frame.
+        :type many_results: Iterable[ db_defs.HistoryResult ] """
+
+        with self.connection:
+            cursor = self.connection.cursor()
+            insert_data = self._generate_insert_string_nt_class(db_defs.HistoryResult)
+            cursor.executemany(insert_data, history_results)
+
 
     def _generate_insert_string_nt_class(self, named_tuple_class):
         question_marks = ["?" for _ in named_tuple_class._fields]

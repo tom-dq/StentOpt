@@ -21,7 +21,7 @@ if SAVE_IMAGES:
 LAST_FRAME_OF_STEP = True
 
 from datastore import Datastore
-from db_defs import Frame, NodePos, ElementStress, ElementPEEQ, ElementEnergyElastic, ElementEnergyPlastic
+from db_defs import Frame, NodePos, ElementStress, ElementPEEQ, ElementEnergyElastic, ElementEnergyPlastic, HistoryResult, expected_history_results
 
 # Get the command line option (should be last!).
 fn_odb = sys.argv[-3]
@@ -85,17 +85,40 @@ def _get_data_array_as_double(one_value):
         raise TypeError(one_value.precision)
 
 
-def walk_file_frames(fn_odb, override_z_val):
+def get_history_results(this_odb):
+    """
+    :return type: Iterable[HistoryResult]
+    """
+
+    fn_odb = this_odb.name
+
+    for step_num, (step_name, one_step) in enumerate(this_odb.steps.items()):
+        for hr_name, history_region in one_step.historyRegions.items():
+            for hist_res_id in expected_history_results:
+                history_regions_output = history_region.historyOutputs[hist_res_id]
+                for hist_time, history_value in history_regions_output.data:
+                    yield HistoryResult(
+                        rowid=None,
+                        fn_odb=fn_odb,
+                        step_num=step_num,
+                        step_name=step_name,
+                        history_region=hr_name,
+                        history_identifier=hist_res_id,
+                        simulation_time=one_step.totalTime + hist_time,
+                        history_value=history_value,
+                    )
+
+
+def walk_file_frames(this_odb, override_z_val):
     """
     :return type: Iterable[Frame, ExtractionMeta]
     """
-    this_odb = odbAccess.openOdb(fn_odb)
+    fn_odb = this_odb.name
 
     for one_instance_name, instance in this_odb.rootAssembly.instances.items():
         this_part_elem_labels = frozenset(elem.label for elem in instance.elements)
         this_part_node_labels = _get_nodes_on_elements(instance.elements)
         this_part_node_initial_pos = _get_node_initial_pos(override_z_val, instance)
-        previous_step_time = 0.0
         for step_num, (step_name, one_step) in enumerate(this_odb.steps.items()):
 
             last_frame_id_of_step = len(one_step.frames) - 1
@@ -112,7 +135,7 @@ def walk_file_frames(fn_odb, override_z_val):
                             step_name=step_name,
                             frame_id=frame_id,
                             frame_value=frame.frameId,
-                            simulation_time=previous_step_time+frame.frameValue,
+                            simulation_time=one_step.totalTime + frame.frameValue,
                         ),
                         ExtractionMeta(
                             frame=frame,
@@ -124,15 +147,11 @@ def walk_file_frames(fn_odb, override_z_val):
                     )
 
                 if frame_id == last_frame_id_of_step:
-                    previous_step_time += frame.frameValue
-
                     if SAVE_IMAGES:
                         # Print to file?
                         fn = r"c:\temp\aba\Mod-{0}-{1}-{2}.png".format(one_instance_name, step_name, frame_id)
                         abaqus.session.printOptions.setValues(vpBackground=True)
                         abaqus.session.printToFile(fn, format=abaqusConstants.PNG)
-
-    this_odb.close()
 
 
 def get_stresses_one_frame(extraction_meta):
@@ -255,12 +274,17 @@ def get_results_one_frame(extraction_meta):
 
 
 def extract_file_results(fn_odb):
+    this_odb = odbAccess.openOdb(fn_odb)
+
     with Datastore(fn=db_fn) as datastore:
-        for frame_db, extraction_meta in walk_file_frames(fn_odb, override_z_val):
+        for frame_db, extraction_meta in walk_file_frames(this_odb, override_z_val):
             print_in_term(frame_db)
             all_results = get_results_one_frame(extraction_meta)
             datastore.add_frame_and_results(frame_db, all_results)
 
+        datastore.add_many_history_results( get_history_results(this_odb) )
+
+    this_odb.close()
 
 
 if __name__ == "__main__":

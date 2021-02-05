@@ -3,6 +3,8 @@ import typing
 
 from stent_opt.abaqus_model import base
 
+from stent_opt.odb_interface.db_defs import expected_history_results
+
 class NodeOutputs(enum.Enum):
     RF = "Reaction Force & Moment Components"
     U = "Displacement Components"
@@ -25,6 +27,11 @@ class EnergyOutputs(enum.Enum):
     ALLKE = "Kinetic energy."
     ALLWK = "External work."
 
+
+# Sanity check
+for energy_output in EnergyOutputs:
+    if energy_output.name not in expected_history_results:
+        raise ValueError(f"{energy_output.name} is in stent_opt.abaqus_model.output_requests.EnergyOutputs but not in stent_opt.odb_interface.db_defs.expected_history_results... the output script will go looking for {energy_output.name} to extract but it won't be there.")
 
 T_OutputRequest = typing.Union[NodeOutputs, ElementOutputs]
 T_HistoryRequest = typing.Union[EnergyOutputs]
