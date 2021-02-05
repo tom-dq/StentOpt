@@ -85,18 +85,26 @@ class GlobalStatusType(enum.Enum):
     current_volume_ratio = enum.auto()
     target_volume_ratio = enum.auto()
     aggregate_min = enum.auto()
+    aggregate_p10 = enum.auto()
     aggregate_mean = enum.auto()
     aggregate_median = enum.auto()
+    aggregate_p90 = enum.auto()
     aggregate_max = enum.auto()
     aggregate_st_dev = enum.auto()
+    aggregate_sum = enum.auto()
 
 
 class GlobalStatus(typing.NamedTuple):
-    # TODO - get these values into the DB and graph them
     iteration_num: int
     global_status_type: GlobalStatusType
     global_status_sub_type: str
     global_status_value: float
+
+    def for_db_form(self):
+        return self._replace(global_status_type=self.global_status_type.name)
+
+    def from_db(self):
+        return self._replace(global_status_type=GlobalStatusType[self.global_status_type])
 
 
 _make_snapshot_table = """CREATE TABLE IF NOT EXISTS Snapshot(
@@ -186,6 +194,14 @@ class History:
         ins_string = self._generate_insert_string_nt_class(NodePosition)
         with self.connection:
             self.connection.executemany(ins_string, node_positions)
+
+    def add_many_global_status_checks(self, global_statuses: typing.Iterable[GlobalStatus]):
+        with self.connection:
+            ins_string = self._generate_insert_string_nt_class(GlobalStatus)
+
+            with self.connection:
+                in_db_forms = (glob_stat.for_db_form() for glob_stat in global_statuses)
+                self.connection.executemany(ins_string, in_db_forms)
 
     def get_snapshots(self) -> typing.Iterable[Snapshot]:
         with self.connection:
@@ -293,6 +309,12 @@ class History:
 
             yield from (StatusCheck(*row).from_db() for row in rows)
 
+    def get_global_status_checks(self, iter_greater_than: int, iter_less_than_equal: int) -> typing.Iterable[GlobalStatus]:
+        with self.connection:
+            rows = self.connection.execute(f"SELECT * FROM GlobalStatus WHERE iteration_num >= ? AND ? >= iteration_num ORDER BY iteration_num, global_status_sub_type, global_status_type ",  (iter_greater_than, iter_less_than_equal))
+            yield from (GlobalStatus(*row).from_db() for row in rows)
+
+
     def get_metric_names(self) -> typing.List[str]:
         with self.connection:
             rows = self.connection.execute("SELECT DISTINCT metric_name FROM StatusCheck")
@@ -302,6 +324,18 @@ class History:
         with self.connection:
             rows = self.connection.execute("SELECT * FROM NodePosition ORDER BY iteration_num")
             yield from (NodePosition(*row) for row in rows)
+
+    def update_global_with_elemental(self, iteration_num: int):
+        """Goes through the elemental results and gets the statistical values."""
+
+        def stat_type(stat_check: StatusCheck):
+            return stat_check.metric_name
+
+        all_stat_checks = sorted(self.get_status_checks(iteration_num-1, iteration_num), key=stat_type)
+        for metric_name, sub_list in itertools.groupby(all_stat_checks, stat_type):
+            # Work out the statistics on sub_list
+
+            raise ValueError("Time to write this bit!")
 
 
 

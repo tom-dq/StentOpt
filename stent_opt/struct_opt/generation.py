@@ -356,9 +356,10 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
             active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements))
         )
 
-    # Get the old data.
+    # Get the data from the previously run simulation.
     with datastore.Datastore(db_fn_prev) as data:
         ranking_result = _get_ranking_functions(optim_params, iter_n, design_n_min_1, data)
+        global_status_raw = list(data.get_final_history_result())
 
     pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in ranking_result.pos_rows}
 
@@ -372,6 +373,19 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
             metric_val=rank_comp.value) for rank_comp_list in ranking_result.all_ranks for rank_comp in rank_comp_list)
 
         hist.add_many_status_checks(status_checks)
+
+        # Save the global model results from Abaqus in the history file.
+        global_status_history = [history.GlobalStatus(
+            iteration_num=iter_n_min_1,
+            global_status_type=history.GlobalStatusType.abaqus_history_result,
+            global_status_sub_type=stat_raw.history_identifier,
+            global_status_value=stat_raw.history_value,
+        ) for stat_raw in global_status_raw]
+        hist.add_many_global_status_checks(global_status_history)
+
+        # TODO!
+        # hist.update_global_with_elemental(iteration_num=iter_n_min_1)
+
 
         # Note the node positions for rendering later on.
         node_pos_for_hist = (history.NodePosition(

@@ -94,7 +94,16 @@ class Datastore:
             for row in rows:
                 yield named_tuple_class(*row)
 
+    def get_final_history_result(self):
+        with self.connection:
+            rows = self.connection.execute("SELECT * FROM HistoryResult ORDER BY history_identifier, step_num, simulation_time DESC")
+            rows_hr = (db_defs.HistoryResult(*row) for row in rows)
+            def get_history_identifier(row_hr):
+                return row_hr.history_identifier
 
+            for history_identifier, many_rows in itertools.groupby(rows_hr, get_history_identifier):
+                final_row = next(many_rows)
+                yield final_row
 
 
 
