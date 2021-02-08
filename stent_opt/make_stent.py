@@ -309,28 +309,26 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
 
 def apply_loads(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
     if stent_params.actuation == Actuation.rigid_cylinder:
-        _apply_loads_enforced_disp_rigid_cyl(stent_params, model)
+        _apply_loads_enforced_disp_rigid_cyl(optim_params, stent_params, model)
 
     elif stent_params.actuation == Actuation.enforced_displacement_plane:
         _apply_loads_enforced_disp_2d_planar(optim_params, stent_params, model)
 
     else:
-        _apply_loads_pressure(stent_params, model)
+        _apply_loads_pressure(optim_params, stent_params, model)
 
 
 def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
-    t1 = 0.2  # TODO - back to 2.0
-    t2 = 3.0  # TODO - back to 3.0
 
     step_expand = optim_params.analysis_step_type(
         name=f"ExpandHold",
-        step_time=t1,
+        step_time=optim_params.time_expansion,
     )
 
     if optim_params.release_stent_after_expansion:
         step_release = optim_params.analysis_step_type(
             name=f"Release",
-            step_time=t2,
+            step_time=optim_params.time_released,
         )
 
     model.add_step(step_expand)
@@ -342,8 +340,8 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
 
     amp_data = (
         amplitude.XY(0.0, 0.0),
-        amplitude.XY(0.8*t1, 1.0),
-        amplitude.XY(t1, 1.0),
+        amplitude.XY(0.8*optim_params.time_expansion, 1.0),
+        amplitude.XY(optim_params.time_expansion, 1.0),
     )
     amp = amplitude.Amplitude("Amp-1", amp_data)
 
@@ -387,42 +385,41 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
     if optim_params.release_stent_after_expansion: model.add_load_specific_steps([step_release], let_go_disp)
     model.add_load_specific_steps([step_expand], hold_base1)
     if optim_params.release_stent_after_expansion: model.add_load_specific_steps([step_release], hold_base2)
-    
-    # Rebound pressure (kind of like the blood vessel squeezing in).
 
-    leading_edge = stent_instance.surfaces[GlobalSurfNames.PLANAR_LEADING_EDGE]
-    actuated_line_length = leading_edge.num_elem() * stent_params.single_element_z_span
-    pressure_load = 0.2 / actuated_line_length
+    if optim_params.release_stent_after_expansion:
+        # Rebound pressure (kind of like the blood vessel squeezing in).
+        leading_edge = stent_instance.surfaces[GlobalSurfNames.PLANAR_LEADING_EDGE]
+        actuated_line_length = leading_edge.num_elem() * stent_params.single_element_z_span
+        pressure_load = 0.2 / actuated_line_length
 
-    amp_data = (
-        amplitude.XY(0.0, 0.0),
-        amplitude.XY(0.1 * t2, 0.0),
-        amplitude.XY(0.6 * t2, pressure_load),
-        amplitude.XY(t2, pressure_load),
-    )
+        amp_data = (
+            amplitude.XY(0.0, 0.0),
+            amplitude.XY(0.1 * optim_params.time_released, 0.0),
+            amplitude.XY(0.6 * optim_params.time_released, pressure_load),
+            amplitude.XY(optim_params.time_released, pressure_load),
+        )
 
-    amp_pressure = amplitude.Amplitude("Amp-Press", amp_data)
+        amp_pressure = amplitude.Amplitude("Amp-Press", amp_data)
 
-    inner_pressure = load.PressureLoad(
-        name="Pressure",
-        with_amplitude=amp_pressure,
-        on_surface=leading_edge,
-        value=pressure_load,
-    )
+        inner_pressure = load.PressureLoad(
+            name="Pressure",
+            with_amplitude=amp_pressure,
+            on_surface=leading_edge,
+            value=pressure_load,
+        )
 
-    if optim_params.release_stent_after_expansion: model.add_load_specific_steps([step_release], inner_pressure)
+        model.add_load_specific_steps([step_release], inner_pressure)
 
 
-def _apply_loads_enforced_disp_rigid_cyl(stent_params: StentParams, model: main.AbaqusModel):
+def _apply_loads_enforced_disp_rigid_cyl(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
     init_radius = stent_params.actuation_surface_ratio
     final_radius = stent_params.r_min * stent_params.expansion_ratio
     dr = final_radius - init_radius
 
-    total_time = .2  # TODO! Back to 3.0
 
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
-        step_time=total_time,
+        step_time=optim_params.time_expansion,
         bulk_visc_b1=step.FALLBACK_VISC_B1,
         bulk_visc_b2=step.FALLBACK_VISC_B2,
     )
@@ -431,8 +428,8 @@ def _apply_loads_enforced_disp_rigid_cyl(stent_params: StentParams, model: main.
 
     amp_data = (
         amplitude.XY(0.0, 0.0),
-        amplitude.XY(0.75 * total_time, dr),
-        amplitude.XY(total_time, 0),
+        amplitude.XY(0.75 * optim_params.time_expansion, dr),
+        amplitude.XY(optim_params.time_expansion, 0),
     )
 
     amp = amplitude.Amplitude("Amp-1", amp_data)
@@ -454,22 +451,20 @@ def _apply_loads_enforced_disp_rigid_cyl(stent_params: StentParams, model: main.
 
 
 
-def _apply_loads_pressure(stent_params: StentParams, model: main.AbaqusModel):
+def _apply_loads_pressure(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
     # Some nominal amplitude from Dylan's model.
 
     if stent_params.balloon:
         max_pressure = 2.0
-        total_time = 5.0
         surf = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).surfaces[GlobalSurfNames.BALLOON_INNER]
 
     else:
         max_pressure = 0.2
-        total_time = 1.5
         surf = model.get_only_instance_base_part_name(GlobalPartNames.STENT).surfaces[GlobalSurfNames.INNER_BOTTOM_HALF]
 
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
-        step_time=total_time,
+        step_time=optim_params.time_expansion,
         bulk_visc_b1=step.FALLBACK_VISC_B1,
         bulk_visc_b2=step.FALLBACK_VISC_B2,
     )
@@ -478,10 +473,10 @@ def _apply_loads_pressure(stent_params: StentParams, model: main.AbaqusModel):
 
     amp_data = (
         amplitude.XY(0.0, 0.0),
-        amplitude.XY(0.65*total_time, 0.16*max_pressure),
-        amplitude.XY(0.75*total_time, 0.5*max_pressure),
-        amplitude.XY(0.9*total_time, max_pressure),
-        amplitude.XY(total_time, 0.05*max_pressure),
+        amplitude.XY(0.65*optim_params.time_expansion, 0.16*max_pressure),
+        amplitude.XY(0.75*optim_params.time_expansion, 0.5*max_pressure),
+        amplitude.XY(0.9*optim_params.time_expansion, max_pressure),
+        amplitude.XY(optim_params.time_expansion, 0.05*max_pressure),
     )
 
     amp = amplitude.Amplitude("Amp-1", amp_data)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # Keeps track of how the optimisation has been going.
 import itertools
 import enum
@@ -25,6 +27,15 @@ _nt_class_types = [
     db_defs.ElementEnergyElastic,
     db_defs.ElementEnergyPlastic,
 ]
+
+
+def _aggregate_elemental_values(st_vals: typing.Iterable[StatusCheck]) -> typing.Iterable[typing.Tuple[GlobalStatusType, float]]:
+    vals = [stat_check.metric_val for stat_check in st_vals]
+
+    for global_status_type in GlobalStatusType.get_elemental_aggregate_values():
+        yield global_status_type, global_status_type.compute_aggregate(vals)
+
+
 
 class Snapshot(typing.NamedTuple):
     iteration_num: int
@@ -92,6 +103,42 @@ class GlobalStatusType(enum.Enum):
     aggregate_max = enum.auto()
     aggregate_st_dev = enum.auto()
     aggregate_sum = enum.auto()
+
+    @classmethod
+    def get_elemental_aggregate_values(cls):
+        for name, enum_obj in cls.__members__.items():
+            if name.startswith("aggregate_"):
+                yield enum_obj
+
+    def compute_aggregate(self, elemental_vals: typing.List[float]) -> float:
+        if self == GlobalStatusType.aggregate_min:
+            return min(elemental_vals)
+
+        elif self == GlobalStatusType.aggregate_max:
+            return max(elemental_vals)
+
+        elif self == GlobalStatusType.aggregate_mean:
+            return statistics.mean(elemental_vals)
+
+        elif self == GlobalStatusType.aggregate_median:
+            return statistics.median(elemental_vals)
+
+        elif self == GlobalStatusType.aggregate_st_dev:
+            return statistics.stdev(elemental_vals)
+
+        elif self == GlobalStatusType.aggregate_sum:
+            return sum(elemental_vals)
+
+        elif self in (GlobalStatusType.aggregate_p10, GlobalStatusType.aggregate_p90):
+            quants = statistics.quantiles(elemental_vals, n=10)
+            if self == GlobalStatusType.aggregate_p10:
+                return quants[0]
+
+            elif self == GlobalStatusType.aggregate_p90:
+                return quants[-1]
+
+        raise ValueError(f"Did not know what to return for {self}")
+
 
 
 class GlobalStatus(typing.NamedTuple):
@@ -196,6 +243,7 @@ class History:
             self.connection.executemany(ins_string, node_positions)
 
     def add_many_global_status_checks(self, global_statuses: typing.Iterable[GlobalStatus]):
+        global_statuses = list(global_statuses)
         with self.connection:
             ins_string = self._generate_insert_string_nt_class(GlobalStatus)
 
@@ -328,6 +376,10 @@ class History:
     def update_global_with_elemental(self, iteration_num: int):
         """Goes through the elemental results and gets the statistical values."""
 
+        self.add_many_global_status_checks(self._make_global_status_rows_from_elemental(iteration_num))
+
+
+    def _make_global_status_rows_from_elemental(self, iteration_num: int) -> typing.Iterable[GlobalStatus]:
         def stat_type(stat_check: StatusCheck):
             return stat_check.metric_name
 
@@ -335,7 +387,13 @@ class History:
         for metric_name, sub_list in itertools.groupby(all_stat_checks, stat_type):
             # Work out the statistics on sub_list
 
-            raise ValueError("Time to write this bit!")
+            for global_status_type, global_status_value in _aggregate_elemental_values(sub_list):
+                yield GlobalStatus(
+                    iteration_num=iteration_num,
+                    global_status_type=global_status_type,
+                    global_status_sub_type=metric_name,
+                    global_status_value=global_status_value,
+                )
 
 
 
@@ -399,7 +457,7 @@ def make_history_db(working_dir: typing.Union[str, pathlib.Path]) -> pathlib.Pat
 
 
 def history_write_read_test():
-    with History(r"c:\temp\aaa234.db") as history:
+    with History(r"c:\temp\aaa23456.db") as history:
         orig_stent_params = design.basic_stent_params
         history.set_stent_params(orig_stent_params)
         history.set_optim_params(optimisation_parameters.active)
@@ -592,6 +650,10 @@ def nt_from_db_strings(nt_class, data):
                 if value is None:
                     working_data[name] = None
 
+                elif _is_nullable(nt_class.__annotations__[name]) and value == "None":
+                    # Get this for optional types
+                    working_data[name] = None
+
                 elif base_type in _enum_types:
                     # Is an enum, lookup from the dictionary.
                     working_data[name] = base_type[value]
@@ -637,9 +699,19 @@ def _get_type_ignoring_nones(some_type):
 
     return non_none_args[0]
 
+def _is_nullable(some_type) -> bool:
+    if getattr(some_type, "__origin__", None) is typing.Union:
+        none_args = [t for t in some_type.__args__ if t == type(None)]
+        if none_args:
+            return True
+
+    return False
 
 if __name__ == "__main__":
-    history_write_read_test()
+    for x in GlobalStatusType.get_elemental_aggregate_values():
+        print(x)
+
+    #history_write_read_test()
 
 if False:
     plot_history(r"E:\Simulations\StentOpt\aba-70\History.db")

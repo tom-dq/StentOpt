@@ -53,10 +53,15 @@ class OptimParams(typing.NamedTuple):
     use_double_precision: bool
     abaqus_output_time_interval: float
     abaqus_target_increment: float
-    release_stent_after_expansion: bool
+    time_expansion: float
+    time_released: typing.Optional[float]  # Make this None to not have a "release" step.
     analysis_step_type: typing.Type[step.StepBase]
     nodes_shared_with_old_design_to_expand: int    # Only let new elements come in which are attached to existing elements with at least this many nodes. Zero to allow all elements.
     nodes_shared_with_old_design_to_contract: int  # Only let new elements go out which are attached to existing elements with at least this many nodes. Zero to allow all elements.
+
+    @property
+    def release_stent_after_expansion(self) -> bool:
+        return bool(self.time_released)
 
     def _target_volume_ratio_clamped(self, stent_design: "design.StentDesign", iter_num: int) -> float:
         existing_volume_ratio = stent_design.volume_ratio()
@@ -189,7 +194,8 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.1,
     abaqus_target_increment=1e-6,
-    release_stent_after_expansion=False,
+    time_expansion=2.0,
+    time_released=None,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,

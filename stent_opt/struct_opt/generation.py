@@ -383,9 +383,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
         ) for stat_raw in global_status_raw]
         hist.add_many_global_status_checks(global_status_history)
 
-        # TODO!
-        # hist.update_global_with_elemental(iteration_num=iter_n_min_1)
-
+        hist.update_global_with_elemental(iteration_num=iter_n_min_1)
 
         # Note the node positions for rendering later on.
         node_pos_for_hist = (history.NodePosition(
