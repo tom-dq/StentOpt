@@ -140,6 +140,11 @@ class GlobalStatusType(enum.Enum):
         raise ValueError(f"Did not know what to return for {self}")
 
 
+class PlottablePoint(typing.NamedTuple):
+    iteration_num: int
+    label: str
+    value: float
+
 
 class GlobalStatus(typing.NamedTuple):
     iteration_num: int
@@ -153,6 +158,8 @@ class GlobalStatus(typing.NamedTuple):
     def from_db(self):
         return self._replace(global_status_type=GlobalStatusType[self.global_status_type])
 
+    def to_plottable_point(self) -> PlottablePoint:
+        return PlottablePoint(iteration_num=self.iteration_num, label=f"{self.global_status_sub_type} {self.global_status_type.name}", value=self.global_status_value)
 
 _make_snapshot_table = """CREATE TABLE IF NOT EXISTS Snapshot(
 iteration_num INTEGER,
@@ -362,7 +369,6 @@ class History:
             rows = self.connection.execute(f"SELECT * FROM GlobalStatus WHERE iteration_num >= ? AND ? >= iteration_num ORDER BY iteration_num, global_status_sub_type, global_status_type ",  (iter_greater_than, iter_less_than_equal))
             yield from (GlobalStatus(*row).from_db() for row in rows)
 
-
     def get_metric_names(self) -> typing.List[str]:
         with self.connection:
             rows = self.connection.execute("SELECT DISTINCT metric_name FROM StatusCheck")
@@ -395,7 +401,16 @@ class History:
                     global_status_value=global_status_value,
                 )
 
-
+    def get_unique_global_status_keys(self) -> typing.Iterable[GlobalStatus]:
+        with self.connection:
+            rows = self.connection.execute("SELECT DISTINCT global_status_type, global_status_sub_type FROM GlobalStatus")
+            for global_status_type, global_status_sub_type in rows:
+                yield GlobalStatus(
+                    iteration_num=None,
+                    global_status_type=GlobalStatusType[global_status_type],
+                    global_status_sub_type=global_status_sub_type,
+                    global_status_value=None,
+                )
 
 def plot_history(hist_fn):
     with History(hist_fn) as hist:

@@ -7,6 +7,10 @@ import enum
 import holoviews
 import panel
 import numpy
+import param
+
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_agg import FigureCanvas
 
 # TODO:
 #  - Rasterize the output plots or something - make them snappier!
@@ -18,7 +22,7 @@ from stent_opt.abaqus_model import base, element
 from stent_opt.struct_opt import history, design
 from stent_opt.struct_opt.computer import this_computer
 
-holoviews.extension('bokeh')
+holoviews.extension('bokeh', 'matplotlib')
 
 
 class DeformationView(enum.Enum):
@@ -54,10 +58,42 @@ UNLIMITED = 1_000_000_000_000  # Should be enough
 STOP_AT_INCREMENT = 100
 
 
+# This is for the legends on plotting axes
+history_db = history.make_history_db(WORKING_DIR_TEMP)
+with history.History(history_db) as hist:
+    _all_global_statuses = [gsv.to_plottable_point() for gsv in hist.get_unique_global_status_keys()]
+    _max_dashboard_increment = min(STOP_AT_INCREMENT, hist.max_saved_iteration_num())
+
+
+
 class ContourView(typing.NamedTuple):
     iteration_num: int
     metric_name: str
     deformed: bool
+
+
+class GraphLine(typing.NamedTuple):
+    points: typing.List[history.PlottablePoint]
+
+    @property
+    def label(self):
+        labels = {p.label for p in self.points}
+        if len(labels) == 0:
+            return None
+
+        elif len(labels) == 1:
+            return labels.pop()
+
+        else:
+            raise ValueError(labels)
+
+    @property
+    def x_vals(self):
+        return [p.iteration_num for p in self.points]
+
+    @property
+    def y_vals(self):
+        return [p.value for p in self.points]
 
 
 def get_status_checks() -> typing.List["history.StatusCheck"]:
@@ -179,54 +215,130 @@ def make_quadmesh(
     return holoviews.Overlay(qmesh_list)
 
 
+def _make_contour(hist: history.History, deformation_view: DeformationView) -> holoviews.HoloMap:
+
+    stent_params = hist.get_stent_params()
+    snapshots = {snap.iteration_num: snap for snap in hist.get_snapshots()}
+
+    # Node undeformed position and connectivity
+    node_pos_undeformed = {iNode: pos.to_xyz() for iNode, idx, pos in design.generate_nodes(stent_params)}
+    node_pos_deformed_all_iters = collections.defaultdict(dict)
+    node_num_to_idx = {iNode: idx for iNode, idx, pos in design.generate_nodes(stent_params)}
+    for node_pos in hist.get_node_positions():
+        node_pos_deformed_all_iters[node_pos.iteration_num][node_pos.node_num] = base.XYZ(x=node_pos.x, y=node_pos.y, z=node_pos.z)
+
+    num_to_elem = {iElem: elem for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
+    num_to_idx = {iElem: idx for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
+
+    plot_dict = {}
+    for contour_view_raw, elem_data in _build_contour_view_data(hist):
+
+        deformation_options = []
+        if deformation_view.create_undef: deformation_options.append( (False, node_pos_undeformed) )
+        if deformation_view.create_def: deformation_options.append( (True, node_pos_deformed_all_iters[contour_view_raw.iteration_num]) )
+
+        for deformed, node_pos in deformation_options:
+            contour_view = contour_view_raw._replace(deformed=deformed)
+            active_elements = frozenset(num_to_idx[iElem] for iElem in snapshots[contour_view.iteration_num].active_elements)
+            print(contour_view)
+
+            # Some measures (like RegionGradient) can exist even if the element is inactive. Strip these out of the display.
+            elem_to_value = {
+                num_to_elem[iElem]: val for
+                iElem, val in elem_data.items()
+                if iElem in snapshots[contour_view.iteration_num].active_elements}
+
+            elem_idx_to_value = {
+                num_to_idx[iElem]: val for
+                iElem, val in  elem_data.items()}
+
+            node_idx_pos = {node_num_to_idx[iNode]: pos for iNode, pos in node_pos.items()}
+
+            qmesh = make_quadmesh(stent_params, active_elements, node_idx_pos, contour_view, elem_idx_to_value)
+            plot_dict[contour_view] = qmesh
+
+    hmap = holoviews.HoloMap(plot_dict, kdims=list(contour_view._fields))
+
+    return hmap
+
+
+class GlobalHistory(param.Parameterized):
+    plot_vars = param.ListSelector(objects=[pp.label for pp in _all_global_statuses])
+    iteration_num = param.Integer(default=0, bounds=(0, _max_dashboard_increment))
+
+    all_pps = typing.List[history.PlottablePoint]
+
+    def __init__(self, hist: history.History):
+        super().__init__()
+
+        all_gsvs = [gsv for gsv in hist.get_global_status_checks(0, UNLIMITED)]
+        self.all_pps = [gsv.to_plottable_point() for gsv in all_gsvs]
+
+    def view(self):
+
+        # Get the relevant line labels
+        if self.plot_vars:
+            plot_labels = set(self.plot_vars)
+
+        else:
+            plot_labels = set()
+
+        plot_points = [pp for pp in self.all_pps if pp.label in plot_labels]
+        graph_points = collections.defaultdict(list)
+
+
+        for pp in plot_points:
+            graph_points[pp.label].append(pp)
+
+        graph_lines = [GraphLine(points) for points in graph_points.values()]
+
+        return _plot_view_func(graph_lines, self.iteration_num)
+
+
+def _make_line_graph(hist: history.History):
+
+    plot_points = [gsc.to_plottable_point() for gsc in hist.get_global_status_checks(0, STOP_AT_INCREMENT)]
+    ds = holoviews.Dataset(plot_points, kdims=['label'], vdims=['value'])
+
+    curve = ds.to(holoviews.Curve, 'label', 'value')
+    return curve
+
+
+def _plot_view_func(graph_lines: typing.List[GraphLine], iteration_num: int):
+
+    fig = Figure()
+    ax = fig.add_subplot()
+
+    for graph_line in graph_lines:
+        x_vals = graph_line.x_vals
+        y_vals = graph_line.y_vals
+        ax.plot(x_vals, y_vals, label=graph_line.label)
+        ax.plot([x_vals[iteration_num]], [y_vals[iteration_num]], 'o')
+
+
+
+    return fig
+
+
 def make_dashboard(working_dir: pathlib.Path, deformation_view: DeformationView):
-    # Get the data from the
+
     print(working_dir)
 
     history_db = history.make_history_db(working_dir)
+
     with history.History(history_db) as hist:
-        stent_params = hist.get_stent_params()
-        snapshots = {snap.iteration_num: snap for snap in hist.get_snapshots()}
 
-        # Node undeformed position and connectivity
-        node_pos_undeformed = {iNode: pos.to_xyz() for iNode, idx, pos in design.generate_nodes(stent_params)}
-        node_pos_deformed_all_iters = collections.defaultdict(dict)
-        node_num_to_idx = {iNode: idx for iNode, idx, pos in design.generate_nodes(stent_params)}
-        for node_pos in hist.get_node_positions():
-            node_pos_deformed_all_iters[node_pos.iteration_num][node_pos.node_num] = base.XYZ(x=node_pos.x, y=node_pos.y, z=node_pos.z)
+        hmap = _make_contour(hist, deformation_view)
+        #curve = _make_line_graph(hist)
+        #panel.panel(curve).show()
+        panel.extension()
+        glob_hist = GlobalHistory(hist)
 
-        num_to_elem = {iElem: elem for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
-        num_to_idx = {iElem: idx for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
+        graph_row = panel.Row(glob_hist.param, glob_hist.view)
+        cols = panel.Column(hmap, graph_row)
+        panel.panel(cols).show()
 
-        plot_dict = {}
-        for contour_view_raw, elem_data in _build_contour_view_data(hist):
 
-            deformation_options = []
-            if deformation_view.create_undef: deformation_options.append( (False, node_pos_undeformed) )
-            if deformation_view.create_def: deformation_options.append( (True, node_pos_deformed_all_iters[contour_view_raw.iteration_num]) )
-
-            for deformed, node_pos in deformation_options:
-                contour_view = contour_view_raw._replace(deformed=deformed)
-                active_elements = frozenset(num_to_idx[iElem] for iElem in snapshots[contour_view.iteration_num].active_elements)
-                print(contour_view)
-
-                # Some measures (like RegionGradient) can exist even if the element is inactive. Strip these out of the display.
-                elem_to_value = {
-                    num_to_elem[iElem]: val for
-                    iElem, val in elem_data.items()
-                    if iElem in snapshots[contour_view.iteration_num].active_elements}
-
-                elem_idx_to_value = {
-                    num_to_idx[iElem]: val for
-                    iElem, val in  elem_data.items()}
-
-                node_idx_pos = {node_num_to_idx[iNode]: pos for iNode, pos in node_pos.items()}
-
-                qmesh = make_quadmesh(stent_params, active_elements, node_idx_pos, contour_view, elem_idx_to_value)
-                plot_dict[contour_view] = qmesh
-
-        hmap = holoviews.HoloMap(plot_dict, kdims=list(contour_view._fields))
-        panel.panel(hmap).show()
 
 
 def do_test():
@@ -270,4 +382,4 @@ def main():
 
 
 if __name__ == '__main__':
-    make_dashboard(WORKING_DIR_TEMP, DeformationView.both)
+    make_dashboard(WORKING_DIR_TEMP, DeformationView.deformed)
