@@ -264,6 +264,15 @@ class History:
             db_forms = (Snapshot(*row) for row in rows)
             yield from (one_db_form.from_db() for one_db_form in db_forms)
 
+    def get_one_snapshot(self, iteration_num: int) -> Snapshot:
+        with self.connection:
+            rows = list(self.connection.execute("SELECT * FROM Snapshot WHERE iteration_num=?", (iteration_num,)))
+            if len(rows) != 1:
+                raise ValueError(iteration_num)
+
+            db_snap = Snapshot(*rows[0])
+            return db_snap.from_db()
+
     def set_stent_params(self, stent_params: "design.StentParams"):
         """Save the model parameters"""
         data_rows = list(stent_params.to_db_strings())
@@ -347,7 +356,7 @@ class History:
                 active_elements=frozenset( (elem_num_to_idx[iElem] for iElem in maybe_snapshot.active_elements)),
             )
 
-    def get_status_checks(self, iter_greater_than: int, iter_less_than_equal: int, limit_to_metrics: typing.Optional[typing.Container[str]]=None) -> typing.Iterable[StatusCheck]:
+    def get_status_checks(self, iter_greater_than_equal: int, iter_less_than_equal: int, limit_to_metrics: typing.Optional[typing.Container[str]]=None) -> typing.Iterable[StatusCheck]:
         with self.connection:
             if limit_to_metrics:
                 qms = ["?" for _ in limit_to_metrics]
@@ -359,14 +368,14 @@ class History:
                 extra_filter = ""
                 extra_args = tuple()
 
-            all_args = (iter_greater_than,iter_less_than_equal) + extra_args
+            all_args = (iter_greater_than_equal,iter_less_than_equal) + extra_args
             rows = self.connection.execute(f"SELECT * FROM StatusCheck WHERE iteration_num >= ? AND ? >= iteration_num {extra_filter} ORDER BY iteration_num, metric_name ", all_args)
 
             yield from (StatusCheck(*row).from_db() for row in rows)
 
-    def get_global_status_checks(self, iter_greater_than: int, iter_less_than_equal: int) -> typing.Iterable[GlobalStatus]:
+    def get_global_status_checks(self, iter_greater_than_equal: int, iter_less_than_equal: int) -> typing.Iterable[GlobalStatus]:
         with self.connection:
-            rows = self.connection.execute(f"SELECT * FROM GlobalStatus WHERE iteration_num >= ? AND ? >= iteration_num ORDER BY iteration_num, global_status_sub_type, global_status_type ",  (iter_greater_than, iter_less_than_equal))
+            rows = self.connection.execute(f"SELECT * FROM GlobalStatus WHERE iteration_num >= ? AND ? >= iteration_num ORDER BY iteration_num, global_status_sub_type, global_status_type ", (iter_greater_than_equal, iter_less_than_equal))
             yield from (GlobalStatus(*row).from_db() for row in rows)
 
     def get_metric_names(self) -> typing.List[str]:
@@ -374,10 +383,16 @@ class History:
             rows = self.connection.execute("SELECT DISTINCT metric_name FROM StatusCheck")
             return list(row[0] for row in rows)
 
-    def get_node_positions(self) -> typing.Iterable[NodePosition]:
+    def get_node_positions(self, iteration_num: typing.Optional[int] = None) -> typing.Iterable[NodePosition]:
         with self.connection:
-            rows = self.connection.execute("SELECT * FROM NodePosition ORDER BY iteration_num")
+            if iteration_num is None:
+                rows = self.connection.execute("SELECT * FROM NodePosition ORDER BY iteration_num")
+
+            else:
+                rows = self.connection.execute("SELECT * FROM NodePosition WHERE iteration_num = ?", (iteration_num,))
+
             yield from (NodePosition(*row) for row in rows)
+
 
     def update_global_with_elemental(self, iteration_num: int):
         """Goes through the elemental results and gets the statistical values."""
@@ -389,7 +404,7 @@ class History:
         def stat_type(stat_check: StatusCheck):
             return stat_check.metric_name
 
-        all_stat_checks = sorted(self.get_status_checks(iteration_num-1, iteration_num), key=stat_type)
+        all_stat_checks = sorted(self.get_status_checks(iteration_num, iteration_num), key=stat_type)
         for metric_name, sub_list in itertools.groupby(all_stat_checks, stat_type):
             # Work out the statistics on sub_list
 

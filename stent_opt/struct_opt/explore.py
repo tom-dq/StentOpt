@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import collections
 import itertools
 import pathlib
@@ -10,6 +12,7 @@ import numpy
 import param
 
 from matplotlib.figure import Figure
+from matplotlib import rcParams
 from matplotlib.backends.backend_agg import FigureCanvas
 
 # TODO:
@@ -62,12 +65,24 @@ STOP_AT_INCREMENT = 100
 history_db = history.make_history_db(WORKING_DIR_TEMP)
 with history.History(history_db) as hist:
     _all_global_statuses = [gsv.to_plottable_point() for gsv in hist.get_unique_global_status_keys()]
+    _global_status_idx = {pp.label: idx for idx, pp in enumerate(_all_global_statuses)}
+    _all_elemental_metrics = hist.get_metric_names()
     _max_dashboard_increment = min(STOP_AT_INCREMENT, hist.max_saved_iteration_num())
 
+# Just re-use this around the place so I don't need to open/close the DB all the time... is this a bad idea?
+global_hist = history.History(history_db)
 
 
 class ContourView(typing.NamedTuple):
     iteration_num: int
+    metric_name: str
+    deformed: bool
+
+    def make_iteration_view(self) -> ContourIterationView:
+        return ContourIterationView(metric_name=self.metric_name, deformed=self.deformed)
+
+
+class ContourIterationView(typing.NamedTuple):
     metric_name: str
     deformed: bool
 
@@ -95,6 +110,10 @@ class GraphLine(typing.NamedTuple):
     def y_vals(self):
         return [p.value for p in self.points]
 
+    @property
+    def xy_points(self):
+        return [(p.iteration_num, p.value) for p in self.points]
+
 
 def get_status_checks() -> typing.List["history.StatusCheck"]:
     history_db = history.make_history_db(WORKING_DIR_TEMP)
@@ -102,7 +121,11 @@ def get_status_checks() -> typing.List["history.StatusCheck"]:
         return list(hist.get_status_checks(iter_greater_than=0, iter_less_than_equal=UNLIMITED))
 
 
-def _build_contour_view_data(hist: history.History) -> typing.Iterable[typing.Tuple[ContourView, typing.Dict[int, float]]]:
+def _build_contour_view_data(
+        hist: history.History,
+        single_iteration: typing.Optional[int] = None,
+        metric_name: typing.Optional[str] = None,
+) -> typing.Iterable[typing.Tuple[ContourView, typing.Dict[int, float]]]:
     """Make the view info for a contour."""
 
     def make_contour_view(status_check: history.StatusCheck) -> ContourView:
@@ -112,13 +135,23 @@ def _build_contour_view_data(hist: history.History) -> typing.Iterable[typing.Tu
             deformed=None,
         )
 
-    metric_names = hist.get_metric_names()
+    if metric_name:
+        good_metric_names = [metric_name]
 
-    print(metric_names)
-    # good_metric_names = metric_names
-    good_metric_names = ["ElementEnergyElastic"]
+    else:
+        metric_names = hist.get_metric_names()
+        # good_metric_names = ["ElementEnergyElastic"]
+        good_metric_names = metric_names
 
-    for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(0, STOP_AT_INCREMENT, good_metric_names), make_contour_view):
+    if single_iteration is None:
+        inc_gt = 0
+        inc_lte = STOP_AT_INCREMENT
+
+    else:
+        inc_gt = single_iteration
+        inc_lte = single_iteration
+
+    for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(inc_gt, inc_lte, good_metric_names), make_contour_view):
         elem_vals = {status_check.elem_num: status_check.metric_val for status_check in sub_iter}
         yield contour_view, elem_vals
 
@@ -214,7 +247,37 @@ def make_quadmesh(
 
     return holoviews.Overlay(qmesh_list)
 
+# Controls out here since iteration_selector is shared
+iteration_selector = panel.widgets.IntSlider(
+    name="Iteration Number",
+    start=0,
+    end=_max_dashboard_increment,
+    step=1,
+    value=0,
+)
 
+elemental_metric_selector = panel.widgets.Select(
+    name="Contour",
+    options=_all_elemental_metrics,
+    value=_all_elemental_metrics[0],
+    size=len(_all_elemental_metrics),
+)
+
+deformed_selector = panel.widgets.Checkbox(
+    name="Deformed",
+    value=True,
+)
+
+history_plot_vars_selector = panel.widgets.MultiSelect(
+    name="History Values",
+    options=[gsv.label for gsv in _all_global_statuses],
+    size=50,
+    value=[gsv.label for gsv in _all_global_statuses[0:1]],
+)
+
+
+# https://stackoverflow.com/a/62434272
+@panel.depends(iteration_selector, elemental_metric_selector, deformed_selector)
 def _make_contour(hist: history.History, deformation_view: DeformationView) -> holoviews.HoloMap:
 
     stent_params = hist.get_stent_params()
@@ -231,7 +294,7 @@ def _make_contour(hist: history.History, deformation_view: DeformationView) -> h
     num_to_idx = {iElem: idx for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
 
     plot_dict = {}
-    for contour_view_raw, elem_data in _build_contour_view_data(hist):
+    for contour_view_raw, elem_data in _build_contour_view_data(hist, single_iteration=iteration_selector.value, metric_name=elemental_metric_selector.value):
 
         deformation_options = []
         if deformation_view.create_undef: deformation_options.append( (False, node_pos_undeformed) )
@@ -250,16 +313,60 @@ def _make_contour(hist: history.History, deformation_view: DeformationView) -> h
 
             elem_idx_to_value = {
                 num_to_idx[iElem]: val for
-                iElem, val in  elem_data.items()}
+                iElem, val in elem_data.items()}
 
             node_idx_pos = {node_num_to_idx[iNode]: pos for iNode, pos in node_pos.items()}
 
             qmesh = make_quadmesh(stent_params, active_elements, node_idx_pos, contour_view, elem_idx_to_value)
-            plot_dict[contour_view] = qmesh
+            plot_dict[contour_view.make_iteration_view()] = qmesh
 
-    hmap = holoviews.HoloMap(plot_dict, kdims=list(contour_view._fields))
+    hmap = holoviews.HoloMap(plot_dict, kdims=list(ContourIterationView._fields))
 
     return hmap
+
+
+
+@panel.depends(iteration_selector, elemental_metric_selector, deformed_selector)
+def _make_single_contour(*args, **kwargs) -> holoviews.Overlay:
+
+    stent_params = global_hist.get_stent_params()
+
+    # Parameters
+    iteration_num = iteration_selector.value
+    deformed = deformed_selector.value
+    metric_name = elemental_metric_selector.value
+
+    print(iteration_num, deformed, metric_name)
+
+    node_num_to_idx = {iNode: idx for iNode, idx, pos in design.generate_nodes(stent_params)}
+    elem_num_to_idx = {iElem: idx for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
+    # Node positions
+    if deformed:
+        node_pos = {
+            node_pos.node_num: base.XYZ(x=node_pos.x, y=node_pos.y, z=node_pos.z)
+            for node_pos in global_hist.get_node_positions(iteration_num)
+        }
+        snapshot = global_hist.get_one_snapshot(iteration_num)
+        active_elements = frozenset(elem_num_to_idx[iElem] for iElem in snapshot.active_elements)
+
+    else:
+        node_pos = {iNode: pos.to_xyz() for iNode, idx, pos in design.generate_nodes(stent_params)}
+        active_elements = frozenset(elem_num_to_idx.values())
+
+    # Should just be one contour here
+    one_contour_view = list(_build_contour_view_data(global_hist, single_iteration=iteration_num, metric_name=metric_name))
+    if len(one_contour_view) != 1:
+        raise ValueError(f"Expected one here.")
+
+    contour_view, elem_data = one_contour_view[0]
+    contour_view._replace(deformed=deformed)
+
+    elem_idx_to_value = {elem_num_to_idx[iElem]: val for iElem, val in elem_data.items() if elem_num_to_idx[iElem] in active_elements}
+
+    node_idx_pos = {node_num_to_idx[iNode]: pos for iNode, pos in node_pos.items()}
+    qmesh = make_quadmesh(stent_params, active_elements, node_idx_pos, contour_view, elem_idx_to_value)
+
+    return qmesh
 
 
 class GlobalHistory(param.Parameterized):
@@ -304,9 +411,79 @@ def _make_line_graph(hist: history.History):
     return curve
 
 
+@panel.depends(iteration_selector, history_plot_vars_selector)
+def _create_history_curve(*args, **kwargs):
+
+    # Widgets
+    iteration_num = iteration_selector.value
+    history_plot_vars = set(history_plot_vars_selector.value)
+
+    all_gsvs = [gsv for gsv in global_hist.get_global_status_checks(0, UNLIMITED)]
+    all_pps = [gsv.to_plottable_point() for gsv in all_gsvs]
+
+    plot_points = [pp for pp in all_pps if pp.label in history_plot_vars]
+    graph_points = collections.defaultdict(list)
+
+    for pp in plot_points:
+        graph_points[pp.label].append(pp)
+
+    graph_lines = [GraphLine(points) for points in graph_points.values()]
+
+    all_vals = [gp.value for gline in graph_lines for gp in gline.points]
+    min_val = min(all_vals, default=0.0)
+    max_val = max(all_vals, default=0.0)
+
+    # TODO - up to here, trying to get the range on the plot to update when the data in DynamicMap changes.
+    # Plan is - make a wrapper function which gets the lines and also the bounds. Then do something with that!
+    # https://gist.github.com/pierdom/4952eb2187ef19765f6bfd1c627f0183
+    # https://discourse.holoviz.org/t/how-to-make-dynamicmap-adopt-to-yaxis-range-limits-change/1427/4
+    # https://holoviews.org/FAQ.html
+
+
+    print(history_plot_vars, min_val, max_val)
+    curves = {}
+    for graph_line in graph_lines:
+        y_dim_name = f'y_curve_{_global_status_idx[graph_line.label]}'
+        redim_dict = {y_dim_name: holoviews.Dimension(y_dim_name, range=(min_val, max_val))}
+        redim_range_dict = {"x_curve": (0, _max_dashboard_increment), y_dim_name: (min_val, max_val)}
+        # curves[graph_line.label] = holoviews.Curve(graph_line.xy_points, 'x_curve', y_dim_name).redim(**redim_dict).opts(axiswise=True)
+        curves[graph_line.label] = holoviews.Curve(graph_line.xy_points, 'x_curve', y_dim_name).redim.range(**redim_range_dict).opts(ylim=(min_val, max_val))
+
+    # curve_dims = {l: curve.opts(ylim=(min_val, max_val)) for l, curve in curves.items()}
+
+    nd_overlay = holoviews.NdOverlay(curves).opts(
+        # legend_position='right',
+        width=this_computer.fig_size[0],
+        height=int(0.5 * this_computer.fig_size[1]),
+        padding=0.1,
+        framewise=True,
+    )
+
+    # return nd_overlay
+
+    #return nd_overlay.redim(y_curve=holoviews.Dimension('y_curve', range=(min_val, max_val)))
+
+    #nd_redim = nd_overlay.redim(y=holoviews.Dimension('y', range=(min_val, max_val)))
+    return nd_overlay
+
+    return holoviews.NdOverlay(curves).opts(
+        legend_position='right',
+        width=this_computer.fig_size[0],
+        height=int(0.5 * this_computer.fig_size[1]),
+        padding=0.1,
+    )
+
+
+
+
+
 def _plot_view_func(graph_lines: typing.List[GraphLine], iteration_num: int):
 
-    fig = Figure()
+    fig_dpi = rcParams['figure.dpi']
+
+    fig_inches = this_computer.fig_size[0]/fig_dpi, 0.4*this_computer.fig_size[1]/fig_dpi
+
+    fig = Figure(figsize=fig_inches, dpi=fig_dpi)
     ax = fig.add_subplot()
 
     for graph_line in graph_lines:
@@ -315,9 +492,13 @@ def _plot_view_func(graph_lines: typing.List[GraphLine], iteration_num: int):
         ax.plot(x_vals, y_vals, label=graph_line.label)
         ax.plot([x_vals[iteration_num]], [y_vals[iteration_num]], 'o')
 
-
-
     return fig
+
+
+def _create_all_curves():
+    # TODO - was doing this
+    pass
+
 
 
 def make_dashboard(working_dir: pathlib.Path, deformation_view: DeformationView):
@@ -328,15 +509,27 @@ def make_dashboard(working_dir: pathlib.Path, deformation_view: DeformationView)
 
     with history.History(history_db) as hist:
 
-        hmap = _make_contour(hist, deformation_view)
+        #hmap = _make_contour(hist, deformation_view)
+        dmap = holoviews.DynamicMap(_make_single_contour)
+        hist_map = holoviews.DynamicMap(_create_history_curve, kdims=['iteration_num']).opts(framewise=True)
         #curve = _make_line_graph(hist)
         #panel.panel(curve).show()
         panel.extension()
-        glob_hist = GlobalHistory(hist)
 
-        graph_row = panel.Row(glob_hist.param, glob_hist.view)
-        cols = panel.Column(hmap, graph_row)
-        panel.panel(cols).show()
+        controls = panel.Column(
+            iteration_selector,
+            elemental_metric_selector,
+            deformed_selector,
+            history_plot_vars_selector,
+        )
+
+        # glob_hist = GlobalHistory(hist)
+
+        cols = panel.Column(dmap, hist_map)
+
+        graph_row = panel.Row(cols, controls)
+
+        panel.panel(graph_row).show()
 
 
 
