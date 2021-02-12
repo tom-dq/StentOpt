@@ -16,13 +16,11 @@ import param
 
 from matplotlib.figure import Figure
 from matplotlib import rcParams
-from matplotlib.backends.backend_agg import FigureCanvas
 
 # TODO:
 #  - Rasterize the output plots or something - make them snappier!
 #  - Make an auto-animation?
 #  - Something to do with stopping disconnections?
-
 
 from stent_opt.abaqus_model import base, element
 from stent_opt.struct_opt import history, design
@@ -57,23 +55,22 @@ def _get_most_recent_working_dir() -> pathlib.Path:
     return max(subdirs, key=most_recent)
 
 
-#WORKING_DIR_TEMP = _get_most_recent_working_dir()
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-229")
+WORKING_DIR_TEMP = _get_most_recent_working_dir()
+# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-229")
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
 STOP_AT_INCREMENT = 100
 
 
-# This is for the legends on plotting axes
-history_db = history.make_history_db(WORKING_DIR_TEMP)
-with history.History(history_db) as hist:
-    _all_global_statuses = [gsv.to_plottable_point() for gsv in hist.get_unique_global_status_keys()]
-    _global_status_idx = {pp.label: idx for idx, pp in enumerate(_all_global_statuses)}
-    _all_elemental_metrics = hist.get_metric_names()
-    _max_dashboard_increment = min(STOP_AT_INCREMENT, hist.max_saved_iteration_num())
-
 # Just re-use this around the place so I don't need to open/close the DB all the time... is this a bad idea?
+history_db = history.make_history_db(WORKING_DIR_TEMP)
 global_hist = history.History(history_db)
+
+_all_global_statuses = [gsv.to_plottable_point() for gsv in global_hist.get_unique_global_status_keys()]
+_global_status_idx = {pp.label: idx for idx, pp in enumerate(_all_global_statuses)}
+_all_elemental_metrics = global_hist.get_metric_names()
+_max_dashboard_increment = min(STOP_AT_INCREMENT, global_hist.max_saved_iteration_num() - 1)  # Why the minus one? Can't remember!
+
 
 
 class ContourView(typing.NamedTuple):
@@ -116,6 +113,10 @@ class GraphLine(typing.NamedTuple):
     @property
     def xy_points(self):
         return [(p.iteration_num, p.value) for p in self.points]
+
+    @property
+    def y_range(self):
+        return min(self.y_vals), max(self.y_vals)
 
 
 class GraphLineCollection(typing.NamedTuple):
@@ -166,9 +167,7 @@ class GraphLineCollection(typing.NamedTuple):
         return self.y_min, self.y_max
 
 def get_status_checks() -> typing.List["history.StatusCheck"]:
-    history_db = history.make_history_db(WORKING_DIR_TEMP)
-    with history.History(history_db) as hist:
-        return list(hist.get_status_checks(iter_greater_than=0, iter_less_than_equal=UNLIMITED))
+    return list(global_hist.get_status_checks(iter_greater_than=0, iter_less_than_equal=UNLIMITED))
 
 
 def _build_contour_view_data(
@@ -323,6 +322,7 @@ history_plot_vars_selector = panel.widgets.MultiSelect(
     options=[gsv.label for gsv in _all_global_statuses],
     size=50,
     value=[gsv.label for gsv in _all_global_statuses[0:1]],
+    width=500,
 )
 
 
@@ -373,7 +373,6 @@ def _make_contour(hist: history.History, deformation_view: DeformationView) -> h
     hmap = holoviews.HoloMap(plot_dict, kdims=list(ContourIterationView._fields))
 
     return hmap
-
 
 
 @panel.depends(iteration_selector, elemental_metric_selector, deformed_selector)
@@ -457,15 +456,25 @@ def _create_history_curve(*args, **kwargs) -> holoviews.NdOverlay:
 
     graph_line_collection = _create_graph_line_collection()
 
-    curves = {}
-    for graph_line in graph_line_collection.graph_lines:
-        curves[graph_line.label] = holoviews.Curve(graph_line.xy_points, 'iteration_num', 'y_curve').opts(framewise=True)
+    iteration_num = iteration_selector.value
+    iteration_num_line = holoviews.VLine(iteration_num).opts(color='grey', line_dash='dashed')
 
-    nd_overlay = (
-        holoviews.NdOverlay(curves)
+    curves = {}
+    print(f"{len(graph_line_collection.graph_lines)} lines on graph:")
+    for graph_line in graph_line_collection.graph_lines:
+        print("   ", graph_line.label, f"{graph_line.y_range}", graph_line.xy_points[0:4])
+        curves[graph_line.label] = holoviews.Curve(graph_line.xy_points, 'iteration_num', graph_line.label, label=graph_line.label)
+
+    # nd_overlay = holoviews.NdOverlay(curves, kdims=['metric'])
+    # For some reason NDOverlap is flaky here - do it another way...
+    overlay = functools.reduce(operator.mul, curves.values())
+
+
+    with_opts = (
+        overlay
             .opts(opts.Curve(framewise=True))  # Makes the curves re-adjust themselves with each update.
             .opts(
-                legend_position='right',
+                # legend_position='right',
                 width=this_computer.fig_size[0],
                 height=int(0.5 * this_computer.fig_size[1]),
                 padding=0.1,
@@ -473,14 +482,19 @@ def _create_history_curve(*args, **kwargs) -> holoviews.NdOverlay:
             )
     )
 
-    return nd_overlay
+    print(with_opts)
+
+    print()
+
+    return with_opts * iteration_num_line
 
 
 def _create_graph_line_collection() -> GraphLineCollection:
 
     # Widgets
-    iteration_num = iteration_selector.value
     history_plot_vars = set(history_plot_vars_selector.value)
+
+    print(history_plot_vars)
 
     all_gsvs = [gsv for gsv in global_hist.get_global_status_checks(0, UNLIMITED)]
     all_pps = [gsv.to_plottable_point() for gsv in all_gsvs]
