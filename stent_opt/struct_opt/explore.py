@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import collections
+import functools
 import itertools
+import operator
 import pathlib
 import typing
 import enum
 
 import holoviews
+from holoviews import opts
 import panel
 import numpy
 import param
@@ -54,8 +57,8 @@ def _get_most_recent_working_dir() -> pathlib.Path:
     return max(subdirs, key=most_recent)
 
 
-WORKING_DIR_TEMP = _get_most_recent_working_dir()
-# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-207")
+#WORKING_DIR_TEMP = _get_most_recent_working_dir()
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-229")
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
 STOP_AT_INCREMENT = 100
@@ -114,6 +117,53 @@ class GraphLine(typing.NamedTuple):
     def xy_points(self):
         return [(p.iteration_num, p.value) for p in self.points]
 
+
+class GraphLineCollection(typing.NamedTuple):
+    graph_lines: typing.List[GraphLine]
+    y_min: typing.Union[float, Ellipsis]
+    y_max: typing.Union[float, Ellipsis]
+
+    @staticmethod
+    def no_ellipses(x1, x2):
+        maybes = [x1, x2]
+        reals = [x for x in maybes if x != Ellipsis]
+        return reals
+
+    def __add__(self, other: GraphLineCollection) -> GraphLineCollection:
+        return GraphLineCollection(
+            graph_lines=self.graph_lines + other.graph_lines,
+            y_min=max(self.no_ellipses(self.y_min, other.y_min), default=...),
+            y_max=min(self.no_ellipses(self.y_max, other.y_max), default=...),
+        )
+
+    @staticmethod
+    def get_identity() -> GraphLineCollection:
+        return GraphLineCollection(
+            graph_lines=[],
+            y_min=...,
+            y_max=...,
+        )
+
+    @staticmethod
+    def from_single(graph_line: GraphLine) -> GraphLineCollection:
+        return GraphLineCollection(
+            graph_lines=[graph_line],
+            y_min=min(graph_line.y_vals),
+            y_max=max(graph_line.y_vals),
+        )
+
+    @staticmethod
+    def from_many_graphs(graph_lines: typing.Iterable[GraphLine]) -> GraphLineCollection:
+        single_graph_collections = [GraphLineCollection.from_single(gl) for gl in graph_lines]
+
+        return functools.reduce(operator.add, single_graph_collections, GraphLineCollection.get_identity())
+
+    @property
+    def y_range(self) -> typing.Tuple[float, float]:
+        if self.y_min == Ellipsis or self.y_max == Ellipsis:
+            raise ValueError(self)
+
+        return self.y_min, self.y_max
 
 def get_status_checks() -> typing.List["history.StatusCheck"]:
     history_db = history.make_history_db(WORKING_DIR_TEMP)
@@ -402,17 +452,31 @@ class GlobalHistory(param.Parameterized):
         return _plot_view_func(graph_lines, self.iteration_num)
 
 
-def _make_line_graph(hist: history.History):
-
-    plot_points = [gsc.to_plottable_point() for gsc in hist.get_global_status_checks(0, STOP_AT_INCREMENT)]
-    ds = holoviews.Dataset(plot_points, kdims=['label'], vdims=['value'])
-
-    curve = ds.to(holoviews.Curve, 'label', 'value')
-    return curve
-
-
 @panel.depends(iteration_selector, history_plot_vars_selector)
-def _create_history_curve(*args, **kwargs):
+def _create_history_curve(*args, **kwargs) -> holoviews.NdOverlay:
+
+    graph_line_collection = _create_graph_line_collection()
+
+    curves = {}
+    for graph_line in graph_line_collection.graph_lines:
+        curves[graph_line.label] = holoviews.Curve(graph_line.xy_points, 'iteration_num', 'y_curve').opts(framewise=True)
+
+    nd_overlay = (
+        holoviews.NdOverlay(curves)
+            .opts(opts.Curve(framewise=True))  # Makes the curves re-adjust themselves with each update.
+            .opts(
+                legend_position='right',
+                width=this_computer.fig_size[0],
+                height=int(0.5 * this_computer.fig_size[1]),
+                padding=0.1,
+                framewise=True,
+            )
+    )
+
+    return nd_overlay
+
+
+def _create_graph_line_collection() -> GraphLineCollection:
 
     # Widgets
     iteration_num = iteration_selector.value
@@ -429,52 +493,7 @@ def _create_history_curve(*args, **kwargs):
 
     graph_lines = [GraphLine(points) for points in graph_points.values()]
 
-    all_vals = [gp.value for gline in graph_lines for gp in gline.points]
-    min_val = min(all_vals, default=0.0)
-    max_val = max(all_vals, default=0.0)
-
-    # TODO - up to here, trying to get the range on the plot to update when the data in DynamicMap changes.
-    # Plan is - make a wrapper function which gets the lines and also the bounds. Then do something with that!
-    # https://gist.github.com/pierdom/4952eb2187ef19765f6bfd1c627f0183
-    # https://discourse.holoviz.org/t/how-to-make-dynamicmap-adopt-to-yaxis-range-limits-change/1427/4
-    # https://holoviews.org/FAQ.html
-
-
-    print(history_plot_vars, min_val, max_val)
-    curves = {}
-    for graph_line in graph_lines:
-        y_dim_name = f'y_curve_{_global_status_idx[graph_line.label]}'
-        redim_dict = {y_dim_name: holoviews.Dimension(y_dim_name, range=(min_val, max_val))}
-        redim_range_dict = {"x_curve": (0, _max_dashboard_increment), y_dim_name: (min_val, max_val)}
-        # curves[graph_line.label] = holoviews.Curve(graph_line.xy_points, 'x_curve', y_dim_name).redim(**redim_dict).opts(axiswise=True)
-        curves[graph_line.label] = holoviews.Curve(graph_line.xy_points, 'x_curve', y_dim_name).redim.range(**redim_range_dict).opts(ylim=(min_val, max_val))
-
-    # curve_dims = {l: curve.opts(ylim=(min_val, max_val)) for l, curve in curves.items()}
-
-    nd_overlay = holoviews.NdOverlay(curves).opts(
-        # legend_position='right',
-        width=this_computer.fig_size[0],
-        height=int(0.5 * this_computer.fig_size[1]),
-        padding=0.1,
-        framewise=True,
-    )
-
-    # return nd_overlay
-
-    #return nd_overlay.redim(y_curve=holoviews.Dimension('y_curve', range=(min_val, max_val)))
-
-    #nd_redim = nd_overlay.redim(y=holoviews.Dimension('y', range=(min_val, max_val)))
-    return nd_overlay
-
-    return holoviews.NdOverlay(curves).opts(
-        legend_position='right',
-        width=this_computer.fig_size[0],
-        height=int(0.5 * this_computer.fig_size[1]),
-        padding=0.1,
-    )
-
-
-
+    return GraphLineCollection.from_many_graphs(graph_lines)
 
 
 def _plot_view_func(graph_lines: typing.List[GraphLine], iteration_num: int):
@@ -495,41 +514,27 @@ def _plot_view_func(graph_lines: typing.List[GraphLine], iteration_num: int):
     return fig
 
 
-def _create_all_curves():
-    # TODO - was doing this
-    pass
-
-
 
 def make_dashboard(working_dir: pathlib.Path, deformation_view: DeformationView):
 
     print(working_dir)
 
-    history_db = history.make_history_db(working_dir)
+    dmap = holoviews.DynamicMap(_make_single_contour)
+    hist_map = holoviews.DynamicMap(_create_history_curve).opts(framewise=True)
+    panel.extension()
 
-    with history.History(history_db) as hist:
+    controls = panel.Column(
+        iteration_selector,
+        elemental_metric_selector,
+        deformed_selector,
+        history_plot_vars_selector,
+    )
 
-        #hmap = _make_contour(hist, deformation_view)
-        dmap = holoviews.DynamicMap(_make_single_contour)
-        hist_map = holoviews.DynamicMap(_create_history_curve, kdims=['iteration_num']).opts(framewise=True)
-        #curve = _make_line_graph(hist)
-        #panel.panel(curve).show()
-        panel.extension()
+    cols = panel.Column(dmap, hist_map)
 
-        controls = panel.Column(
-            iteration_selector,
-            elemental_metric_selector,
-            deformed_selector,
-            history_plot_vars_selector,
-        )
+    graph_row = panel.Row(cols, controls)
 
-        # glob_hist = GlobalHistory(hist)
-
-        cols = panel.Column(dmap, hist_map)
-
-        graph_row = panel.Row(cols, controls)
-
-        panel.panel(graph_row).show()
+    panel.panel(graph_row).show()
 
 
 
