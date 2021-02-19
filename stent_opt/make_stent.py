@@ -755,10 +755,12 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     iter_prev = main_loop_start_i - 1
 
     while True:
+        # Extract ONE from the previous generation
         one_design, one_ranking = generation.process_completed_simulation(working_dir, iter_prev)
 
         all_new_designs_this_iter = []
         done = False
+        # Potentialy make many new models.
         for iter_this, (new_gen_func, new_gen_descip) in enumerate(new_design_trials, start=iter_prev+1):
             one_new_design = new_gen_func(working_dir, one_design, one_ranking, iter_this, new_gen_descip)
 
@@ -777,13 +779,13 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
             fn_db_current = history.make_fn_in_dir(working_dir, ".db", iter_this)
             perform_extraction(fn_odb, fn_db_current, one_new_design.stent_params.nodal_z_override_in_odb)
 
-            all_new_designs_this_iter.append(one_new_design)
+            all_new_designs_this_iter.append((iter_this, one_new_design))
 
         if len(all_new_designs_this_iter) > 1:
             warning = Warning("Arbitrary choice out of all new designs.")
             raise warning
 
-        old_design = all_new_designs_this_iter[0]
+        iter_prev, old_design = all_new_designs_this_iter[0]
 
         if done:
             break

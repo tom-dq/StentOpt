@@ -167,7 +167,7 @@ class CandidatesFor(typing.NamedTuple):
     introduction: typing.FrozenSet[design.PolarIndex]
 
 
-def _get_candidate_elements(
+def get_candidate_elements(
         optim_params: optimisation_parameters.OptimParams,
         design_n_min_1: design.StentDesign,
 ) -> CandidatesFor:
@@ -219,7 +219,7 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
     target_count = optim_params.target_num_elems(design_n_min_1, iter_n)
     delta_n_elems = target_count - len(design_n_min_1.active_elements)
 
-    candidates_for = _get_candidate_elements(optim_params, design_n_min_1)
+    candidates_for = get_candidate_elements(optim_params, design_n_min_1)
 
     # If there was no change in volume ratio, what would be the maximum number of elements we could add?
     max_new_num_unconstrained = int(optim_params.max_change_in_vol_ratio * design_n_min_1.stent_params.divs.fully_populated_elem_count())
