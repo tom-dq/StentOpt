@@ -39,6 +39,7 @@ def _aggregate_elemental_values(st_vals: typing.Iterable[StatusCheck]) -> typing
 
 class Snapshot(typing.NamedTuple):
     iteration_num: int
+    label: str
     filename: str
     active_elements: typing.FrozenSet[int]
 
@@ -163,6 +164,7 @@ class GlobalStatus(typing.NamedTuple):
 
 _make_snapshot_table = """CREATE TABLE IF NOT EXISTS Snapshot(
 iteration_num INTEGER,
+label TEXT,
 filename TEXT,
 active_elements TEXT
 )"""
@@ -260,13 +262,13 @@ class History:
 
     def get_snapshots(self) -> typing.Iterable[Snapshot]:
         with self.connection:
-            rows = self.connection.execute("SELECT * FROM Snapshot ORDER BY iteration_num")
+            rows = self.connection.execute("SELECT * FROM Snapshot ORDER BY iteration_num, label")
             db_forms = (Snapshot(*row) for row in rows)
             yield from (one_db_form.from_db() for one_db_form in db_forms)
 
     def get_one_snapshot(self, iteration_num: int) -> Snapshot:
         with self.connection:
-            rows = list(self.connection.execute("SELECT * FROM Snapshot WHERE iteration_num=?", (iteration_num,)))
+            rows = list(self.connection.execute("SELECT * FROM Snapshot WHERE iteration_num=? ORDER BY label", (iteration_num,)))
             if len(rows) != 1:
                 raise ValueError(iteration_num)
 

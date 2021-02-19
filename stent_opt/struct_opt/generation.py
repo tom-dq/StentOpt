@@ -404,6 +404,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_prev: int, iter_this: in
     with history.History(history_db) as hist:
         snapshot = history.Snapshot(
             iteration_num=iter_this,
+            label=f"Iter{iter_this}.0",
             filename=str(inp_fn),
             active_elements=new_active_elem_nums)
 

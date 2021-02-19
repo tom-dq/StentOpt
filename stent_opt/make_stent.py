@@ -724,6 +724,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
             active_elem_nums = (elem_indices_to_num[idx] for idx in current_design.active_elements)
             snapshot = history.Snapshot(
                 iteration_num=starting_i,
+                label=f"First Iteration {starting_i}",
                 filename=str(fn_inp),
                 active_elements=frozenset(active_elem_nums),
             )

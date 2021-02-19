@@ -6,13 +6,11 @@ import itertools
 import operator
 import pathlib
 import typing
-import enum
 
 import holoviews
 from holoviews import opts
 import panel
 import numpy
-import param
 
 from matplotlib.figure import Figure
 from matplotlib import rcParams
@@ -36,20 +34,6 @@ from stent_opt.struct_opt import history, design
 from stent_opt.struct_opt.computer import this_computer
 
 holoviews.extension('bokeh', 'matplotlib')
-
-
-class DeformationView(enum.Enum):
-    undeformed = enum.auto()
-    deformed = enum.auto()
-    both = enum.auto()
-
-    @property
-    def create_def(self) -> bool:
-        return self in (DeformationView.deformed, DeformationView.both)
-
-    @property
-    def create_undef(self) -> bool:
-        return self in (DeformationView.undeformed, DeformationView.both)
 
 
 def _get_most_recent_working_dir() -> pathlib.Path:
@@ -214,36 +198,13 @@ def _build_contour_view_data(
         yield contour_view, elem_vals
 
 
-def make_contour(
-        node_pos: typing.Dict[int, base.XYZ],
-        contour_view: ContourView,
-        element_to_value: typing.Dict[element.Element, float],
-) -> holoviews.Polygons:
-
-    """Make a single Holoviews contour."""
-
-    # TODO - try again with QuadMesh - maybe we can do some masking/nan/blah blah blah stuff...
-
-    def gen_poly_data(elem, value):
-        one_poly_data = {
-            ('x', 'y'): [ (node_pos[iNode].x, node_pos[iNode].y) for iNode in elem.connection],
-            'level': value}
-        return one_poly_data
-
-    poly_data = [gen_poly_data(elem, value) for elem, value in element_to_value.items()]
-
-    polys = holoviews.Polygons(poly_data, vdims='level', group=contour_view.metric_name)
-    polys.opts(color='level', aspect='equal', line_width=0.1, padding=0.1, width=this_computer.fig_size[0], height=this_computer.fig_size[1], invert_axes=True)
-
-    return polys
-
-
 def make_quadmesh(
         stent_params: design.StentParams,
         active_elements: typing.FrozenSet[design.PolarIndex],
         node_idx_pos: typing.Dict[design.PolarIndex, base.XYZ],
         contour_view: ContourView,
         elem_idx_to_value: typing.Dict[design.PolarIndex, float],
+        title: str,
 ) -> holoviews.Overlay:
     """Make a single Quadmesh representation"""
 
@@ -301,7 +262,7 @@ def make_quadmesh(
         qmesh_list.append(qmesh_ghost)
 
     for qmesh in qmesh_list:
-        qmesh.opts(aspect='equal', line_width=0.1, padding=0.1, width=this_computer.fig_size[0], height=this_computer.fig_size[1], colorbar=True, bgcolor='lightgray')
+        qmesh.opts(aspect='equal', line_width=0.1, padding=0.1, width=this_computer.fig_size[0], height=this_computer.fig_size[1], colorbar=True, bgcolor='lightgray', title=title)
 
     return holoviews.Overlay(qmesh_list)
 
@@ -335,55 +296,6 @@ history_plot_vars_selector = panel.widgets.MultiSelect(
 )
 
 
-# https://stackoverflow.com/a/62434272
-@panel.depends(iteration_selector, elemental_metric_selector, deformed_selector)
-def _make_contour(hist: history.History, deformation_view: DeformationView) -> holoviews.HoloMap:
-
-    stent_params = hist.get_stent_params()
-    snapshots = {snap.iteration_num: snap for snap in hist.get_snapshots()}
-
-    # Node undeformed position and connectivity
-    node_pos_undeformed = {iNode: pos.to_xyz() for iNode, idx, pos in design.generate_nodes(stent_params)}
-    node_pos_deformed_all_iters = collections.defaultdict(dict)
-    node_num_to_idx = {iNode: idx for iNode, idx, pos in design.generate_nodes(stent_params)}
-    for node_pos in hist.get_node_positions():
-        node_pos_deformed_all_iters[node_pos.iteration_num][node_pos.node_num] = base.XYZ(x=node_pos.x, y=node_pos.y, z=node_pos.z)
-
-    num_to_elem = {iElem: elem for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
-    num_to_idx = {iElem: idx for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
-
-    plot_dict = {}
-    for contour_view_raw, elem_data in _build_contour_view_data(hist, single_iteration=iteration_selector.value, metric_name=elemental_metric_selector.value):
-
-        deformation_options = []
-        if deformation_view.create_undef: deformation_options.append( (False, node_pos_undeformed) )
-        if deformation_view.create_def: deformation_options.append( (True, node_pos_deformed_all_iters[contour_view_raw.iteration_num]) )
-
-        for deformed, node_pos in deformation_options:
-            contour_view = contour_view_raw._replace(deformed=deformed)
-            active_elements = frozenset(num_to_idx[iElem] for iElem in snapshots[contour_view.iteration_num].active_elements)
-            print(contour_view)
-
-            # Some measures (like RegionGradient) can exist even if the element is inactive. Strip these out of the display.
-            elem_to_value = {
-                num_to_elem[iElem]: val for
-                iElem, val in elem_data.items()
-                if iElem in snapshots[contour_view.iteration_num].active_elements}
-
-            elem_idx_to_value = {
-                num_to_idx[iElem]: val for
-                iElem, val in elem_data.items()}
-
-            node_idx_pos = {node_num_to_idx[iNode]: pos for iNode, pos in node_pos.items()}
-
-            qmesh = make_quadmesh(stent_params, active_elements, node_idx_pos, contour_view, elem_idx_to_value)
-            plot_dict[contour_view.make_iteration_view()] = qmesh
-
-    hmap = holoviews.HoloMap(plot_dict, kdims=list(ContourIterationView._fields))
-
-    return hmap
-
-
 @panel.depends(iteration_selector, elemental_metric_selector, deformed_selector)
 def _make_single_contour(*args, **kwargs) -> holoviews.Overlay:
 
@@ -398,13 +310,16 @@ def _make_single_contour(*args, **kwargs) -> holoviews.Overlay:
 
     node_num_to_idx = {iNode: idx for iNode, idx, pos in design.generate_nodes(stent_params)}
     elem_num_to_idx = {iElem: idx for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
+
+    snapshot = global_hist.get_one_snapshot(iteration_num)
+
     # Node positions
     if deformed:
         node_pos = {
             node_pos.node_num: base.XYZ(x=node_pos.x, y=node_pos.y, z=node_pos.z)
             for node_pos in global_hist.get_node_positions(iteration_num)
         }
-        snapshot = global_hist.get_one_snapshot(iteration_num)
+
         active_elements = frozenset(elem_num_to_idx[iElem] for iElem in snapshot.active_elements)
 
     else:
@@ -422,42 +337,9 @@ def _make_single_contour(*args, **kwargs) -> holoviews.Overlay:
     elem_idx_to_value = {elem_num_to_idx[iElem]: val for iElem, val in elem_data.items() if elem_num_to_idx[iElem] in active_elements}
 
     node_idx_pos = {node_num_to_idx[iNode]: pos for iNode, pos in node_pos.items()}
-    qmesh = make_quadmesh(stent_params, active_elements, node_idx_pos, contour_view, elem_idx_to_value)
+    qmesh = make_quadmesh(stent_params, active_elements, node_idx_pos, contour_view, elem_idx_to_value, snapshot.label)
 
     return qmesh
-
-
-class GlobalHistory(param.Parameterized):
-    plot_vars = param.ListSelector(objects=[pp.label for pp in _all_global_statuses])
-    iteration_num = param.Integer(default=0, bounds=(0, _max_dashboard_increment))
-
-    all_pps = typing.List[history.PlottablePoint]
-
-    def __init__(self, hist: history.History):
-        super().__init__()
-
-        all_gsvs = [gsv for gsv in hist.get_global_status_checks(0, UNLIMITED)]
-        self.all_pps = [gsv.to_plottable_point() for gsv in all_gsvs]
-
-    def view(self):
-
-        # Get the relevant line labels
-        if self.plot_vars:
-            plot_labels = set(self.plot_vars)
-
-        else:
-            plot_labels = set()
-
-        plot_points = [pp for pp in self.all_pps if pp.label in plot_labels]
-        graph_points = collections.defaultdict(list)
-
-
-        for pp in plot_points:
-            graph_points[pp.label].append(pp)
-
-        graph_lines = [GraphLine(points) for points in graph_points.values()]
-
-        return _plot_view_func(graph_lines, self.iteration_num)
 
 
 @panel.depends(iteration_selector, history_plot_vars_selector)
@@ -477,7 +359,6 @@ def _create_history_curve(*args, **kwargs) -> holoviews.NdOverlay:
     # nd_overlay = holoviews.NdOverlay(curves, kdims=['metric'])
     # For some reason NDOverlap is flaky here - do it another way...
     overlay = functools.reduce(operator.mul, curves.values())
-
 
     with_opts = (
         overlay
@@ -538,7 +419,7 @@ def _plot_view_func(graph_lines: typing.List[GraphLine], iteration_num: int):
 
 
 
-def make_dashboard(working_dir: pathlib.Path, deformation_view: DeformationView):
+def make_dashboard(working_dir: pathlib.Path):
 
     print(working_dir)
 
@@ -603,4 +484,4 @@ def main():
 
 
 if __name__ == '__main__':
-    make_dashboard(WORKING_DIR_TEMP, DeformationView.deformed)
+    make_dashboard(WORKING_DIR_TEMP)
