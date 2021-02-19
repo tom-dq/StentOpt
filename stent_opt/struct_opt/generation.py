@@ -48,7 +48,8 @@ def get_gradient_input_data(
             snapshot = hist.get_snapshot(iter_num)
 
             with datastore.Datastore(output_db_fn) as data:
-                one_frame = data.get_last_frame_of_instance("STENT-1")
+                print(output_db_fn)
+                one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
 
                 raw_rows = list(data.get_all_rows_at_frame(raw_component, one_frame))
                 raw_ranking_components = list(score.get_primary_ranking_components(raw_rows))
@@ -286,7 +287,7 @@ def _get_ranking_functions(
         if vicinity_ranking:
             all_ranks.append(vicinity_ranking)
 
-    one_frame = data.get_last_frame_of_instance("STENT-1")
+    one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
     raw_elem_rows = []
 
     # Element based funtions
@@ -465,7 +466,7 @@ def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
         # old_design = design.make_initial_design(stent_params)
 
         with datastore.Datastore(db_fn) as data:
-            one_frame = data.get_last_frame_of_instance("STENT-1")
+            one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
 
             peeq_rows = list(data.get_all_rows_at_frame(db_defs.ElementPEEQ, one_frame))
             stress_rows = list(data.get_all_rows_at_frame(db_defs.ElementStress, one_frame))

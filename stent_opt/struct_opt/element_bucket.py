@@ -79,8 +79,30 @@ def network_traverse_test():
 
     G = _build_graph(elems)
 
+    for c in networkx.connected_components(G):
+        print(c)
+
+
     print(G)
 
+TElem = typing.TypeVar("TElem")
+def get_connected_elements(elem_to_conn: typing.Dict[TElem, typing.Tuple[int]]) -> typing.Iterable[ typing.Set[TElem] ]:
+    G = networkx.Graph()
+
+    node_to_elems = collections.defaultdict(set)
+    for elem, nodes in elem_to_conn.items():
+        for node in nodes:
+            node_to_elems[node].add(elem)
+
+    for fe_elem in elem_to_conn:
+        G.add_node(fe_elem)
+
+    for fe_node, fe_elems in node_to_elems.items():
+        for fe_elem1, fe_elem2 in itertools.permutations(fe_elems, 2):
+            G.add_edge(fe_elem1, fe_elem2)
+
+    for c in networkx.connected_components(G):
+        yield c
 
 
 def test_buckets():

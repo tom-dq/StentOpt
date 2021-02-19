@@ -201,6 +201,8 @@ active = OptimParams(
     nodes_shared_with_old_design_to_contract=2,
 )
 
+active = active._replace(region_gradient=None)  # TODO - put this back after done with all the compel testing
+
 
 if __name__ == "__main__":
     #  check we can serialise and deserialse the optimisation parameters

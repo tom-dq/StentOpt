@@ -1,4 +1,5 @@
 import itertools
+import multiprocessing
 import os
 import pathlib
 import subprocess
@@ -6,6 +7,7 @@ import tempfile
 import typing
 import collections
 import statistics
+import functools
 
 import psutil
 
@@ -16,6 +18,7 @@ from stent_opt.abaqus_model import interaction, node, boundary_condition, sectio
 from stent_opt.struct_opt import design
 from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalSurfNames, GlobalNodeSetNames, Actuation, StentParams
 from stent_opt.struct_opt import generation, optimisation_parameters
+from stent_opt.struct_opt import generation_FORCE, chains
 
 from stent_opt.struct_opt import history
 from stent_opt.struct_opt.computer import this_computer
@@ -674,7 +677,7 @@ def run_model(optim_params, inp_fn):
     os.chdir(old_working_dir)
 
 
-def perform_extraction(odb_fn, out_db_fn, override_z_val):
+def perform_extraction(odb_fn, out_db_fn, override_z_val, working_dir_extract):
     old_working_dir = os.getcwd()
     os.chdir(working_dir_extract)
     args = ["abaqus.bat", "cae", "noGui=odb_extract.py", "--", str(odb_fn), str(out_db_fn), str(override_z_val)]
@@ -699,7 +702,8 @@ def _from_scract_setup(working_dir):
     perform_extraction(
         history.make_fn_in_dir(working_dir, ".odb", starting_i),
         history.make_fn_in_dir(working_dir, ".db", starting_i),
-        current_design.stent_params.nodal_z_override_in_odb
+        current_design.stent_params.nodal_z_override_in_odb,
+        working_dir_extract,
     )
 
     with history.History(history_db_fn) as hist:
@@ -716,9 +720,46 @@ def _from_scract_setup(working_dir):
 
 
 # TEMP! This is for trialing new designs
-new_design_trials: typing.List[typing.Tuple[generation.T_ProdNewGen, str]] = [
-    (generation.produce_new_generation, "generation.produce_new_generation"),
-]
+new_design_trials: typing.List[typing.Tuple[generation.T_ProdNewGen, str]] = []
+
+for one_chain in chains.make_single_sided_chains(1):
+    one_forced_func = functools.partial(generation_FORCE.compel_new_generation, one_chain)
+    new_design_trials.append((one_forced_func, str(one_chain)))
+
+
+new_design_trials.append((generation.produce_new_generation, "generation.produce_new_generation"))
+
+
+class RunOneArgs(typing.NamedTuple):
+    working_dir: pathlib.Path
+    optim_params: optimisation_parameters.OptimParams
+    iter_this: int
+    nodal_z_override_in_odb: float
+    working_dir_extract: str
+
+
+def process_pool_run_and_process(run_one_args: RunOneArgs):
+
+    fn_inp = history.make_fn_in_dir(run_one_args.working_dir, ".inp", run_one_args.iter_this)
+    fn_odb = history.make_fn_in_dir(run_one_args.working_dir, ".odb", run_one_args.iter_this)
+
+    run_model(run_one_args.optim_params, fn_inp)
+
+    fn_db_current = history.make_fn_in_dir(run_one_args.working_dir, ".db", run_one_args.iter_this)
+
+    with lock:
+        perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract)
+
+    generation.process_completed_simulation(run_one_args.working_dir, run_one_args.iter_this)
+
+    return f"[{multiprocessing.current_process().name}] {run_one_args.iter_this} done."
+
+
+
+def init(l):
+    global lock
+    lock = l
+
 
 
 def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.OptimParams):
@@ -753,6 +794,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         old_design = hist.get_most_recent_design()
 
     iter_prev = main_loop_start_i - 1
+    previous_max_i = iter_prev
 
     while True:
         # Extract ONE from the previous generation
@@ -761,40 +803,47 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         all_new_designs_this_iter = []
         done = False
         # Potentialy make many new models.
-        for iter_this, (new_gen_func, new_gen_descip) in enumerate(new_design_trials, start=iter_prev+1):
+
+        arg_list = []
+        for iter_this, (new_gen_func, new_gen_descip) in enumerate(new_design_trials, start=previous_max_i+1):
             one_new_design = new_gen_func(working_dir, one_design, one_ranking, iter_this, new_gen_descip)
 
-            new_elements = one_new_design.active_elements - old_design.active_elements
-            removed_elements = old_design.active_elements - one_new_design.active_elements
+            new_elements = one_new_design.active_elements - one_design.active_elements
+            removed_elements = one_design.active_elements - one_new_design.active_elements
             print(f"[{iter_prev} -> {iter_this}]\t{new_gen_descip}\tAdded: {len(new_elements)}\tRemoved: {len(removed_elements)}.")
 
             fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_this)
-            fn_odb = history.make_fn_in_dir(working_dir, ".odb", iter_this)
 
             make_stent_model(optim_params, one_new_design, fn_inp)
-            run_model(optim_params, fn_inp)
 
-            done = optim_params.is_converged(old_design, one_new_design, iter_this)
+            arg_list.append(RunOneArgs(working_dir, optim_params, iter_this, one_design.stent_params.nodal_z_override_in_odb, working_dir_extract))
 
-            fn_db_current = history.make_fn_in_dir(working_dir, ".db", iter_this)
-            perform_extraction(fn_odb, fn_db_current, one_new_design.stent_params.nodal_z_override_in_odb)
+            done = optim_params.is_converged(one_design, one_new_design, iter_this)
 
             all_new_designs_this_iter.append((iter_this, one_new_design))
 
+            previous_max_i = max(previous_max_i, iter_this)
+
+        l = multiprocessing.Lock()
+        with multiprocessing.Pool(processes=4, initializer=init, initargs=(l,)) as pool:
+
+            for res in pool.imap_unordered(process_pool_run_and_process, arg_list):
+                print(res)
+
         if len(all_new_designs_this_iter) > 1:
             warning = Warning("Arbitrary choice out of all new designs.")
-            raise warning
+            print(warning)
 
-        iter_prev, old_design = all_new_designs_this_iter[0]
+        iter_prev, one_design = all_new_designs_this_iter[0]
 
         if done:
             break
-
 
 if __name__ == "__main__":
 
     stent_params = design.basic_stent_params
     optim_params = optimisation_parameters.active._replace(working_dir=str(this_computer.working_dir))
+    # optim_params = optimisation_parameters.active._replace(working_dir=r"E:\Simulations\StentOpt\AA-256")
 
     do_opt(stent_params, optim_params)
 

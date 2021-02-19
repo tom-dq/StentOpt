@@ -1,6 +1,7 @@
 # This is stuff for "forcing the hand" of the iterations so I can see what worked well.
 
 import enum
+import math
 import typing
 
 import itertools
@@ -21,6 +22,12 @@ class ChainComponent(typing.NamedTuple):
 
     def __repr__(self):
         return f"ChainComponent(Action.{self.action.name}, {self.start}, {self.end})"
+
+    def contains(self, action: Action, x: float):
+        if action != self.action:
+            return False
+
+        return self.start <= x <= self.end
 
 
 class Chains:
@@ -83,6 +90,48 @@ class Chains:
         comma_bits = ", ".join(bits)
         return f"Chains({comma_bits})"
 
+    def contains(self, action: Action, x: float):
+        return any(chain.contains(action, x) for chain in self._chains)
+
+
+def make_chains(actions: typing.List[Action], n: int):
+
+    one_span = 1.0 / n
+
+    single_span_flags = [False, True]
+
+    # Could be add, remove or both
+
+    for span_flags in itertools.product(single_span_flags, repeat=n*len(actions)):
+        all_chain_components = []
+
+        for global_idx, one_flag in enumerate(span_flags):
+            action_idx, idx = divmod(global_idx, n)
+            action = actions[action_idx]
+            start = idx * one_span
+            end = (idx+1) * one_span
+            if math.isclose(end, 1.0):
+                end = 1.0
+
+            if one_flag:
+                one_chain_component = ChainComponent(action, start, end)
+                all_chain_components.append(one_chain_component)
+
+        # Don't need to yield a do-nothing chain...
+        if all_chain_components:
+            yield Chains(*all_chain_components)
+
+
+def make_single_sided_chains(n: int):
+    """ Make chains which only add or remove at a time"""
+
+    for action in Action:
+        yield from make_chains([action], n)
+
+
+def make_all_chains(n: int):
+    yield from make_chains(list(Action), n)
+
 
 def test_chains():
     add1to5 = ChainComponent(Action.add, 1.0, 5.0)
@@ -112,3 +161,6 @@ def test_chains():
 
 if __name__ == "__main__":
     test_chains()
+
+    for c in make_single_sided_chains(4):
+        print(c)
