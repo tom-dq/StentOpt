@@ -739,22 +739,23 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     with history.History(history_db_fn) as hist:
         old_design = hist.get_most_recent_design()
 
-    for i_current in range(main_loop_start_i, 10000):
-        fn_inp = history.make_fn_in_dir(working_dir, ".inp", i_current)
-        fn_odb = history.make_fn_in_dir(working_dir, ".odb", i_current)
+    for iter_this in range(main_loop_start_i, 10000):
+        iter_prev = iter_this - 1
+        fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_this)
+        fn_odb = history.make_fn_in_dir(working_dir, ".odb", iter_this)
 
-        new_design = generation.make_new_generation(working_dir, i_current)
+        new_design = generation.make_new_generation(working_dir, iter_prev, iter_this)
 
         new_elements = new_design.active_elements - old_design.active_elements
         removed_elements = old_design.active_elements - new_design.active_elements
         print(f"Added: {len(new_elements)}\tRemoved: {len(removed_elements)}.")
 
-        done = optim_params.is_converged(old_design, new_design, i_current)
+        done = optim_params.is_converged(old_design, new_design, iter_this)
 
         make_stent_model(optim_params, new_design, fn_inp)
         run_model(optim_params, fn_inp)
 
-        fn_db_current = history.make_fn_in_dir(working_dir, ".db", i_current)
+        fn_db_current = history.make_fn_in_dir(working_dir, ".db", iter_this)
         perform_extraction(fn_odb, fn_db_current, new_design.stent_params.nodal_z_override_in_odb)
 
         old_design = new_design

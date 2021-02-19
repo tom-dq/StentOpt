@@ -281,7 +281,10 @@ def _get_ranking_functions(
 
         recent_gradient_input_data = get_gradient_input_data(optim_params.working_dir, optim_params.region_gradient.component, grad_track_steps)
         vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(design_n_min_1.stent_params, recent_gradient_input_data, statistics.mean))
-        all_ranks.append(vicinity_ranking)
+
+        # Sometimes there won't be data here (i.e., on the first few iterations).
+        if vicinity_ranking:
+            all_ranks.append(vicinity_ranking)
 
     one_frame = data.get_last_frame_of_instance("STENT-1")
     raw_elem_rows = []
@@ -334,12 +337,11 @@ def _get_ranking_functions(
     )
 
 
-def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentDesign:
-    iter_n_min_1 = iter_n - 1  # Previous iteration number.
+def make_new_generation(working_dir: pathlib.Path, iter_prev: int, iter_this: int) -> design.StentDesign:
 
-    db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_n-1)
+    db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
     history_db = history.make_history_db(working_dir)
-    inp_fn = history.make_fn_in_dir(working_dir, ".inp", iter_n)
+    inp_fn = history.make_fn_in_dir(working_dir, ".inp", iter_this)
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -350,7 +352,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
     elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
 
     with history.History(history_db) as hist:
-        snapshot_n_min_1 = hist.get_snapshot(iter_n_min_1)
+        snapshot_n_min_1 = hist.get_snapshot(iter_prev)
         design_n_min_1 = design.StentDesign(
             stent_params=stent_params,
             active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements))
@@ -358,7 +360,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
     # Get the data from the previously run simulation.
     with datastore.Datastore(db_fn_prev) as data:
-        ranking_result = _get_ranking_functions(optim_params, iter_n, design_n_min_1, data)
+        ranking_result = _get_ranking_functions(optim_params, iter_prev, design_n_min_1, data)
         global_status_raw = list(data.get_final_history_result())
 
     pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in ranking_result.pos_rows}
@@ -366,7 +368,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
     # Log the history
     with history.History(history_db) as hist:
         status_checks = (history.StatusCheck(
-            iteration_num=iter_n_min_1,
+            iteration_num=iter_prev,
             elem_num=rank_comp.elem_id,
             stage=_hist_status_stage_from_rank_comp(rank_comp),
             metric_name=rank_comp.comp_name,
@@ -376,32 +378,32 @@ def make_new_generation(working_dir: pathlib.Path, iter_n: int) -> design.StentD
 
         # Save the global model results from Abaqus in the history file.
         global_status_history = [history.GlobalStatus(
-            iteration_num=iter_n_min_1,
+            iteration_num=iter_prev,
             global_status_type=history.GlobalStatusType.abaqus_history_result,
             global_status_sub_type=stat_raw.history_identifier,
             global_status_value=stat_raw.history_value,
         ) for stat_raw in global_status_raw]
         hist.add_many_global_status_checks(global_status_history)
 
-        hist.update_global_with_elemental(iteration_num=iter_n_min_1)
+        hist.update_global_with_elemental(iteration_num=iter_prev)
 
         # Note the node positions for rendering later on.
         node_pos_for_hist = (history.NodePosition(
-            iteration_num=iter_n_min_1,
+            iteration_num=iter_prev,
             node_num=node_num,
             x=pos.x,
             y=pos.y,
             z=pos.z) for node_num, pos in pos_lookup.items())
         hist.add_node_positions(node_pos_for_hist)
 
-    new_active_elems = evolve_decider(optim_params, design_n_min_1, ranking_result.final_ranking_component, iter_n)
+    new_active_elems = evolve_decider(optim_params, design_n_min_1, ranking_result.final_ranking_component, iter_this)
 
     # Save the latest design snapshot
     # Log the history
     new_active_elem_nums = frozenset(elem_indices_to_num[idx] for idx in new_active_elems)
     with history.History(history_db) as hist:
         snapshot = history.Snapshot(
-            iteration_num=iter_n,
+            iteration_num=iter_this,
             filename=str(inp_fn),
             active_elements=new_active_elem_nums)
 
@@ -537,10 +539,11 @@ if __name__ == '__main__':
     # make_plot_tests()
 
     working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-179")  # 89
-    i_current = 1
-    make_plot_tests(working_dir, i_current)
+    iter_this = 1
+    iter_prev = iter_this - 1
+    make_plot_tests(working_dir, iter_this)
 
-    new_design = make_new_generation(working_dir, i_current)
+    new_design = make_new_generation(working_dir, iter_prev, iter_this)
     # print(new_design)
 
 

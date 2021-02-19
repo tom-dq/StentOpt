@@ -22,6 +22,15 @@ from matplotlib import rcParams
 #  - Make an auto-animation?
 #  - Something to do with stopping disconnections?
 
+# TODO:
+#   Plan for better investigation of what makes a good objective criteria:
+#     - Refactor to make it possible to have a number of new generations from an old generation, with different parameters in each. Give new designs "labels" or something.
+#     - See which criteria make the design better or worse
+#     - Have multiple chains of elements being included or excluded.
+#     - See which pushes the design in the right direction and see what local criteria achieved that.
+#     - Nonlinear elastic as a proxy?
+
+
 from stent_opt.abaqus_model import base, element
 from stent_opt.struct_opt import history, design
 from stent_opt.struct_opt.computer import this_computer
@@ -70,8 +79,8 @@ _all_global_statuses = [gsv.to_plottable_point() for gsv in global_hist.get_uniq
 _global_status_idx = {pp.label: idx for idx, pp in enumerate(_all_global_statuses)}
 _all_elemental_metrics = global_hist.get_metric_names()
 _max_dashboard_increment = min(STOP_AT_INCREMENT, global_hist.max_saved_iteration_num() - 1)  # Why the minus one? Can't remember!
-
-
+if _max_dashboard_increment == 0:
+    _max_dashboard_increment = 1  # Special case to make the slider work if there aren't enough results
 
 class ContourView(typing.NamedTuple):
     iteration_num: int

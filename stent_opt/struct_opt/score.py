@@ -181,7 +181,13 @@ def get_primary_ranking_local_region_gradient(
         ) -> typing.Iterable[PrimaryRankingComponent]:
     """Determine how the local stress is correlated with the a particular element being active or inactive."""
 
+    REGION_GRADIENT = "RegionGradient"
+
     recent_gradient_input_data = list(recent_gradient_input_data)
+
+    # For the first few iterations this doesn't make sense...
+    if len(recent_gradient_input_data) < 2:
+        return StopIteration()
 
     # Global lookup for all elements - the divisions will not change.
     elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(recent_gradient_input_data[0].stent_design.stent_params.divs)}
@@ -244,7 +250,7 @@ def get_primary_ranking_local_region_gradient(
             grad = 0.0
 
         yield PrimaryRankingComponent(
-            comp_name="RegionGradient",
+            comp_name=REGION_GRADIENT,
             elem_id=elem_num,
             value=grad
         )
