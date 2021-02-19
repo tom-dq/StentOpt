@@ -715,6 +715,11 @@ def _from_scract_setup(working_dir):
         hist.add_snapshot(snapshot)
 
 
+# TEMP! This is for trialing new designs
+new_design_trials: typing.List[typing.Tuple[generation.T_ProdNewGen, str]] = [
+    (generation.produce_new_generation, "generation.produce_new_generation"),
+]
+
 
 def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.OptimParams):
     working_dir = pathlib.Path(optim_params.working_dir)
@@ -747,31 +752,41 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     with history.History(history_db_fn) as hist:
         old_design = hist.get_most_recent_design()
 
-    for iter_this in range(main_loop_start_i, 10000):
-        iter_prev = iter_this - 1
-        fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_this)
-        fn_odb = history.make_fn_in_dir(working_dir, ".odb", iter_this)
+    iter_prev = main_loop_start_i - 1
 
+    while True:
         one_design, one_ranking = generation.process_completed_simulation(working_dir, iter_prev)
-        new_design = generation.produce_new_generation(working_dir, one_design, one_ranking, iter_this)
 
-        new_elements = new_design.active_elements - old_design.active_elements
-        removed_elements = old_design.active_elements - new_design.active_elements
-        print(f"Added: {len(new_elements)}\tRemoved: {len(removed_elements)}.")
+        all_new_designs_this_iter = []
+        done = False
+        for iter_this, (new_gen_func, new_gen_descip) in enumerate(new_design_trials, start=iter_prev+1):
+            one_new_design = new_gen_func(working_dir, one_design, one_ranking, iter_this, new_gen_descip)
 
-        done = optim_params.is_converged(old_design, new_design, iter_this)
+            new_elements = one_new_design.active_elements - old_design.active_elements
+            removed_elements = old_design.active_elements - one_new_design.active_elements
+            print(f"[{iter_prev} -> {iter_this}]\t{new_gen_descip}\tAdded: {len(new_elements)}\tRemoved: {len(removed_elements)}.")
 
-        make_stent_model(optim_params, new_design, fn_inp)
-        run_model(optim_params, fn_inp)
+            fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_this)
+            fn_odb = history.make_fn_in_dir(working_dir, ".odb", iter_this)
 
-        fn_db_current = history.make_fn_in_dir(working_dir, ".db", iter_this)
-        perform_extraction(fn_odb, fn_db_current, new_design.stent_params.nodal_z_override_in_odb)
+            make_stent_model(optim_params, one_new_design, fn_inp)
+            run_model(optim_params, fn_inp)
 
-        old_design = new_design
+            done = optim_params.is_converged(old_design, one_new_design, iter_this)
+
+            fn_db_current = history.make_fn_in_dir(working_dir, ".db", iter_this)
+            perform_extraction(fn_odb, fn_db_current, one_new_design.stent_params.nodal_z_override_in_odb)
+
+            all_new_designs_this_iter.append(one_new_design)
+
+        if len(all_new_designs_this_iter) > 1:
+            warning = Warning("Arbitrary choice out of all new designs.")
+            raise warning
+
+        old_design = all_new_designs_this_iter[0]
 
         if done:
             break
-
 
 
 if __name__ == "__main__":

@@ -398,8 +398,12 @@ def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> t
 
     return design_n_min_1, ranking_result
 
+T_ProdNewGen = typing.Callable[
+    [pathlib.Path, design.StentDesign, RankingResults, int, str],
+    design.StentDesign
+]
 
-def produce_new_generation(working_dir: pathlib.Path, design_prev: design.StentDesign, ranking_result: RankingResults, iter_this: int) -> design.StentDesign:
+def produce_new_generation(working_dir: pathlib.Path, design_prev: design.StentDesign, ranking_result: RankingResults, iter_this: int, label: str) -> design.StentDesign:
 
     inp_fn = history.make_fn_in_dir(working_dir, ".inp", iter_this)
     history_db = history.make_history_db(working_dir)
@@ -417,13 +421,13 @@ def produce_new_generation(working_dir: pathlib.Path, design_prev: design.StentD
     with history.History(history_db) as hist:
         snapshot = history.Snapshot(
             iteration_num=iter_this,
-            label=f"Iter{iter_this}.0",
+            label=label,
             filename=str(inp_fn),
             active_elements=new_active_elem_nums)
 
         hist.add_snapshot(snapshot)
 
-    return design.StentDesign(stent_params=design_prev.stent_params, active_elements=frozenset(new_active_elems))
+    return design.StentDesign(stent_params=design_prev.stent_params, active_elements=frozenset(new_active_elems), label=snapshot.label)
 
 
 def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
