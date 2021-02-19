@@ -192,6 +192,7 @@ class StentParams(typing.NamedTuple):
 class StentDesign(typing.NamedTuple):
     stent_params: StentParams
     active_elements: typing.FrozenSet[PolarIndex]
+    label: str
 
     def volume_ratio(self) -> float:
         active_elements = len(self.active_elements)
@@ -598,7 +599,8 @@ def make_initial_design_dylan(stent_params: StentParams) -> StentDesign:
     included_elements = (idx for idx, iElem, e in generate_stent_part_elements(stent_params) if check_elem(e))
     return StentDesign(
         stent_params=stent_params,
-        active_elements=frozenset(included_elements)
+        active_elements=frozenset(included_elements),
+        label="InitialDylan",
     )
 
 
@@ -680,7 +682,8 @@ def _make_design_from_line_segments(stent_params: StentParams, line_z_th_points_
     included_elements = frozenset(idx for idx, iElem, e in generate_stent_part_elements(stent_params) if check_elem(e))
     return StentDesign(
         stent_params=stent_params,
-        active_elements=included_elements
+        active_elements=included_elements,
+        label="InitialLineSegments",
     )
 
 
@@ -766,7 +769,8 @@ def make_initial_all_in(stent_params: StentParams) -> StentDesign:
     included_elements = (idx for idx, iElem, e in generate_stent_part_elements(stent_params))
     return StentDesign(
         stent_params=stent_params,
-        active_elements=frozenset(included_elements)
+        active_elements=frozenset(included_elements),
+        label="InitialAllIn",
     )
 
 
@@ -980,6 +984,7 @@ def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snap
     return StentDesign(
         stent_params=stent_params,
         active_elements=frozenset(active_elements_idx),
+        label=snapshot.label,
     )
 
 def show_initial_model_test(stent_design: StentDesign):

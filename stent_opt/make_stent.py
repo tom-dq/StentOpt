@@ -685,6 +685,37 @@ def perform_extraction(odb_fn, out_db_fn, override_z_val):
         raise subprocess.SubprocessError(ret_code)
 
 
+
+def _from_scract_setup(working_dir):
+    history_db_fn = history.make_history_db(working_dir)
+
+    # Do the initial setup from a first model.
+    starting_i = 0
+    fn_inp = history.make_fn_in_dir(working_dir, ".inp", starting_i)
+    current_design = design.make_initial_design(stent_params)
+    make_stent_model(optim_params, current_design, fn_inp)
+
+    run_model(optim_params, fn_inp)
+    perform_extraction(
+        history.make_fn_in_dir(working_dir, ".odb", starting_i),
+        history.make_fn_in_dir(working_dir, ".db", starting_i),
+        current_design.stent_params.nodal_z_override_in_odb
+    )
+
+    with history.History(history_db_fn) as hist:
+        elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
+        active_elem_nums = (elem_indices_to_num[idx] for idx in current_design.active_elements)
+        snapshot = history.Snapshot(
+            iteration_num=starting_i,
+            label=f"First Iteration {starting_i}",
+            filename=str(fn_inp),
+            active_elements=frozenset(active_elem_nums),
+        )
+
+        hist.add_snapshot(snapshot)
+
+
+
 def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.OptimParams):
     working_dir = pathlib.Path(optim_params.working_dir)
     history_db_fn = history.make_history_db(working_dir)
@@ -706,31 +737,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
                 raise ValueError(r"Something changed with the stent params - can't use this one!")
 
     if start_from_scratch:
-        # Do the initial setup from a first model.
-        starting_i = 0
-        fn_inp = history.make_fn_in_dir(working_dir, ".inp", starting_i)
-        current_design = design.make_initial_design(stent_params)
-        make_stent_model(optim_params, current_design, fn_inp)
-
-        run_model(optim_params, fn_inp)
-        perform_extraction(
-            history.make_fn_in_dir(working_dir, ".odb", starting_i),
-            history.make_fn_in_dir(working_dir, ".db", starting_i),
-            current_design.stent_params.nodal_z_override_in_odb
-        )
-
-        with history.History(history_db_fn) as hist:
-            elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
-            active_elem_nums = (elem_indices_to_num[idx] for idx in current_design.active_elements)
-            snapshot = history.Snapshot(
-                iteration_num=starting_i,
-                label=f"First Iteration {starting_i}",
-                filename=str(fn_inp),
-                active_elements=frozenset(active_elem_nums),
-            )
-
-            hist.add_snapshot(snapshot)
-
+        _from_scract_setup(working_dir)
         main_loop_start_i = 1
 
     else:
@@ -745,7 +752,8 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_this)
         fn_odb = history.make_fn_in_dir(working_dir, ".odb", iter_this)
 
-        new_design = generation.make_new_generation(working_dir, iter_prev, iter_this)
+        one_design, one_ranking = generation.process_completed_simulation(working_dir, iter_prev)
+        new_design = generation.produce_new_generation(working_dir, one_design, one_ranking, iter_this)
 
         new_elements = new_design.active_elements - old_design.active_elements
         removed_elements = old_design.active_elements - new_design.active_elements

@@ -337,11 +337,11 @@ def _get_ranking_functions(
     )
 
 
-def make_new_generation(working_dir: pathlib.Path, iter_prev: int, iter_this: int) -> design.StentDesign:
+def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> typing.Tuple[design.StentDesign, RankingResults]:
+    """Processes the results of a completed simulation and returns it's design and results to produce the next iteration."""
 
     db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
     history_db = history.make_history_db(working_dir)
-    inp_fn = history.make_fn_in_dir(working_dir, ".inp", iter_this)
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -349,13 +349,13 @@ def make_new_generation(working_dir: pathlib.Path, iter_prev: int, iter_this: in
 
     # Go between num (1234) and idx (5, 6, 7)...
     elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
-    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
 
     with history.History(history_db) as hist:
         snapshot_n_min_1 = hist.get_snapshot(iter_prev)
         design_n_min_1 = design.StentDesign(
             stent_params=stent_params,
-            active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements))
+            active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements)),
+            label=snapshot_n_min_1.label,
         )
 
     # Get the data from the previously run simulation.
@@ -396,7 +396,20 @@ def make_new_generation(working_dir: pathlib.Path, iter_prev: int, iter_this: in
             z=pos.z) for node_num, pos in pos_lookup.items())
         hist.add_node_positions(node_pos_for_hist)
 
-    new_active_elems = evolve_decider(optim_params, design_n_min_1, ranking_result.final_ranking_component, iter_this)
+    return design_n_min_1, ranking_result
+
+
+def produce_new_generation(working_dir: pathlib.Path, design_prev: design.StentDesign, ranking_result: RankingResults, iter_this: int) -> design.StentDesign:
+
+    inp_fn = history.make_fn_in_dir(working_dir, ".inp", iter_this)
+    history_db = history.make_history_db(working_dir)
+    with history.History(history_db) as hist:
+        stent_params = hist.get_stent_params()
+        optim_params = hist.get_opt_params()
+
+    new_active_elems = evolve_decider(optim_params, design_prev, ranking_result.final_ranking_component, iter_this)
+
+    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
 
     # Save the latest design snapshot
     # Log the history
@@ -410,7 +423,7 @@ def make_new_generation(working_dir: pathlib.Path, iter_prev: int, iter_this: in
 
         hist.add_snapshot(snapshot)
 
-    return design.StentDesign(stent_params=design_n_min_1.stent_params, active_elements=frozenset(new_active_elems))
+    return design.StentDesign(stent_params=design_prev.stent_params, active_elements=frozenset(new_active_elems))
 
 
 def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
@@ -516,7 +529,8 @@ def evolve_decider_test():
         snapshot_n_min_1 = hist.get_snapshot(iter_n_min_1)
         design_n_min_1 = design.StentDesign(
             stent_params=stent_params,
-            active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements))
+            active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements)),
+            label=snapshot_n_min_1.label,
         )
 
         status_checks = hist.get_status_checks(0, 1_000_000_000)
@@ -544,7 +558,8 @@ if __name__ == '__main__':
     iter_prev = iter_this - 1
     make_plot_tests(working_dir, iter_this)
 
-    new_design = make_new_generation(working_dir, iter_prev, iter_this)
+    one_design, one_ranking = process_completed_simulation(working_dir, iter_prev)
+    new_design = produce_new_generation(working_dir, one_design, one_ranking, iter_this)
     # print(new_design)
 
 

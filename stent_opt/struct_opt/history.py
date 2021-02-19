@@ -356,6 +356,7 @@ class History:
             return design.StentDesign(
                 stent_params=stent_params,
                 active_elements=frozenset( (elem_num_to_idx[iElem] for iElem in maybe_snapshot.active_elements)),
+                label=maybe_snapshot.label,
             )
 
     def get_status_checks(self, iter_greater_than_equal: int, iter_less_than_equal: int, limit_to_metrics: typing.Optional[typing.Container[str]]=None) -> typing.Iterable[StatusCheck]:

@@ -1,6 +1,9 @@
 # Temporary (I think) to manually drive the iteration
-
+import collections
+import itertools
 import typing
+
+import networkx
 
 class Element(typing.NamedTuple):
     num: int
@@ -41,6 +44,45 @@ class Bucket:
         self._all_nodes = {n for elem in self._elems for n in elem.conn}
 
 
+
+def _build_graph(elems: typing.Iterable[Element]) -> networkx.Graph:
+
+    """Confusingly, the "Nodes" in the graph are the elements in the FE mesh"""
+    G = networkx.Graph()
+
+    elems = list(elems)
+
+    node_to_elems = collections.defaultdict(set)
+    for elem in elems:
+        for node in elem.conn:
+            node_to_elems[node].add(elem)
+
+
+    for fe_elem in elems:
+        G.add_node(fe_elem)
+
+    for fe_node, fe_elems in node_to_elems.items():
+        for fe_elem1, fe_elem2 in itertools.permutations(fe_elems, 2):
+            G.add_edge(fe_elem1, fe_elem2)
+
+    return G
+
+
+def network_traverse_test():
+    elems = [
+        Element(1, (1, 2, 3, 4)),
+        Element(2, (4, 5, 6, 7)),
+        Element(3, (10, 11, 30, 40)),
+        Element(4, (3, 40, 67, 78)),
+        Element(5, (1001, 1002, 1003, 1004)),
+    ]
+
+    G = _build_graph(elems)
+
+    print(G)
+
+
+
 def test_buckets():
     e1a = Element(10, (1, 2, 3, 4))
     e1b = Element(11, (1, 2, 3, 5))
@@ -76,4 +118,4 @@ def test_buckets():
     print("All OK")
 
 if __name__ == "__main__":
-    test_buckets()
+    network_traverse_test()
