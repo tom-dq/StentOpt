@@ -34,8 +34,6 @@ except KeyError:
     pass
 
 # TODO 2021-02-03
-# - Graphs of global compliance / energy dissipated / etc...
-# - Graphs of min/median/mean/max of elemental objective functions
 # - Graphs of volume ratios and target volume ratio
 # - Rasterise and build (offline) the images of each step.
 
@@ -722,13 +720,15 @@ def _from_scract_setup(working_dir):
 # TEMP! This is for trialing new designs
 new_design_trials: typing.List[typing.Tuple[generation.T_ProdNewGen, str]] = []
 
-for one_chain in chains.make_single_sided_chains(1):
+for one_chain in chains.make_single_sided_chains(8):
     one_forced_func = functools.partial(generation_FORCE.compel_new_generation, one_chain)
-    new_design_trials.append((one_forced_func, str(one_chain)))
+    # new_design_trials.append((one_forced_func, str(one_chain)))
 
 
 new_design_trials.append((generation.produce_new_generation, "generation.produce_new_generation"))
 
+
+print(f"Doing {len(new_design_trials)} trails each time...")
 
 class RunOneArgs(typing.NamedTuple):
     working_dir: pathlib.Path

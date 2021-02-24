@@ -939,12 +939,14 @@ def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major:
     return _make_param_polar_point_radius_test
 
 
+
+
 def make_initial_design_radius_test(stent_params: StentParams) -> StentDesign:
     """Simple outline for testing the radius of curvature"""
 
     def width(x):
         end_w = 0.05
-        middle_w = 0.01
+        middle_w = 0.025
         trans_start=0.3
         trans_end=0.4
 
@@ -960,20 +962,72 @@ def make_initial_design_radius_test(stent_params: StentParams) -> StentDesign:
         else:
             return middle_w
 
-
-    nominal_radius = 0.5 * (stent_params.r_min + stent_params.r_max)
-
     ref_length = basic_stent_params.theta_arc_initial / 6
     f = _radius_test_param_curve(basic_stent_params, r_minor=0.3 * ref_length, r_major=2.8*ref_length, D=5.5*ref_length )
 
-    N = 1000
+    N = 100
     xyz_point = [(f(t/N), width(t/N)) for t in range(N+1)]
 
-    return _make_design_from_line_segments(stent_params, xyz_point, nominal_radius)
+    return _make_design_from_line_segments(stent_params, xyz_point, stent_params.radial_midplane_initial)
+
+
+
+
+def _s_curve(stent_params: StentParams) -> typing.Callable[[float], base.XYZ]:
+
+
+    nominal_radius = stent_params.radial_midplane_initial
+
+    def make_p(t: float) -> base.XYZ:
+        t_bar = math.pi * 2 * t
+
+        r_th_z = base.RThZ(
+            theta_deg=stent_params.angle * (t + 1.0 * math.sin(t_bar)),
+            z= bottom_gap + (target_height/2)*(1 - math.cos(t_bar)),
+            r=nominal_radius)
+
+        return r_th_z.to_planar_unrolled()
+
+    return make_p
+
+
+
+def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
+
+    width = 0.15
+    nominal_radius = stent_params.radial_midplane_initial
+
+    z_span = stent_params.length / 3
+    z_bottom = 0.5 * (stent_params.length - z_span)
+
+    def make_p(t: float) -> base.RThZ:
+        t_bar = math.pi * 2 * t
+
+        return base.RThZ(
+            r=nominal_radius,
+            theta_deg= stent_params.angle * (t + math.sin(2 * t_bar) / math.pi / 2),  #    stent_params.angle * (t + math.sin(2*t_bar)),
+            z=z_bottom + z_span * 0.5 * (1 - math.cos(t_bar)),
+            )
+
+    N = 300
+    polar_points = [make_p(t/(N-1)) for t in range(N)]
+
+    if stent_params.stent_element_dimensions == 2:
+        xyz_point = [p.to_planar_unrolled() for p in polar_points]
+
+    elif stent_params.stent_element_dimensions == 3:
+        xyz_point = [p.to_xyz() for p in polar_points]
+
+    else:
+        raise ValueError(stent_params.stent_element_dimensions)
+
+    line_z_th_points_and_widths = [(p, width) for p in xyz_point]
+    return _make_design_from_line_segments(stent_params, line_z_th_points_and_widths, nominal_radius)
 
 
 # make_initial_design = make_initial_design_radius_test
-make_initial_design = make_initial_two_lines
+# make_initial_design = make_initial_two_lines
+make_initial_design = make_initial_design_s_curve
 
 
 
@@ -1001,8 +1055,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=20,  # 31
-        Z=200,  # 120
+        Th=30,  # 31
+        Z=300,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1027,7 +1081,7 @@ dylan_r10n1_params = StentParams(
             Z=2,
         ),
     ),
-    expansion_ratio=.2,  # 2.0
+    expansion_ratio=1.1,  # 2.0
 )
 
 basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)

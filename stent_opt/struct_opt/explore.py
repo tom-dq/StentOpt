@@ -160,7 +160,7 @@ class GraphLineCollection(typing.NamedTuple):
         return self.y_min, self.y_max
 
 def get_status_checks() -> typing.List["history.StatusCheck"]:
-    return list(global_hist.get_status_checks(iter_greater_than=0, iter_less_than_equal=UNLIMITED))
+    return list(global_hist.get_status_checks(iter_greater_than_equal=0, iter_less_than_equal=UNLIMITED))
 
 
 def _build_contour_view_data(
@@ -308,6 +308,11 @@ def _make_single_contour(*args, **kwargs) -> holoviews.Overlay:
 
     print(iteration_num, deformed, metric_name)
 
+    return _contour_build_from_db(stent_params, iteration_num, deformed, metric_name)
+
+
+@functools.lru_cache(1024)
+def _contour_build_from_db(stent_params: design.StentParams, iteration_num: int, deformed: bool, metric_name: str) -> holoviews.Overlay:
     node_num_to_idx = {iNode: idx for iNode, idx, pos in design.generate_nodes(stent_params)}
     elem_num_to_idx = {iElem: idx for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
 

@@ -397,6 +397,23 @@ def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> t
             z=pos.z) for node_num, pos in pos_lookup.items())
         hist.add_node_positions(node_pos_for_hist)
 
+        # Record the volume ratios
+        vol_ratios = [
+            history.GlobalStatus(
+                iteration_num=iter_prev,
+                global_status_type=history.GlobalStatusType.target_volume_ratio,
+                global_status_sub_type="TargetVol",
+                global_status_value=optim_params.volume_target_func(optim_params.volume_target_opts, iter_prev),
+            ),
+            history.GlobalStatus(
+                iteration_num=iter_prev,
+                global_status_type=history.GlobalStatusType.current_volume_ratio,
+                global_status_sub_type="CurrentVol",
+                global_status_value=design_n_min_1.volume_ratio(),
+            ),
+        ]
+        hist.add_many_global_status_checks(vol_ratios)
+
     return design_n_min_1, ranking_result
 
 T_ProdNewGen = typing.Callable[
