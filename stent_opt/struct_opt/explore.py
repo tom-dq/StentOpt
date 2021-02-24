@@ -52,19 +52,24 @@ WORKING_DIR_TEMP = _get_most_recent_working_dir()
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-251")
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
-STOP_AT_INCREMENT = 100
+STOP_AT_INCREMENT = 1000
 
 
 # Just re-use this around the place so I don't need to open/close the DB all the time... is this a bad idea?
 history_db = history.make_history_db(WORKING_DIR_TEMP)
 global_hist = history.History(history_db)
 
-_all_global_statuses = [gsv.to_plottable_point() for gsv in global_hist.get_unique_global_status_keys()]
-_global_status_idx = {pp.label: idx for idx, pp in enumerate(_all_global_statuses)}
-_all_elemental_metrics = global_hist.get_metric_names()
-_max_dashboard_increment = min(STOP_AT_INCREMENT, global_hist.max_saved_iteration_num() - 1)  # Why the minus one? Can't remember!
-if _max_dashboard_increment == 0:
-    _max_dashboard_increment = 1  # Special case to make the slider work if there aren't enough results
+def _update_global_db_data():
+    global _all_global_statuses, _global_status_idx, _all_elemental_metrics, _max_dashboard_increment
+    _all_global_statuses = [gsv.to_plottable_point() for gsv in global_hist.get_unique_global_status_keys()]
+    _global_status_idx = {pp.label: idx for idx, pp in enumerate(_all_global_statuses)}
+    _all_elemental_metrics = global_hist.get_metric_names()
+    _max_dashboard_increment = min(STOP_AT_INCREMENT, global_hist.max_saved_iteration_num() - 1)  # Why the minus one? Can't remember!
+    if _max_dashboard_increment == 0:
+        _max_dashboard_increment = 1  # Special case to make the slider work if there aren't enough results
+
+
+_update_global_db_data()
 
 class ContourView(typing.NamedTuple):
     iteration_num: int
@@ -295,9 +300,13 @@ history_plot_vars_selector = panel.widgets.MultiSelect(
     width=500,
 )
 
+def _update_controls():
+    _update_global_db_data()
+    iteration_selector.end = _max_dashboard_increment
 
 @panel.depends(iteration_selector, elemental_metric_selector, deformed_selector)
 def _make_single_contour(*args, **kwargs) -> holoviews.Overlay:
+    _update_controls()
 
     stent_params = global_hist.get_stent_params()
 
@@ -349,6 +358,8 @@ def _contour_build_from_db(stent_params: design.StentParams, iteration_num: int,
 
 @panel.depends(iteration_selector, history_plot_vars_selector)
 def _create_history_curve(*args, **kwargs) -> holoviews.NdOverlay:
+
+    _update_controls()
 
     graph_line_collection = _create_graph_line_collection()
 

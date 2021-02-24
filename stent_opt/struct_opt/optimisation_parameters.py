@@ -180,10 +180,10 @@ active = OptimParams(
         n_past_increments=5,
     ),
     element_components=[
-        db_defs.ElementPEEQ,
+        # db_defs.ElementPEEQ,
         db_defs.ElementStress,
-        db_defs.ElementEnergyElastic,
-        db_defs.ElementEnergyPlastic,
+        # db_defs.ElementEnergyElastic,
+        # db_defs.ElementEnergyPlastic,
     ],
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
@@ -193,8 +193,8 @@ active = OptimParams(
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
     abaqus_output_time_interval=0.1,  # Was 0.1
-    abaqus_target_increment=1e-6,
-    time_expansion=0.1,  # Was 2.0
+    abaqus_target_increment=1e-6,  # 1e-6
+    time_expansion=1.0,  # Was 2.0
     time_released=None,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,

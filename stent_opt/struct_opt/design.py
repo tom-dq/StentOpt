@@ -994,10 +994,10 @@ def _s_curve(stent_params: StentParams) -> typing.Callable[[float], base.XYZ]:
 
 def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
 
-    width = 0.15
+    width = 0.20375
     nominal_radius = stent_params.radial_midplane_initial
 
-    z_span = stent_params.length / 3
+    z_span = stent_params.length / 5
     z_bottom = 0.5 * (stent_params.length - z_span)
 
     def make_p(t: float) -> base.RThZ:
@@ -1055,8 +1055,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=30,  # 31
-        Z=300,  # 120
+        Th=100,  # 31
+        Z=1000,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1081,7 +1081,7 @@ dylan_r10n1_params = StentParams(
             Z=2,
         ),
     ),
-    expansion_ratio=1.1,  # 2.0
+    expansion_ratio=2.0,  # 2.0
 )
 
 basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
