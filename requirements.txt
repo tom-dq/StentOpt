@@ -1,7 +1,7 @@
+bokeh==2.2.3  # Most recent (2.3.0) doesn't seem to work with holoviews 1.41.1
 holoviews
 panel
 numpy  # ==1.19.3
-bokeh
 psutil
 matplotlib
 scipy
