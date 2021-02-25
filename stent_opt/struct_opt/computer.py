@@ -42,7 +42,7 @@ elif psutil.cpu_count(logical=False) == 8:
 elif psutil.cpu_count(logical=False) == 6:
     # Macbook - just for viewing results at the moment.
     n_cpus = 4
-    base_working_dir = r"/Users/tomwilson/PhD Data/StentOptSims"
+    base_working_dir = r"/Users/tomwilson/Dropbox/PhD/StentOptDBs"
     fig_size = (1200, 750)  # (2000, 1350)
 
 else:

@@ -5,3 +5,6 @@ abaqus_pde.deps
  __pycache__/
  *.pyc
  **/*.pyc
+ venv/
+ venv-py39/
+ 
