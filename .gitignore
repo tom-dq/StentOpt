@@ -2,9 +2,9 @@ abaqus*.rec
 abaqus.rpy*
 abaqus_pde.deps
 .idea
- __pycache__/
- *.pyc
- **/*.pyc
- venv/
- venv-py39/
+__pycache__/
+*.pyc
+**/*.pyc
+venv/
+venv-py39/
  
