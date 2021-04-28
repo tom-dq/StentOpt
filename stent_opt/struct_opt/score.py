@@ -32,6 +32,7 @@ FACES_OF = {
     element.ElemType.C3D8R: _FACES_OF_HEX,
 }
 
+# TODO - add  an "observer" flag to these so we can see results but not use them in the optimisation
 class PrimaryRankingComponent(typing.NamedTuple):
     comp_name: str
     elem_id: int
@@ -111,6 +112,24 @@ def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingCom
 
     else:
         raise ValueError(nt_row)
+
+
+def get_primary_ranking_deviation(nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+    """Gets a ranking component which makes elements close to the mean the best."""
+
+    raw_primary_res = list(get_primary_ranking_components(nt_rows))
+
+    raw_data = [prc.value for prc in raw_primary_res]
+    central_value = statistics.mean(raw_data)
+
+    # Deviations (zero is "right at mean")
+    deviations = [prc._replace(value=central_value - prc.value) for prc in raw_primary_res]
+    max_dev = max( abs(prc.value) for prc in deviations)
+
+    # Most "fit" is minimum deviation...
+    final = [prc._replace(value=max_dev - abs(prc.value)) for prc in deviations]
+
+    return final
 
 
 def get_primary_ranking_element_distortion(old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
