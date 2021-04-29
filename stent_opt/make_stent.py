@@ -18,7 +18,7 @@ from stent_opt.abaqus_model import interaction, node, boundary_condition, sectio
 from stent_opt.struct_opt import design
 from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalSurfNames, GlobalNodeSetNames, Actuation, StentParams
 from stent_opt.struct_opt import generation, optimisation_parameters
-from stent_opt.struct_opt import generation_FORCE, chains
+# from stent_opt.struct_opt import generation_FORCE, chains
 
 from stent_opt.struct_opt import history
 from stent_opt.struct_opt.computer import this_computer
@@ -720,8 +720,8 @@ def _from_scract_setup(working_dir):
 # TEMP! This is for trialing new designs
 new_design_trials: typing.List[typing.Tuple[generation.T_ProdNewGen, str]] = []
 
-for one_chain in chains.make_single_sided_chains(8):
-    one_forced_func = functools.partial(generation_FORCE.compel_new_generation, one_chain)
+#for one_chain in chains.make_single_sided_chains(8):
+#    one_forced_func = functools.partial(generation_FORCE.compel_new_generation, one_chain)
     # new_design_trials.append((one_forced_func, str(one_chain)))
 
 

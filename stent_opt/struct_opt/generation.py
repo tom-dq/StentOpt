@@ -30,13 +30,12 @@ MAKE_PLOTS = False
 
 
 def get_gradient_input_data(
-        working_dir,
-        raw_component,
+        optim_params: optimisation_parameters.OptimParams,
         iteration_nums: typing.Iterable[int],
 ) -> typing.Iterable[score.GradientInputData]:
     """raw_component is db_defs.ElementStress or db_defs.ElementPEEQ"""
 
-    working_dir = pathlib.Path(working_dir)
+    working_dir = pathlib.Path(optim_params.working_dir)
     history_db_fn = history.make_history_db(working_dir)
 
     with history.History(history_db_fn) as hist:
@@ -51,8 +50,8 @@ def get_gradient_input_data(
                 print(output_db_fn)
                 one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
 
-                raw_rows = list(data.get_all_rows_at_frame(raw_component, one_frame))
-                raw_ranking_components = list(score.get_primary_ranking_components(raw_rows))
+                raw_rows = list(data.get_all_rows_at_frame(optim_params.region_gradient.component, one_frame))
+                raw_ranking_components = list(score.get_primary_ranking_components(optim_params, raw_rows))
                 element_ranking_components = {one_comp.elem_id: one_comp for one_comp in raw_ranking_components}
                 yield score.GradientInputData(
                     iteration_num=iter_num,
@@ -280,7 +279,7 @@ def _get_ranking_functions(
         first_grad_track = max(0, final_grad_track - optim_params.region_gradient.n_past_increments)
         grad_track_steps = range(first_grad_track, final_grad_track)
 
-        recent_gradient_input_data = get_gradient_input_data(optim_params.working_dir, optim_params.region_gradient.component, grad_track_steps)
+        recent_gradient_input_data = get_gradient_input_data(optim_params, grad_track_steps)
         vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(design_n_min_1.stent_params, recent_gradient_input_data, statistics.mean))
 
         # Sometimes there won't be data here (i.e., on the first few iterations).
@@ -292,7 +291,7 @@ def _get_ranking_functions(
 
     # Element based funtions
     for one_component in optim_params.element_components:
-        this_comp_rows = score.get_primary_ranking_components(data.get_all_rows_at_frame(one_component, one_frame))
+        this_comp_rows = score.get_primary_ranking_components(optim_params, data.get_all_rows_at_frame(one_component, one_frame))
         raw_elem_rows.append( list(this_comp_rows) )
 
     # Nodal position based functions
@@ -464,7 +463,7 @@ def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
     iter_to_pos = {}
 
     # Gradient tracking test
-    recent_gradient_input_data = list(get_gradient_input_data(working_dir, db_defs.ElementStress, history_iters))
+    recent_gradient_input_data = list(get_gradient_input_data(optim_params, history_iters))
 
     vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(stent_params, recent_gradient_input_data, statistics.mean))
     for idx, x in enumerate(vicinity_ranking):
@@ -500,7 +499,7 @@ def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
 
         # Element-based effort functions
         for db_data in [stress_rows]: # [peeq_rows]: #, stress_rows]:
-            all_ranks.append(list(score.get_primary_ranking_components(db_data)))
+            all_ranks.append(list(score.get_primary_ranking_components(optim_params, db_data)))
 
 
     sec_rank = list(score.get_secondary_ranking_sum_of_norm(all_ranks))

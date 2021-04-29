@@ -10,7 +10,7 @@ import numpy
 from stent_opt.abaqus_model import base, element
 from stent_opt.abaqus_model.base import XYZ
 from stent_opt.odb_interface import db_defs
-from stent_opt.struct_opt import design, deformation_grad, graph_connection
+from stent_opt.struct_opt import design, deformation_grad, graph_connection, optimisation_parameters, common
 from stent_opt.struct_opt.deformation_grad import T_NodeMap
 
 _FACES_OF_QUAD = (
@@ -114,13 +114,13 @@ def _get_primary_ranking_components_raw(nt_rows) -> typing.Iterable[PrimaryRanki
         raise ValueError(nt_row)
 
 
-def _get_primary_ranking_deviation(nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+def _get_primary_ranking_deviation(central_value_producer, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets a ranking component which makes elements close to the mean the best."""
 
     raw_primary_res = list(_get_primary_ranking_components_raw(nt_rows))
 
     raw_data = [prc.value for prc in raw_primary_res]
-    central_value = statistics.mean(raw_data)
+    central_value = central_value_producer(raw_data)
 
     # Deviations (zero is "right at mean")
     deviations = [prc._replace(value=central_value - prc.value) for prc in raw_primary_res]
@@ -133,8 +133,25 @@ def _get_primary_ranking_deviation(nt_rows) -> typing.Iterable[PrimaryRankingCom
 
 
 
-def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
-    pass
+def get_primary_ranking_components(optim_params: optimisation_parameters.OptimParams, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+    if not optim_params.primary_ranking_fitness_filter:
+        raise ValueError("need at least something in optim_params.primary_ranking_fitness_filter")
+
+    nt_rows = list(nt_rows)
+
+    for primary_ranking_fitness in optim_params.primary_ranking_fitness_filter:
+        if primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.high_value:
+            yield from _get_primary_ranking_components_raw(nt_rows)
+
+        elif primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.close_to_mean:
+            yield from _get_primary_ranking_deviation(statistics.mean, nt_rows)
+
+        elif primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.close_to_median:
+            yield from _get_primary_ranking_deviation(statistics.median, nt_rows)
+
+        else:
+            raise ValueError(primary_ranking_fitness)
+
 
 def get_primary_ranking_element_distortion(old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
 

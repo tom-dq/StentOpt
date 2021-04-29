@@ -9,17 +9,17 @@ import typing
 import statistics
 import matplotlib.pyplot as plt
 
-from stent_opt.struct_opt.common import RegionReducer
+from stent_opt.struct_opt.common import RegionReducer, PrimaryRankingComponentFitnessFilter
 from stent_opt.abaqus_model import element
 from stent_opt.struct_opt import design
 from stent_opt.odb_interface import db_defs
 from stent_opt.struct_opt import optimisation_parameters
-import common
+
 
 _enum_types = [
     element.ElemType,
     RegionReducer,
-    common.PrimaryRankingComponentFitnessFilter,
+    PrimaryRankingComponentFitnessFilter,
 ]
 
 _nt_class_types = [
@@ -588,12 +588,22 @@ def nt_to_db_strings(nt_instance) -> typing.Iterable[typing.Tuple[str, typing.Op
         yield from _item_to_db_strings(key, val, this_item_type)
 
 
-def single_item_from_string(s):
+def single_item_from_string(s, maybe_target_type):
     """Strings which may be named tuples classes, or functions"""
 
     matches_nt_class = [nt for nt in _nt_class_types if nt.__name__ == s]
     matches_funcs = [f for f in optimisation_parameters._for_db_funcs if f.__name__ == s]
-    matches = matches_nt_class + matches_funcs
+
+    is_an_enum = False
+    try:
+        is_an_enum = issubclass(maybe_target_type, enum.Enum)
+
+    except TypeError:
+        pass
+
+    matches_enum = [e for e in maybe_target_type if e.name == s] if is_an_enum else []
+
+    matches = matches_nt_class + matches_funcs + matches_enum
 
     if len(matches) == 1:
         return matches[0]
@@ -672,7 +682,7 @@ def nt_from_db_strings(nt_class, data):
 
             text_is_a_list = all(is_an_item(k) for k,v in without_prefix_data)
             if text_is_a_list:
-                working_data[prefix] = [single_item_from_string(nt_s) for k, nt_s in without_prefix_data]
+                working_data[prefix] = [single_item_from_string(nt_s, single_type.__args__[0]) for k, nt_s in without_prefix_data]
 
             else:
                 working_data[prefix] = single_type.from_db_strings(without_prefix_data)
@@ -707,8 +717,8 @@ def nt_from_db_strings(nt_class, data):
                     else:
                         raise ValueError("What?")
 
-                elif single_item_from_string(value):
-                    working_data[name] = single_item_from_string(value)
+                elif single_item_from_string(value, base_type):
+                    working_data[name] = single_item_from_string(value, base_type)
 
                 elif base_type == bool:
                     # Get a "0" string for false here...
