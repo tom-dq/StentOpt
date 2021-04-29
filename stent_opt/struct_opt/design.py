@@ -1081,7 +1081,7 @@ dylan_r10n1_params = StentParams(
             Z=2,
         ),
     ),
-    expansion_ratio=2.0,  # 2.0
+    expansion_ratio=1.5,  # 2.0
 )
 
 basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)

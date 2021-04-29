@@ -208,7 +208,7 @@ active = OptimParams(
         reduce_type=common.RegionReducer.mean_val,
         n_past_increments=5,
     ),
-    primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.close_to_median],
+    primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.high_value],
     element_components=[
         # db_defs.ElementPEEQ,
         db_defs.ElementStress,
@@ -224,7 +224,7 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.1,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=2.0,  # Was 2.0
+    time_expansion=0.6,  # Was 2.0
     time_released=None,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,

@@ -823,8 +823,8 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
             previous_max_i = max(previous_max_i, iter_this)
 
         MULTI_PROCESS_POOL = False
+        l = multiprocessing.Lock()
         if MULTI_PROCESS_POOL:
-            l = multiprocessing.Lock()
             with multiprocessing.Pool(processes=4, initializer=init, initargs=(l,)) as pool:
 
                 for res in pool.imap_unordered(process_pool_run_and_process, arg_list):
@@ -835,6 +835,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
                 print(warning)
 
         else:
+            init(l)
             for run_one_args in arg_list:
                 process_pool_run_and_process(run_one_args)
 
