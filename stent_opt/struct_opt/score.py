@@ -141,16 +141,20 @@ def get_primary_ranking_components(optim_params: optimisation_parameters.OptimPa
 
     for primary_ranking_fitness in optim_params.primary_ranking_fitness_filter:
         if primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.high_value:
-            yield from _get_primary_ranking_components_raw(nt_rows)
+            nt_producer = _get_primary_ranking_components_raw(nt_rows)
 
         elif primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.close_to_mean:
-            yield from _get_primary_ranking_deviation(statistics.mean, nt_rows)
+            nt_producer = _get_primary_ranking_deviation(statistics.mean, nt_rows)
 
         elif primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.close_to_median:
-            yield from _get_primary_ranking_deviation(statistics.median, nt_rows)
+            nt_producer = _get_primary_ranking_deviation(statistics.median, nt_rows)
 
         else:
             raise ValueError(primary_ranking_fitness)
+
+        # Add on the suffix for the filter.
+        with_filter_suffix = (prc._replace(name=f"{prc.name} {primary_ranking_fitness.name}") for prc in nt_producer)
+        yield from with_filter_suffix
 
 
 def get_primary_ranking_element_distortion(old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
