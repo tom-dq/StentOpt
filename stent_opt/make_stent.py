@@ -726,9 +726,7 @@ new_design_trials: typing.List[typing.Tuple[generation.T_ProdNewGen, str]] = []
 
 
 new_design_trials.append((generation.produce_new_generation, "generation.produce_new_generation"))
-
-
-print(f"Doing {len(new_design_trials)} trails each time...")
+# print(f"Doing {len(new_design_trials)} trails each time...")
 
 class RunOneArgs(typing.NamedTuple):
     working_dir: pathlib.Path
@@ -824,15 +822,21 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
             previous_max_i = max(previous_max_i, iter_this)
 
-        l = multiprocessing.Lock()
-        with multiprocessing.Pool(processes=4, initializer=init, initargs=(l,)) as pool:
+        MULTI_PROCESS_POOL = False
+        if MULTI_PROCESS_POOL:
+            l = multiprocessing.Lock()
+            with multiprocessing.Pool(processes=4, initializer=init, initargs=(l,)) as pool:
 
-            for res in pool.imap_unordered(process_pool_run_and_process, arg_list):
-                print(res)
+                for res in pool.imap_unordered(process_pool_run_and_process, arg_list):
+                    print(res)
 
-        if len(all_new_designs_this_iter) > 1:
-            warning = Warning("Arbitrary choice out of all new designs.")
-            print(warning)
+            if len(all_new_designs_this_iter) > 1:
+                warning = Warning("Arbitrary choice out of all new designs.")
+                print(warning)
+
+        else:
+            for run_one_args in arg_list:
+                process_pool_run_and_process(run_one_args)
 
         iter_prev, one_design = all_new_designs_this_iter[0]
 

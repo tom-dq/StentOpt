@@ -51,7 +51,7 @@ def get_gradient_input_data(
                 one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
 
                 raw_rows = list(data.get_all_rows_at_frame(optim_params.region_gradient.component, one_frame))
-                raw_ranking_components = list(score.get_primary_ranking_components(True, optim_params, raw_rows))
+                raw_ranking_components = list(score.get_primary_ranking_components(True, optim_params.single_primary_ranking_fitness_filter, raw_rows))
                 element_ranking_components = {one_comp.elem_id: one_comp for one_comp in raw_ranking_components}
                 yield score.GradientInputData(
                     iteration_num=iter_num,
@@ -290,9 +290,11 @@ def _get_ranking_functions(
     raw_elem_rows = []
 
     # Element based funtions
-    for include_in_opt, elem_component in optim_params.get_all_elem_components():
-        this_comp_rows = score.get_primary_ranking_components(include_in_opt, optim_params, data.get_all_rows_at_frame(elem_component, one_frame))
-        raw_elem_rows.append( list(this_comp_rows) )
+    for include_in_opt_comp, elem_component in optim_params.get_all_elem_components():
+        for include_in_opt_filter, one_filter in optim_params.get_all_primary_ranking_fitness_filters():
+            include_in_opt = include_in_opt_comp and include_in_opt_filter
+            this_comp_rows = score.get_primary_ranking_components(include_in_opt, one_filter, data.get_all_rows_at_frame(elem_component, one_frame))
+            raw_elem_rows.append( list(this_comp_rows) )
 
     # Nodal position based functions
     pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
@@ -500,7 +502,7 @@ def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
 
         # Element-based effort functions
         for db_data in [stress_rows]: # [peeq_rows]: #, stress_rows]:
-            all_ranks.append(list(score.get_primary_ranking_components(optim_params, db_data)))
+            all_ranks.append(list(score.get_primary_ranking_components(True, optim_params.single_primary_ranking_fitness_filter, db_data)))
 
 
     sec_rank = list(score.get_secondary_ranking_sum_of_norm(all_ranks))

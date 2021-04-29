@@ -138,32 +138,23 @@ def _get_primary_ranking_deviation(include_in_opt: bool, central_value_producer,
     return final
 
 
+def get_primary_ranking_components(include_in_opt: bool, one_filter: common.PrimaryRankingComponentFitnessFilter, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
 
-def get_primary_ranking_components(raw_res_include_in_opt: bool, optim_params: optimisation_parameters.OptimParams, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
-    if not optim_params.primary_ranking_fitness_filter:
-        raise ValueError("need at least something in optim_params.primary_ranking_fitness_filter")
+    if one_filter == common.PrimaryRankingComponentFitnessFilter.high_value:
+        nt_producer = _get_primary_ranking_components_raw(include_in_opt, nt_rows)
 
-    nt_rows = list(nt_rows)
+    elif one_filter == common.PrimaryRankingComponentFitnessFilter.close_to_mean:
+        nt_producer = _get_primary_ranking_deviation(include_in_opt, statistics.mean, nt_rows)
 
-    for primary_ranking_fitness in common.PrimaryRankingComponentFitnessFilter:
-        include_this_filter = primary_ranking_fitness in optim_params.primary_ranking_fitness_filter
-        include_in_opt = raw_res_include_in_opt and include_this_filter
+    elif one_filter == common.PrimaryRankingComponentFitnessFilter.close_to_median:
+        nt_producer = _get_primary_ranking_deviation(include_in_opt, statistics.median, nt_rows)
 
-        if primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.high_value:
-            nt_producer = _get_primary_ranking_components_raw(include_in_opt, nt_rows)
+    else:
+        raise ValueError(one_filter)
 
-        elif primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.close_to_mean:
-            nt_producer = _get_primary_ranking_deviation(include_in_opt, statistics.mean, nt_rows)
-
-        elif primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.close_to_median:
-            nt_producer = _get_primary_ranking_deviation(include_in_opt, statistics.median, nt_rows)
-
-        else:
-            raise ValueError(primary_ranking_fitness)
-
-        # Add on the suffix for the filter.
-        with_filter_suffix = (prc._replace(comp_name=f"{prc.comp_name} {primary_ranking_fitness.name}") for prc in nt_producer)
-        yield from with_filter_suffix
+    # Add on the suffix for the filter.
+    with_filter_suffix = (prc._replace(comp_name=f"{prc.comp_name} {one_filter.name}") for prc in nt_producer)
+    yield from with_filter_suffix
 
 
 def get_primary_ranking_element_distortion(include_in_opt: bool, old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:

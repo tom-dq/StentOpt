@@ -46,7 +46,7 @@ class OptimParams(typing.NamedTuple):
     volume_target_opts: VolumeTargetOpts
     volume_target_func: T_vol_func
     region_gradient: typing.Optional[RegionGradient]  # None to not have the region gradient included.
-    primary_ranking_fitness_filter: typing.List[common.PrimaryRankingComponentFitnessFilter]
+    primary_ranking_fitness_filters: typing.List[common.PrimaryRankingComponentFitnessFilter]
     element_components: typing.List[T_elem_result]
     nodal_position_components: typing.List[T_nodal_pos_func]
     gaussian_sigma: float
@@ -79,6 +79,18 @@ class OptimParams(typing.NamedTuple):
         for node_component in all_defined_funcs:
             include_in_opt = node_component in self.nodal_position_components
             yield include_in_opt, node_component
+
+    def get_all_primary_ranking_fitness_filters(self) -> typing.Iterable[typing.Tuple[bool, common.PrimaryRankingComponentFitnessFilter]]:
+        for one_filter in common.PrimaryRankingComponentFitnessFilter:
+            include_in_opt = one_filter in self.primary_ranking_fitness_filters
+            yield include_in_opt, one_filter
+
+    @property
+    def single_primary_ranking_fitness_filter(self) -> common.PrimaryRankingComponentFitnessFilter:
+        if len(self.primary_ranking_fitness_filters) != 1:
+            raise ValueError(self.primary_ranking_fitness_filters)
+
+        return self.primary_ranking_fitness_filters[0]
 
     def _target_volume_ratio_clamped(self, stent_design: "design.StentDesign", iter_num: int) -> float:
         existing_volume_ratio = stent_design.volume_ratio()
@@ -196,7 +208,7 @@ active = OptimParams(
         reduce_type=common.RegionReducer.mean_val,
         n_past_increments=5,
     ),
-    primary_ranking_fitness_filter=[common.PrimaryRankingComponentFitnessFilter.high_value],
+    primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.close_to_median],
     element_components=[
         # db_defs.ElementPEEQ,
         db_defs.ElementStress,
@@ -212,7 +224,7 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.1,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=0.8,  # Was 2.0
+    time_expansion=2.0,  # Was 2.0
     time_released=None,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
