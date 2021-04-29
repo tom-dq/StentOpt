@@ -439,7 +439,7 @@ def _removed_observer_only_components(list_of_lists: typing.List[typing.List[Pri
     for one_list in list_of_lists:
         for_inclusion_set = {prc.include_in_opt for prc in one_list}
         if len(for_inclusion_set) != 1:
-            raise ValueError("How did we get here?")
+            raise ValueError("How did we get here?", for_inclusion_set, one_list[0])
 
         for_inclusion = for_inclusion_set.pop()
         if for_inclusion:
@@ -486,6 +486,7 @@ def get_secondary_ranking_sum_of_norm(list_of_lists: typing.List[typing.List[Pri
             comp_name=sec_name,
             elem_id=elem_id,
             value=sec_rank_val / len(names),
+            include_in_opt=True,
         )
 
 

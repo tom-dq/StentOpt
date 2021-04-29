@@ -320,7 +320,8 @@ def _get_ranking_functions(
             score.SecondaryRankingComponent(
                 comp_name=comp_name,
                 elem_id=elem_indices_to_num[elem_id],
-                value=value
+                value=value,
+                include_in_opt=True,
             ) for elem_id, value in idx_to_val.items()
         ]
 
