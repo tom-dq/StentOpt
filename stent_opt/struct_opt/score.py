@@ -72,7 +72,7 @@ class LineOfBestFit(typing.NamedTuple):
     c: float
 
 
-def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+def _get_primary_ranking_components_raw(nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
     """All the nt_rows should be the same type"""
 
     nt_rows = list(nt_rows)
@@ -114,10 +114,10 @@ def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingCom
         raise ValueError(nt_row)
 
 
-def get_primary_ranking_deviation(nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+def _get_primary_ranking_deviation(nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets a ranking component which makes elements close to the mean the best."""
 
-    raw_primary_res = list(get_primary_ranking_components(nt_rows))
+    raw_primary_res = list(_get_primary_ranking_components_raw(nt_rows))
 
     raw_data = [prc.value for prc in raw_primary_res]
     central_value = statistics.mean(raw_data)
@@ -131,6 +131,10 @@ def get_primary_ranking_deviation(nt_rows) -> typing.Iterable[PrimaryRankingComp
 
     return final
 
+
+
+def get_primary_ranking_components(nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+    pass
 
 def get_primary_ranking_element_distortion(old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
 

@@ -14,11 +14,12 @@ from stent_opt.abaqus_model import element
 from stent_opt.struct_opt import design
 from stent_opt.odb_interface import db_defs
 from stent_opt.struct_opt import optimisation_parameters
-
+import common
 
 _enum_types = [
     element.ElemType,
-    RegionReducer
+    RegionReducer,
+    common.PrimaryRankingComponentFitnessFilter,
 ]
 
 _nt_class_types = [
@@ -566,9 +567,10 @@ def _item_to_db_strings(key, val, this_item_type) -> typing.Iterable[typing.Tupl
         yield key, val.__name__
 
     elif isinstance(val, list):
+        list_sub_type = this_item_type.__args__[0]
         for idx, one_item in enumerate(val):
             # Use the ellipsis to signal we don't know anything about the type of the element in the list - leave it up to the recursive call to deal with it.
-            sub_key, sub_val = next(_item_to_db_strings(f"{key}.[{idx}]", one_item, ...))
+            sub_key, sub_val = next(_item_to_db_strings(f"{key}.[{idx}]", one_item, list_sub_type))
             yield sub_key, sub_val
 
     elif len(matched_nt_class_types) == 1:

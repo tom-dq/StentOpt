@@ -46,6 +46,7 @@ class OptimParams(typing.NamedTuple):
     volume_target_opts: VolumeTargetOpts
     volume_target_func: T_vol_func
     region_gradient: typing.Optional[RegionGradient]  # None to not have the region gradient included.
+    primary_ranking_fitness_filter: typing.List[common.PrimaryRankingComponentFitnessFilter]
     element_components: typing.List[T_elem_result]
     nodal_position_components: typing.List[T_nodal_pos_func]
     gaussian_sigma: float
@@ -179,6 +180,7 @@ active = OptimParams(
         reduce_type=common.RegionReducer.mean_val,
         n_past_increments=5,
     ),
+    primary_ranking_fitness_filter=[common.PrimaryRankingComponentFitnessFilter.high_value],
     element_components=[
         # db_defs.ElementPEEQ,
         db_defs.ElementStress,
