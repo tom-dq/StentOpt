@@ -1055,8 +1055,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=40,  # 31
-        Z=400,  # 120
+        Th=100,  # 31
+        Z=1000,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1081,7 +1081,7 @@ dylan_r10n1_params = StentParams(
             Z=2,
         ),
     ),
-    expansion_ratio=1.5,  # 2.0
+    expansion_ratio=2.0,  # 2.0
 )
 
 basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
