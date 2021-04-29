@@ -51,7 +51,7 @@ def get_gradient_input_data(
                 one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
 
                 raw_rows = list(data.get_all_rows_at_frame(optim_params.region_gradient.component, one_frame))
-                raw_ranking_components = list(score.get_primary_ranking_components(optim_params, raw_rows))
+                raw_ranking_components = list(score.get_primary_ranking_components(True, optim_params, raw_rows))
                 element_ranking_components = {one_comp.elem_id: one_comp for one_comp in raw_ranking_components}
                 yield score.GradientInputData(
                     iteration_num=iter_num,
@@ -290,14 +290,14 @@ def _get_ranking_functions(
     raw_elem_rows = []
 
     # Element based funtions
-    for one_component in optim_params.element_components:
-        this_comp_rows = score.get_primary_ranking_components(optim_params, data.get_all_rows_at_frame(one_component, one_frame))
+    for include_in_opt, elem_component in optim_params.get_all_elem_components():
+        this_comp_rows = score.get_primary_ranking_components(include_in_opt, optim_params, data.get_all_rows_at_frame(elem_component, one_frame))
         raw_elem_rows.append( list(this_comp_rows) )
 
     # Nodal position based functions
     pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
-    for one_func in optim_params.nodal_position_components:
-        this_comp_rows = one_func(design_n_min_1, pos_rows)
+    for include_in_opt, one_func in optim_params.get_all_node_position_components():
+        this_comp_rows = one_func(include_in_opt, design_n_min_1, pos_rows)
         raw_elem_rows.append(list(this_comp_rows))
 
     # Compute the primary and overall ranking components

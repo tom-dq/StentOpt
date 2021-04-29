@@ -37,12 +37,14 @@ class PrimaryRankingComponent(typing.NamedTuple):
     comp_name: str
     elem_id: int
     value: float
+    include_in_opt: bool
 
 
 class SecondaryRankingComponent(typing.NamedTuple):
     comp_name: str
     elem_id: int
     value: float
+    include_in_opt: bool
 
 
 T_PrimaryList = typing.List[PrimaryRankingComponent]
@@ -72,7 +74,7 @@ class LineOfBestFit(typing.NamedTuple):
     c: float
 
 
-def _get_primary_ranking_components_raw(nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+def _get_primary_ranking_components_raw(include_in_opt, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
     """All the nt_rows should be the same type"""
 
     nt_rows = list(nt_rows)
@@ -83,7 +85,8 @@ def _get_primary_ranking_components_raw(nt_rows) -> typing.Iterable[PrimaryRanki
             yield PrimaryRankingComponent(
                 comp_name=row.__class__.__name__,
                 elem_id=row.elem_num,
-                value=row.PEEQ
+                value=row.PEEQ,
+                include_in_opt=include_in_opt,
             )
 
     elif isinstance(nt_row, db_defs.ElementStress):
@@ -91,7 +94,8 @@ def _get_primary_ranking_components_raw(nt_rows) -> typing.Iterable[PrimaryRanki
             yield PrimaryRankingComponent(
                 comp_name=row.__class__.__name__,
                 elem_id=row.elem_num,
-                value=row.von_mises
+                value=row.von_mises,
+                include_in_opt=include_in_opt,
             )
 
     elif isinstance(nt_row, db_defs.ElementEnergyElastic):
@@ -99,7 +103,8 @@ def _get_primary_ranking_components_raw(nt_rows) -> typing.Iterable[PrimaryRanki
             yield PrimaryRankingComponent(
                 comp_name=row.__class__.__name__,
                 elem_id=row.elem_num,
-                value=row.ESEDEN
+                value=row.ESEDEN,
+                include_in_opt=include_in_opt,
             )
 
     elif isinstance(nt_row, db_defs.ElementEnergyPlastic):
@@ -107,17 +112,18 @@ def _get_primary_ranking_components_raw(nt_rows) -> typing.Iterable[PrimaryRanki
             yield PrimaryRankingComponent(
                 comp_name=row.__class__.__name__,
                 elem_id=row.elem_num,
-                value=row.EPDDEN
+                value=row.EPDDEN,
+                include_in_opt=include_in_opt,
             )
 
     else:
         raise ValueError(nt_row)
 
 
-def _get_primary_ranking_deviation(central_value_producer, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+def _get_primary_ranking_deviation(include_in_opt: bool, central_value_producer, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets a ranking component which makes elements close to the mean the best."""
 
-    raw_primary_res = list(_get_primary_ranking_components_raw(nt_rows))
+    raw_primary_res = list(_get_primary_ranking_components_raw(include_in_opt, nt_rows))
 
     raw_data = [prc.value for prc in raw_primary_res]
     central_value = central_value_producer(raw_data)
@@ -133,31 +139,34 @@ def _get_primary_ranking_deviation(central_value_producer, nt_rows) -> typing.It
 
 
 
-def get_primary_ranking_components(optim_params: optimisation_parameters.OptimParams, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+def get_primary_ranking_components(raw_res_include_in_opt: bool, optim_params: optimisation_parameters.OptimParams, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
     if not optim_params.primary_ranking_fitness_filter:
         raise ValueError("need at least something in optim_params.primary_ranking_fitness_filter")
 
     nt_rows = list(nt_rows)
 
-    for primary_ranking_fitness in optim_params.primary_ranking_fitness_filter:
+    for primary_ranking_fitness in common.PrimaryRankingComponentFitnessFilter:
+        include_this_filter = primary_ranking_fitness in optim_params.primary_ranking_fitness_filter
+        include_in_opt = raw_res_include_in_opt and include_this_filter
+
         if primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.high_value:
-            nt_producer = _get_primary_ranking_components_raw(nt_rows)
+            nt_producer = _get_primary_ranking_components_raw(include_in_opt, nt_rows)
 
         elif primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.close_to_mean:
-            nt_producer = _get_primary_ranking_deviation(statistics.mean, nt_rows)
+            nt_producer = _get_primary_ranking_deviation(include_in_opt, statistics.mean, nt_rows)
 
         elif primary_ranking_fitness == common.PrimaryRankingComponentFitnessFilter.close_to_median:
-            nt_producer = _get_primary_ranking_deviation(statistics.median, nt_rows)
+            nt_producer = _get_primary_ranking_deviation(include_in_opt, statistics.median, nt_rows)
 
         else:
             raise ValueError(primary_ranking_fitness)
 
         # Add on the suffix for the filter.
-        with_filter_suffix = (prc._replace(name=f"{prc.name} {primary_ranking_fitness.name}") for prc in nt_producer)
+        with_filter_suffix = (prc._replace(comp_name=f"{prc.comp_name} {primary_ranking_fitness.name}") for prc in nt_producer)
         yield from with_filter_suffix
 
 
-def get_primary_ranking_element_distortion(old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
+def get_primary_ranking_element_distortion(include_in_opt: bool, old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
 
     elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.stent_params.divs)}
 
@@ -169,7 +178,8 @@ def get_primary_ranking_element_distortion(old_design: "design.StentDesign", nt_
         yield PrimaryRankingComponent(
             comp_name="InternalAngle",
             elem_id=elem_num,
-            value=_max_delta_angle_of_element(old_design.stent_params, node_to_pos, elem_connection)
+            value=_max_delta_angle_of_element(old_design.stent_params, node_to_pos, elem_connection),
+            include_in_opt=include_in_opt,
         )
 
 
@@ -220,6 +230,7 @@ def get_line_of_best_fit(x_vals, y_vals) -> LineOfBestFit:
 
 def get_primary_ranking_local_region_gradient(
         stent_params: design.StentParams,
+        include_in_opt: bool,
         recent_gradient_input_data: typing.Iterable[GradientInputData],
         region_reducer: typing.Callable[[typing.Iterable[float]], float],  # e.g., max or statistics.mean.
         ) -> typing.Iterable[PrimaryRankingComponent]:
@@ -296,13 +307,14 @@ def get_primary_ranking_local_region_gradient(
         yield PrimaryRankingComponent(
             comp_name=REGION_GRADIENT,
             elem_id=elem_num,
-            value=grad
+            value=grad,
+            include_in_opt=include_in_opt,
         )
 
     # TODO - include the "authority"
 
 
-def get_primary_ranking_macro_deformation(old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
+def get_primary_ranking_macro_deformation(include_in_opt: bool, old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets the local-ish deformation within a given number of elements, by removing the rigid body rotation/translation."""
 
     # TODO - speed this up! Need to:
@@ -382,6 +394,7 @@ def get_primary_ranking_macro_deformation(old_design: "design.StentDesign", nt_r
             comp_name="LocalDeformation",
             elem_id=elem_num,
             value=statistics.mean(nodal_vals),
+            include_in_opt=include_in_opt,
         )
 
 
@@ -420,12 +433,29 @@ def _max_delta_angle_of_element(stent_params: "design.StentParams", node_to_pos:
     return max(angles_delta)
 
 
+def _removed_observer_only_components(list_of_lists: typing.List[typing.List[PrimaryRankingComponent]]) -> typing.List[typing.List[PrimaryRankingComponent]]:
+    out_list_of_lists = []
+
+    for one_list in list_of_lists:
+        for_inclusion_set = {prc.include_in_opt for prc in one_list}
+        if len(for_inclusion_set) != 1:
+            raise ValueError("How did we get here?")
+
+        for_inclusion = for_inclusion_set.pop()
+        if for_inclusion:
+            out_list_of_lists.append(one_list)
+
+    return out_list_of_lists
+
+
 def get_secondary_ranking_sum_of_norm(list_of_lists: typing.List[typing.List[PrimaryRankingComponent]]) -> typing.Iterable[SecondaryRankingComponent]:
     """Just normalises the ranking components to the mean, and adds each one up."""
 
     elem_effort = collections.Counter()
     names = []
-    for one_list in list_of_lists:
+
+    include_in_opt_lists = _removed_observer_only_components(list_of_lists)
+    for one_list in include_in_opt_lists:
         names.append(one_list[0].comp_name)
         vals = [prim_rank.value for prim_rank in one_list]
 

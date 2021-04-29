@@ -37,7 +37,7 @@ class RegionGradient(typing.NamedTuple):
 
 
 T_vol_func = typing.Callable[[VolumeTargetOpts, int], float]
-T_nodal_pos_func = typing.Callable[["design.StentDesign", typing.Iterable[db_defs.NodePos]], typing.Iterable[score.PrimaryRankingComponent]]   # Accepts a design and some node positions, and generates ranking components.
+T_nodal_pos_func = typing.Callable[[bool, "design.StentDesign", typing.Iterable[db_defs.NodePos]], typing.Iterable[score.PrimaryRankingComponent]]   # Accepts a design and some node positions, and generates ranking components.
 
 
 class OptimParams(typing.NamedTuple):
@@ -63,6 +63,22 @@ class OptimParams(typing.NamedTuple):
     @property
     def release_stent_after_expansion(self) -> bool:
         return bool(self.time_released)
+
+    def get_all_elem_components(self) -> typing.Iterable[typing.Tuple[bool, T_elem_result]]:
+        """Step through the results, selecting the ones which are contribution to the optimisation"""
+        for elem_component in T_elem_result.__args__:
+            include_in_opt = elem_component in self.element_components
+            yield include_in_opt, elem_component
+
+    def get_all_node_position_components(self) -> typing.Iterable[typing.Tuple[bool, T_nodal_pos_func]]:
+        all_defined_funcs = [
+            score.get_primary_ranking_element_distortion,
+            score.get_primary_ranking_macro_deformation,
+        ]
+
+        for node_component in all_defined_funcs:
+            include_in_opt = node_component in self.nodal_position_components
+            yield include_in_opt, node_component
 
     def _target_volume_ratio_clamped(self, stent_design: "design.StentDesign", iter_num: int) -> float:
         existing_volume_ratio = stent_design.volume_ratio()
@@ -196,7 +212,7 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.1,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=2.0,  # Was 2.0
+    time_expansion=0.8,  # Was 2.0
     time_released=None,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
