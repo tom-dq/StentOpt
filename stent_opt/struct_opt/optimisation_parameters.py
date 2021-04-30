@@ -1,3 +1,4 @@
+import enum
 import typing
 
 from stent_opt.odb_interface import db_defs
@@ -36,6 +37,15 @@ class RegionGradient(typing.NamedTuple):
         return history.nt_from_db_strings(cls, data)
 
 
+class PostExpansionBehaviour(enum.Enum):
+    none = enum.auto()
+    release = enum.auto()
+    oscillate = enum.auto()
+
+    @property
+    def requires_second_step(self) -> bool:
+        return self in (PostExpansionBehaviour.release, PostExpansionBehaviour.oscillate)
+
 T_vol_func = typing.Callable[[VolumeTargetOpts, int], float]
 T_nodal_pos_func = typing.Callable[[bool, "design.StentDesign", typing.Iterable[db_defs.NodePos]], typing.Iterable[score.PrimaryRankingComponent]]   # Accepts a design and some node positions, and generates ranking components.
 
@@ -56,6 +66,7 @@ class OptimParams(typing.NamedTuple):
     abaqus_target_increment: float
     time_expansion: float
     time_released: typing.Optional[float]  # Make this None to not have a "release" step.
+    post_expansion_behaviour: PostExpansionBehaviour
     analysis_step_type: typing.Type[step.StepBase]
     nodes_shared_with_old_design_to_expand: int    # Only let new elements come in which are attached to existing elements with at least this many nodes. Zero to allow all elements.
     nodes_shared_with_old_design_to_contract: int  # Only let new elements go out which are attached to existing elements with at least this many nodes. Zero to allow all elements.
@@ -63,6 +74,10 @@ class OptimParams(typing.NamedTuple):
     @property
     def release_stent_after_expansion(self) -> bool:
         return bool(self.time_released)
+
+    @property
+    def simulation_has_second_step(self) -> bool:
+        return bool(self.time_released) and self.post_expansion_behaviour.requires_second_step
 
     def get_all_elem_components(self) -> typing.Iterable[typing.Tuple[bool, T_elem_result]]:
         """Step through the results, selecting the ones which are contribution to the optimisation"""
@@ -217,15 +232,16 @@ active = OptimParams(
     ],
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
-        # score.get_primary_ranking_macro_deformation,
+        score.get_primary_ranking_macro_deformation,
     ],
-    gaussian_sigma=0.15,  # TODO - make this proporional to the element length or something? Was 0.75
+    gaussian_sigma=0.3,  # Was 0.15 forever
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
     abaqus_output_time_interval=0.1,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=2.0,  # Was 2.0
+    time_expansion=1.0,  # Was 2.0
     time_released=None,
+    post_expansion_behaviour=PostExpansionBehaviour.release,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,

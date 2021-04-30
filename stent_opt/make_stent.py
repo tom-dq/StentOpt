@@ -325,16 +325,24 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
         name=f"ExpandHold",
         step_time=optim_params.time_expansion,
     )
-
-    if optim_params.release_stent_after_expansion:
-        step_release = optim_params.analysis_step_type(
-            name=f"Release",
-            step_time=optim_params.time_released,
-        )
-
     model.add_step(step_expand)
-    if optim_params.release_stent_after_expansion:
-        model.add_step(step_release)
+
+    if optim_params.simulation_has_second_step:
+        if optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.release:
+            step_two = optim_params.analysis_step_type(
+                name=f"Release",
+                step_time=optim_params.time_released,
+            )
+        elif optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.oscillate:
+            step_two = optim_params.analysis_step_type(
+                name=f"Oscillate",
+                step_time=optim_params.time_released,
+            )
+
+        else:
+            raise ValueError(optim_params.post_expansion_behaviour)
+
+        model.add_step(step_two)
 
     # Maximum displacement
     max_displacement = stent_params.theta_arc_initial * (stent_params.expansion_ratio - 1.0)
@@ -357,13 +365,31 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
         ),
     )
 
-    let_go_disp = boundary_condition.BoundaryDispRot(
-        name="ReleaseDisp",
-        with_amplitude=None,
-        components=(
-            boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentTheta0.name], dof=1, value=0.0),
-        ),
-    )
+    if optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.release:
+        step_two_disp = boundary_condition.BoundaryDispRot(
+            name="ReleaseDisp",
+            with_amplitude=None,
+            components=(
+                boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentTheta0.name], dof=1, value=0.0),
+            ),
+        )
+
+    elif optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.oscillate:
+        HEART_RATE_HZ = 1.2
+        OSC_AMP = 0.05  # For now, just 5% of the initial arc length
+
+        amp_osc = amplitude.AmplitudePeriodic("Amp-Osc", HEART_RATE_HZ, 0.0, 1.0, OSC_AMP)
+        step_two_disp = boundary_condition.BoundaryDispRot(
+            name="OscillateDisp",
+            with_amplitude=amp_osc,
+            components=(
+                boundary_condition.DispRotBoundComponent(
+                    node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentTheta0.name], dof=1, value=0.0),
+                boundary_condition.DispRotBoundComponent(
+                    node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentThetaMax.name], dof=1,
+                    value=max_displacement),
+            ),
+        )
 
     hold_base1 = boundary_condition.BoundaryDispRot(
         name="HoldBaseA",
@@ -383,9 +409,9 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
 
 
     model.add_load_specific_steps([step_expand], expand_disp)
-    if optim_params.release_stent_after_expansion: model.add_load_specific_steps([step_release], let_go_disp)
+    if optim_params.simulation_has_second_step: model.add_load_specific_steps([step_two], step_two_disp)
     model.add_load_specific_steps([step_expand], hold_base1)
-    if optim_params.release_stent_after_expansion: model.add_load_specific_steps([step_release], hold_base2)
+    if optim_params.simulation_has_second_step: model.add_load_specific_steps([step_two], hold_base2)
 
     if optim_params.release_stent_after_expansion:
         # Rebound pressure (kind of like the blood vessel squeezing in).
@@ -409,7 +435,7 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
             value=pressure_load,
         )
 
-        model.add_load_specific_steps([step_release], inner_pressure)
+        model.add_load_specific_steps([step_two], inner_pressure)
 
 
 def _apply_loads_enforced_disp_rigid_cyl(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):

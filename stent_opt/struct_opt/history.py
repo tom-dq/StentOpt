@@ -15,11 +15,12 @@ from stent_opt.struct_opt import design
 from stent_opt.odb_interface import db_defs
 from stent_opt.struct_opt import optimisation_parameters
 
-
+# TODO - fix up this stuff with enums not comparing equal: https://stackoverflow.com/a/40371520
 _enum_types = [
     element.ElemType,
     RegionReducer,
     PrimaryRankingComponentFitnessFilter,
+    optimisation_parameters.PostExpansionBehaviour,
 ]
 
 _nt_class_types = [

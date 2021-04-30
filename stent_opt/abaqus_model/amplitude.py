@@ -1,3 +1,4 @@
+import dataclasses
 import typing
 
 from stent_opt.abaqus_model import base
@@ -7,7 +8,26 @@ class XY(typing.NamedTuple):
     y: float
 
 
-class Amplitude(typing.NamedTuple):
+def _eight_or_fewer_per_line(in_data: typing.Iterable[float]) -> typing.Iterable[str]:
+    str_data = (base.abaqus_float(x) for x in in_data)
+
+    for one_row in base.groups_of(str_data, 8):
+
+        if len(one_row) < 8:
+            for one_pair in base.groups_of(one_row, 2):
+                yield ', '.join(one_pair)
+
+        else:
+            yield ', '.join(one_row)
+
+
+@dataclasses.dataclass(frozen=True)
+class AmplitudeBase:
+    name: str
+
+
+@dataclasses.dataclass(frozen=True)
+class Amplitude(AmplitudeBase):
     name: str
     data: typing.Tuple[XY, ...]
 
@@ -19,21 +39,38 @@ class Amplitude(typing.NamedTuple):
                 yield datum.x
                 yield datum.y
 
-        str_data = (base.abaqus_float(x) for x in generate_single_points())
-
         """ ***ERROR: ALL DATA LINES ON *AMPLITUDE, DEFINITION=TABULAR, EXCEPTING THE LAST 
            DATA LINE, MUST HAVE EXACTLY FOUR DATA PAIRS (EIGHT ENTRIES) OR ONE 
            SINGLE DATA PAIR (TWO ENTRIES). PLEASE CHECK THE DATA LINES FOR 
            *AMPLITUDE."""
 
-        for one_row in base.groups_of(str_data, 8):
+        yield from _eight_or_fewer_per_line(generate_single_points())
 
-            if len(one_row) < 8:
-                for one_pair in base.groups_of(one_row, 2):
-                    yield ', '.join(one_pair)
 
-            else:
-                yield ', '.join(one_row)
+@dataclasses.dataclass(frozen=True)
+class AmplitudePeriodic(AmplitudeBase):
+    name: str
+    circ_freq: float
+    start_time_step: float
+    init_amp: float
+    osc_amp: float
+
+    def make_inp_lines(self) -> typing.Iterable[str]:
+        yield f"*Amplitude, name={base.quoted_if_necessary(self.name)}, definition=PERIODIC"
+
+        offset_0 = 0.0
+        periodic_components = (
+            (offset_0, self.osc_amp),
+        )
+
+        yield f"{len(periodic_components)}, {base.abaqus_float(self.circ_freq)}, {base.abaqus_float(self.start_time_step)}, {base.abaqus_float(self.init_amp)}"
+
+        def generate_single_points() -> typing.Iterable[float]:
+            for pc in periodic_components:
+                yield pc[0]
+                yield pc[1]
+
+        yield from _eight_or_fewer_per_line(generate_single_points())
 
 
 def make_test_amplitude() -> Amplitude:

@@ -42,7 +42,7 @@ class DispRotBoundComponent(typing.NamedTuple):
 @dataclasses.dataclass(frozen=True, order=True)
 class BoundaryDispRot(BoundaryBase):
     name: str
-    with_amplitude: typing.Optional[amplitude.Amplitude]
+    with_amplitude: typing.Optional[amplitude.AmplitudeBase]
     components: typing.Tuple[DispRotBoundComponent, ...]
 
 
