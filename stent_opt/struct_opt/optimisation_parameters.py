@@ -47,7 +47,7 @@ class PostExpansionBehaviour(enum.Enum):
         return self in (PostExpansionBehaviour.release, PostExpansionBehaviour.oscillate)
 
 T_vol_func = typing.Callable[[VolumeTargetOpts, int], float]
-T_nodal_pos_func = typing.Callable[[bool, "design.StentDesign", typing.Iterable[db_defs.NodePos]], typing.Iterable[score.PrimaryRankingComponent]]   # Accepts a design and some node positions, and generates ranking components.
+T_nodal_pos_func = typing.Callable[["OptimParams", bool, "design.StentDesign", typing.Iterable[db_defs.NodePos]], typing.Iterable[score.PrimaryRankingComponent]]   # Accepts a design and some node positions, and generates ranking components.
 
 
 class OptimParams(typing.NamedTuple):
@@ -60,6 +60,7 @@ class OptimParams(typing.NamedTuple):
     element_components: typing.List[T_elem_result]
     nodal_position_components: typing.List[T_nodal_pos_func]
     gaussian_sigma: float
+    local_deformation_stencil_length: float
     working_dir: str
     use_double_precision: bool
     abaqus_output_time_interval: float
@@ -235,12 +236,13 @@ active = OptimParams(
         score.get_primary_ranking_macro_deformation,
     ],
     gaussian_sigma=0.3,  # Was 0.15 forever
+    local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
     abaqus_output_time_interval=0.1,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
     time_expansion=1.0,  # Was 2.0
-    time_released=1.0,
+    time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.release,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,

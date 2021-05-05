@@ -69,6 +69,20 @@ class Cylinder(typing.NamedTuple):
         return history.nt_from_db_strings(cls, data)
 
 
+class InadmissibleRegion(typing.NamedTuple):
+    theta_min: float
+    theta_max: float
+    z_min: float
+    z_max: float
+
+    def to_db_strings(self):
+        yield from history.nt_to_db_strings(self)
+
+    @classmethod
+    def from_db_strings(cls, data):
+        return history.nt_from_db_strings(cls, data)
+
+
 class StentParams(typing.NamedTuple):
     angle: float
     divs: PolarIndex
@@ -79,6 +93,7 @@ class StentParams(typing.NamedTuple):
     balloon: typing.Optional[Balloon]
     cylinder: typing.Optional[Cylinder]
     expansion_ratio: typing.Optional[float]
+    inadmissible_regions: typing.List[InadmissibleRegion]
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
@@ -1055,8 +1070,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=30,  # 31
-        Z=300,  # 120
+        Th=100,  # 31
+        Z=1000,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1082,6 +1097,14 @@ dylan_r10n1_params = StentParams(
         ),
     ),
     expansion_ratio=2.0,  # 2.0
+    inadmissible_regions=[
+        InadmissibleRegion(
+            theta_min=20,
+            theta_max=40,
+            z_min=0,
+            z_max=5,
+        )
+    ],
 )
 
 basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
@@ -1089,6 +1112,19 @@ basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
 
 
 if __name__ == "__main__":
+    #  check we can serialise and deserialse the optimisation parameters
+    data = list(dylan_r10n1_params.to_db_strings())
+    for x in data:
+        print(*x, sep='\t')
+
+    again = StentParams.from_db_strings(data)
+
+    print(again)
+    print(dylan_r10n1_params)
+    assert dylan_r10n1_params == again
+
+
+if 213==234:
 
     ref_length = basic_stent_params.theta_arc_initial / 6
     f = _radius_test_param_curve(basic_stent_params, r_minor=ref_length, r_major=2*ref_length, D=3*ref_length )

@@ -299,7 +299,7 @@ def _get_ranking_functions(
     # Nodal position based functions
     pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
     for include_in_opt, one_func in optim_params.get_all_node_position_components():
-        this_comp_rows = one_func(include_in_opt, design_n_min_1, pos_rows)
+        this_comp_rows = one_func(optim_params, include_in_opt, design_n_min_1, pos_rows)
         raw_elem_rows.append(list(this_comp_rows))
 
     # Compute the primary and overall ranking components

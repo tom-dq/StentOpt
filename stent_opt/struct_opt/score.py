@@ -157,7 +157,7 @@ def get_primary_ranking_components(include_in_opt: bool, one_filter: common.Prim
     yield from with_filter_suffix
 
 
-def get_primary_ranking_element_distortion(include_in_opt: bool, old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
+def get_primary_ranking_element_distortion(optim_params: optimisation_parameters.OptimParams, include_in_opt: bool, old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
 
     elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(old_design.stent_params.divs)}
 
@@ -305,16 +305,14 @@ def get_primary_ranking_local_region_gradient(
     # TODO - include the "authority"
 
 
-def get_primary_ranking_macro_deformation(include_in_opt: bool, old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
+def get_primary_ranking_macro_deformation(optim_params: optimisation_parameters.OptimParams, include_in_opt: bool, old_design: "design.StentDesign", nt_rows_node_pos) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets the local-ish deformation within a given number of elements, by removing the rigid body rotation/translation."""
 
     # TODO - speed this up! Need to:
     #  - Cache the connectivity somehow
     #  - Prepare one big matrix and submit sub-matrices to nodal_deformation
 
-    STENCIL_LENGTH = 0.1  # mm
-
-    elem_to_nodes_in_range = graph_connection.element_idx_to_nodes_within(STENCIL_LENGTH, old_design)
+    elem_to_nodes_in_range = graph_connection.element_idx_to_nodes_within(optim_params.local_deformation_stencil_length, old_design)
 
     idx_num_elem = [(idx, iElem, elem) for idx, iElem, elem in design.generate_stent_part_elements(old_design.stent_params) if idx in old_design.active_elements]
     elem_indices_to_num = {idx: iElem for (idx, iElem, elem) in idx_num_elem}
@@ -371,7 +369,7 @@ def get_primary_ranking_macro_deformation(include_in_opt: bool, old_design: "des
         #orig = prepare_node_patch(node_to_pos_original, node_num_set)
         #deformed = prepare_node_patch(node_to_pos_deformed, node_num_set)
 
-        this_val = deformation_grad.nodal_deformation(STENCIL_LENGTH, np_orig_sub, np_def_sub)
+        this_val = deformation_grad.nodal_deformation(optim_params.local_deformation_stencil_length, np_orig_sub, np_def_sub)
         for node_num in node_num_set:
             node_num_to_contribs[node_num].append(this_val)
 
