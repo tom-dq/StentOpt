@@ -1,4 +1,5 @@
 import collections
+import functools
 import pathlib
 import statistics
 import typing
@@ -167,6 +168,12 @@ class CandidatesFor(typing.NamedTuple):
     introduction: typing.FrozenSet[design.PolarIndex]
 
 
+@functools.lru_cache()
+def _get_all_admissible_elements(stent_params):
+    fully_populated = design.generate_elem_indices_admissible(stent_params)
+    return frozenset(elemIdx for _, elemIdx in fully_populated)
+
+
 def get_candidate_elements(
         optim_params: optimisation_parameters.OptimParams,
         design_n_min_1: design.StentDesign,
@@ -174,8 +181,7 @@ def get_candidate_elements(
 
     """Figure out which elements can come and go for the next iteration"""
 
-    fully_populated = design.generate_elem_indices(design_n_min_1.stent_params.divs)
-    fully_populated_indices = frozenset(elemIdx for _, elemIdx in fully_populated)
+    fully_populated_indices = _get_all_admissible_elements(design_n_min_1.stent_params)
 
     def get_adj_elements(last_iter_elems, threshold: int):
         # Prepare the set of nodes to which eligible elements are attached.

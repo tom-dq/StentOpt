@@ -99,10 +99,37 @@ class StentParams(BaseModelForDB):
     balloon: typing.Optional[Balloon]
     cylinder: typing.Optional[Cylinder]
     expansion_ratio: typing.Optional[float]
-    inadmissible_regions: typing.List[InadmissibleRegion]
+    inadmissible_regions: typing.Tuple[InadmissibleRegion]
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
+
+    def polar_index_admissible(self, elem_polar_index: PolarIndex):
+        half_elem_theta = self.angle / self.divs.Th
+        half_elem_z = self.length / self.divs.Z
+
+        def region_is_ok(inadmissible_region):
+
+            threshold_low_theta = inadmissible_region.theta_min / self.angle * self.divs.Th - half_elem_theta
+            threshold_high_theta = inadmissible_region.theta_max / self.angle * self.divs.Th + half_elem_theta
+            if not threshold_low_theta < elem_polar_index.Th < threshold_high_theta:
+                return True
+
+            threshold_low_z = inadmissible_region.z_min / self.length * self.divs.Z - half_elem_z
+            threshold_high_z = inadmissible_region.z_max / self.length * self.divs.Z + half_elem_z
+            if not threshold_low_z < elem_polar_index.Z < threshold_high_z:
+                return True
+
+            return False
+
+        for inadmissible_region in self.inadmissible_regions:
+            # TODO - get this watertight for off-by-one, rounding and centroid concerns.
+            if not region_is_ok(inadmissible_region):
+                return False
+
+        return True
+
+
 
     @classmethod
     def from_db_strings(cls, data):
@@ -251,7 +278,6 @@ def generate_node_indices(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int,
 
         yield iNode, PolarIndex(R=iR, Th=iTh, Z=iZ)
 
-
 def generate_stent_boundary_nodes(stent_params: StentParams) -> typing.Iterable[PolarIndex]:
     """Not in order!"""
 
@@ -268,6 +294,10 @@ def generate_stent_boundary_nodes(stent_params: StentParams) -> typing.Iterable[
 def generate_elem_indices(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int, PolarIndex]]:
     divs_minus_one = node_to_elem_design_space(divs)
     yield from generate_node_indices(divs_minus_one)
+
+
+def generate_elem_indices_admissible(stent_params: StentParams) -> typing.Iterable[typing.Tuple[int, PolarIndex]]:
+    yield from ((i, pe) for i, pe in generate_elem_indices(stent_params.divs) if stent_params.polar_index_admissible(pe))
 
 
 
@@ -527,13 +557,15 @@ def get_single_element_connection(stent_params: StentParams, i: PolarIndex) -> t
 
 def generate_stent_part_elements(stent_params: StentParams) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
     if stent_params.stent_element_dimensions == 2:
-        yield from generate_plate_elements_all(stent_params.divs, stent_params.stent_element_type)
+        all_elems = generate_plate_elements_all(stent_params.divs, stent_params.stent_element_type)
 
     elif stent_params.stent_element_dimensions == 3:
-        yield from generate_brick_elements_all(stent_params.divs)
+        all_elems = generate_brick_elements_all(stent_params.divs)
 
     else:
         raise ValueError(stent_params.stent_element_dimensions)
+
+    yield from ((pe, i, e) for (pe, i, e) in all_elems if stent_params.polar_index_admissible(pe))
 
 
 def generate_brick_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
@@ -1048,9 +1080,10 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
     return _make_design_from_line_segments(stent_params, line_z_th_points_and_widths, nominal_radius)
 
 
+make_initial_design = make_initial_all_in
 # make_initial_design = make_initial_design_radius_test
 # make_initial_design = make_initial_two_lines
-make_initial_design = make_initial_design_s_curve
+# make_initial_design = make_initial_design_s_curve
 
 
 
@@ -1078,8 +1111,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=30,  # 31
-        Z=300,  # 120
+        Th=20,  # 31
+        Z=150,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
