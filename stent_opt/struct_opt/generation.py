@@ -68,8 +68,8 @@ def gaussian_smooth(optim_params: optimisation_parameters.OptimParams, stent_par
 
     design_space_elements = design.node_to_elem_design_space(design_space)
     raw = numpy.zeros(shape=design_space_elements.to_tuple())
-    for (r, th, z), val in unsmoothed.items():
-        raw[r, th, z] = val
+    for polar_index, val in unsmoothed.items():
+        raw[polar_index.R, polar_index.Th, polar_index.Z] = val
 
     def normalised_sigma():
         """Since the sigma depends on the mesh size, we have to normalise it."""
