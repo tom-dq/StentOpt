@@ -10,15 +10,19 @@ from stent_opt.abaqus_model import base, element
 
 # Convert to and from database string formats.
 from stent_opt.struct_opt import history
+from stent_opt.struct_opt.common import BaseModelForDB
 
 # These can be serialised and deserialised
 # from stent_opt.struct_opt.history import nt_to_db_strings, nt_from_db_strings, Snapshot
 
 
-class PolarIndex(typing.NamedTuple):
+class PolarIndex(BaseModelForDB):
     R: int
     Th: int
     Z: int
+
+    class Config:
+        frozen = False
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
@@ -33,6 +37,8 @@ class PolarIndex(typing.NamedTuple):
         r_elems = max(self.R - 1, 1)
         return z_elems * th_elems * r_elems
 
+    def to_tuple(self) -> typing.Tuple[int]:
+        return (self.R, self.Th, self.Z)
 
 
 class Actuation(enum.Enum):
@@ -42,7 +48,7 @@ class Actuation(enum.Enum):
     enforced_displacement_plane = enum.auto()
 
 
-class Balloon(typing.NamedTuple):
+class Balloon(BaseModelForDB):
     inner_radius_ratio: float
     overshoot_ratio: float
     foldover_param: float
@@ -56,7 +62,7 @@ class Balloon(typing.NamedTuple):
         return history.nt_from_db_strings(cls, data)
 
 
-class Cylinder(typing.NamedTuple):
+class Cylinder(BaseModelForDB):
     initial_radius_ratio: float
     overshoot_ratio: float
     divs: PolarIndex
@@ -69,7 +75,7 @@ class Cylinder(typing.NamedTuple):
         return history.nt_from_db_strings(cls, data)
 
 
-class InadmissibleRegion(typing.NamedTuple):
+class InadmissibleRegion(BaseModelForDB):
     theta_min: float
     theta_max: float
     z_min: float
@@ -83,7 +89,7 @@ class InadmissibleRegion(typing.NamedTuple):
         return history.nt_from_db_strings(cls, data)
 
 
-class StentParams(typing.NamedTuple):
+class StentParams(BaseModelForDB):
     angle: float
     divs: PolarIndex
     r_min: float
@@ -214,11 +220,13 @@ class StentDesign(typing.NamedTuple):
         fully_populated = self.stent_params.divs.fully_populated_elem_count()
         return active_elements / fully_populated
 
+
 def node_to_elem_design_space(divs: PolarIndex) -> PolarIndex:
-    return divs._replace(
-        R=max(divs.R - 1, 1), # Special case if we're at R=1 - that means plate elements.
+    return PolarIndex(
+        R=max(divs.R - 1, 1),  # Special case if we're at R=1 - that means plate elements.
         Th=divs.Th - 1,
-        Z=divs.Z - 1)
+        Z=divs.Z - 1,
+    )
 
 
 def node_from_index(divs: PolarIndex, iR, iTh, iZ):
@@ -1107,17 +1115,19 @@ dylan_r10n1_params = StentParams(
     ],
 )
 
-basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
 
+basic_stent_params = dylan_r10n1_params.copy_with_updates(balloon=None, cylinder=None)
+
+print(basic_stent_params)
 
 
 if __name__ == "__main__":
     #  check we can serialise and deserialse the optimisation parameters
-    data = list(dylan_r10n1_params.to_db_strings())
-    for x in data:
-        print(*x, sep='\t')
+    data = dylan_r10n1_params.json(indent=2)
+    print(data)
 
-    again = StentParams.from_db_strings(data)
+
+    again = StentParams.parse_raw(data)
 
     print(again)
     print(dylan_r10n1_params)

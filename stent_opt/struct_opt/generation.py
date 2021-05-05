@@ -67,7 +67,7 @@ def gaussian_smooth(optim_params: optimisation_parameters.OptimParams, stent_par
     design_space = stent_params.divs
 
     design_space_elements = design.node_to_elem_design_space(design_space)
-    raw = numpy.zeros(shape=design_space_elements)
+    raw = numpy.zeros(shape=design_space_elements.to_tuple())
     for (r, th, z), val in unsmoothed.items():
         raw[r, th, z] = val
 

@@ -38,7 +38,6 @@ def _aggregate_elemental_values(st_vals: typing.Iterable[StatusCheck]) -> typing
         yield global_status_type, global_status_type.compute_aggregate(vals)
 
 
-
 class Snapshot(typing.NamedTuple):
     iteration_num: int
     label: str
@@ -76,9 +75,9 @@ class StatusCheck(typing.NamedTuple):
         return self._replace(stage=StatusCheckStage[self.stage])
 
 
-class DesignParam(typing.NamedTuple):
+class GlobalParam(typing.NamedTuple):
     param_name: str
-    param_value: typing.Optional[str]
+    param_json: str
 
 
 class OptParam(typing.NamedTuple):
@@ -179,9 +178,9 @@ metric_name TEXT,
 metric_val REAL
 )"""
 
-_make_design_parameters_table_ = """CREATE TABLE IF NOT EXISTS DesignParam(
+_make_global_parameters_table_ = """CREATE TABLE IF NOT EXISTS GlobalParam(
 param_name TEXT UNIQUE,
-param_value TEXT)"""
+param_value JSON)"""
 
 
 _make_opt_parameters_table_ = """CREATE TABLE IF NOT EXISTS OptParam(
@@ -205,7 +204,7 @@ global_status_value REAL
 _make_tables = [
     _make_snapshot_table,
     _make_status_check_table,
-    _make_design_parameters_table_,
+    _make_global_parameters_table_,
     _make_opt_parameters_table_,
     _make_node_pos_table_,
     _make_global_status_table,
@@ -218,6 +217,7 @@ class History:
     def __init__(self, fn):
         self.fn = fn
         self.connection = sqlite3.connect(fn)
+        self.connection.enable_load_extension(True)
 
         with self.connection:
             for mt in _make_tables:
@@ -277,20 +277,31 @@ class History:
             db_snap = Snapshot(*rows[0])
             return db_snap.from_db()
 
+    def _set_global_param(self, some_param):
+        param_name = some_param.__class__.__name__
+        param_value = some_param.json(indent=2)
+
+        ins_string = self._generate_insert_string_nt_class(GlobalParam)
+        with self.connection:
+            self.connection.execute(ins_string, (param_name,param_value,))
+
+    def _get_global_param(self, some_param_class):
+        with self.connection:
+            rows = self.connection.execute("SELECT param_value FROM GlobalParam WHERE param_name = ?", (some_param_class.__name__,))
+            l_rows = list(rows)
+            assert len(l_rows) == 1
+            data_json = l_rows[0][0]
+
+        return some_param_class.parse_raw(data_json)
+
     def set_stent_params(self, stent_params: "design.StentParams"):
         """Save the model parameters"""
-        data_rows = list(stent_params.to_db_strings())
-        ins_string = self._generate_insert_string_nt_class(DesignParam)
-        with self.connection:
-            self.connection.executemany(ins_string, data_rows)
+        self._set_global_param(stent_params)
 
     def get_stent_params(self) -> "design.StentParams":
         """Get the model parameters"""
-        with self.connection:
-            rows = self.connection.execute("SELECT * FROM DesignParam")
-            l_rows = list(rows)
+        return self._get_global_param(design.StentParams)
 
-        return design.StentParams.from_db_strings(l_rows)
 
     def set_optim_params(self, opt_params: optimisation_parameters.OptimParams):
         """Save the optimisation parameters."""
@@ -492,7 +503,7 @@ def make_history_db(working_dir: typing.Union[str, pathlib.Path]) -> pathlib.Pat
 
 
 def history_write_read_test():
-    with History(r"c:\temp\aaa23456.db") as history:
+    with History(r"c:\temp\aaabbbccc.db") as history:
         orig_stent_params = design.basic_stent_params
         history.set_stent_params(orig_stent_params)
         history.set_optim_params(optimisation_parameters.active)
@@ -754,6 +765,8 @@ def _is_nullable(some_type) -> bool:
     return False
 
 if __name__ == "__main__":
+    history_write_read_test()
+
     for x in GlobalStatusType.get_elemental_aggregate_values():
         print(x)
 

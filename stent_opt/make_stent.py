@@ -56,9 +56,8 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
         transform_to_cyl = True
 
     elif element_dimensions == 2:
-        stent_params = stent_design.stent_params._replace(
-            divs=stent_design.stent_params.divs._replace(R=1),
-        )
+        sp_divs = stent_design.stent_params.divs.copy_with_updates(R=1)
+        stent_params = stent_design.stent_params.copy_with_updates(divs=sp_divs)
 
         section_thickness = stent_params.radial_thickness
         transform_to_cyl = False
