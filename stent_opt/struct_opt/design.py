@@ -3,6 +3,7 @@ import enum
 import itertools
 import math
 import typing
+import hashlib
 
 from stent_opt.abaqus_model import base, element
 
@@ -14,6 +15,7 @@ from stent_opt.struct_opt.common import BaseModelForDB
 
 # These can be serialised and deserialised
 # from stent_opt.struct_opt.history import nt_to_db_strings, nt_from_db_strings, Snapshot
+from stent_opt.struct_opt.graph_connection import get_elems_in_centre
 
 
 class PolarIndex(BaseModelForDB):
@@ -22,7 +24,7 @@ class PolarIndex(BaseModelForDB):
     Z: int
 
     class Config:
-        frozen = False
+        frozen = True
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
@@ -40,6 +42,12 @@ class PolarIndex(BaseModelForDB):
     def to_tuple(self) -> typing.Tuple[int]:
         return (self.R, self.Th, self.Z)
 
+    def __lt__(self, other):
+        return self.to_tuple() < other.to_tuple()
+
+    def __hash__(self):
+        """For some reason the default hash was not reliable."""
+        return hash(self.to_tuple())
 
 class Actuation(enum.Enum):
     direct_pressure = enum.auto()
@@ -105,17 +113,19 @@ class StentParams(BaseModelForDB):
         yield from history.nt_to_db_strings(self)
 
     def polar_index_admissible(self, elem_polar_index: PolarIndex):
-        half_elem_theta = self.angle / self.divs.Th
-        half_elem_z = self.length / self.divs.Z
+        elem_theta_delta = self.angle / (self.divs.Th - 1)
+        elem_z_delta = self.length / (self.divs.Z - 1)
 
         def region_is_ok(inadmissible_region):
 
-            threshold_low_theta = inadmissible_region.theta_min / self.angle * self.divs.Th - half_elem_theta
+
+
+            threshold_low_theta = inadmissible_region.theta_min / self.angle * self.divs.Th + half_elem_theta
             threshold_high_theta = inadmissible_region.theta_max / self.angle * self.divs.Th + half_elem_theta
             if not threshold_low_theta < elem_polar_index.Th < threshold_high_theta:
                 return True
 
-            threshold_low_z = inadmissible_region.z_min / self.length * self.divs.Z - half_elem_z
+            threshold_low_z = inadmissible_region.z_min / self.length * self.divs.Z + half_elem_z
             threshold_high_z = inadmissible_region.z_max / self.length * self.divs.Z + half_elem_z
             if not threshold_low_z < elem_polar_index.Z < threshold_high_z:
                 return True
@@ -829,6 +839,19 @@ def make_initial_all_in(stent_params: StentParams) -> StentDesign:
     )
 
 
+def make_initial_all_in_with_hole(stent_params: StentParams) -> StentDesign:
+    all_in_design = make_initial_all_in(stent_params)
+
+    cent_elems = get_elems_in_centre(all_in_design)
+    without_centre = set(all_in_design.active_elements) - set(cent_elems)
+
+    return StentDesign(
+        stent_params=stent_params,
+        active_elements=frozenset(without_centre),
+        label="WithoutCent",
+    )
+
+
 def make_initial_two_lines(stent_params: StentParams) -> StentDesign:
     """Make a simpler sharp corner with straight edges."""
     width = 0.25
@@ -1081,6 +1104,7 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
 
 
 make_initial_design = make_initial_all_in
+# make_initial_design = make_initial_all_in_with_hole
 # make_initial_design = make_initial_design_radius_test
 # make_initial_design = make_initial_two_lines
 # make_initial_design = make_initial_design_s_curve
@@ -1097,13 +1121,10 @@ def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snap
         label=snapshot.label,
     )
 
-def show_initial_model_test(stent_design: StentDesign):
-    node_positions = {polar_index: xyz.to_xyz() for _, polar_index, xyz in generate_nodes(stent_design.stent_params)}
-    poly_list = []
-    for face_nodes, val in single_faces_and_vals:
-        verts = [node_position[iNode] for iNode in face_nodes]
-
-        poly_list.append( (verts, val))
+def show_initial_model_test():
+    from stent_opt.struct_opt import display
+    stent_design = make_initial_design(basic_stent_params)
+    display.show_design(stent_design)
 
 
 
@@ -1111,8 +1132,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=100,  # 31
-        Z=400,  # 120
+        Th=20,  # 31
+        Z=40,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1155,7 +1176,10 @@ print(basic_stent_params)
 
 
 if __name__ == "__main__":
+    show_initial_model_test()
     #  check we can serialise and deserialse the optimisation parameters
+
+
     data = dylan_r10n1_params.json(indent=2)
     print(data)
 

@@ -22,29 +22,43 @@ def element_idx_to_elems_within(distance: float, stent_design: "design.StentDesi
     return _element_idx_to_something_within(_Entity.elem, distance, stent_design)
 
 
-def _element_idx_to_something_within(entity: _Entity, distance: float, stent_design: "design.StentDesign"):
-    # TODO - do this a different way, with meshgrid and indices, for example.
 
-    elem_num_to_idx = {
-        iElem: idx for iElem, idx in
-        design.generate_elem_indices(stent_design.stent_params.divs) if
-        idx in stent_design.active_elements}
-
-    # Get the hop distance between individual nodes.
+def _get_elem_idx_to_nodes(stent_design: "design.StentDesign"):
     elem_idx_to_nodes = {
         elem_idx: elem.connection for elem_idx, elem_num, elem in
         design.generate_stent_part_elements(stent_design.stent_params) if
         elem_idx in stent_design.active_elements
     }
 
+    return elem_idx_to_nodes
+
+def _get_elem_num_to_nodes(stent_design: "design.StentDesign"):
+    elem_num_to_nodes = {
+        elem_num: elem.connection for elem_idx, elem_num, elem in
+        design.generate_stent_part_elements(stent_design.stent_params) if
+        elem_idx in stent_design.active_elements
+    }
+
+    return elem_num_to_nodes
+
+def _get_active_nodes(elem_idx_to_nodes):
     active_nodes = set()
+    for node_list in elem_idx_to_nodes.values():
+        active_nodes.update(node_list)
+
+    return active_nodes
+
+
+def _build_graph_from_design(stent_design: "design.StentDesign") -> networkx.Graph:
+    elem_idx_to_nodes = _get_elem_idx_to_nodes(stent_design)
+    active_nodes = _get_active_nodes(elem_idx_to_nodes)
+
     node_hops = dict()
 
     node_positions = design.get_node_num_to_pos(stent_design.stent_params)
 
     for node_list in elem_idx_to_nodes.values():
 
-        active_nodes.update(node_list)
         # Always use the lowest node first for easy lookups
         for n1_n2 in itertools.combinations(sorted(node_list), 2):
             n1_n2 = tuple(n1_n2)
@@ -62,6 +76,22 @@ def _element_idx_to_something_within(entity: _Entity, distance: float, stent_des
     if stent_design.stent_params.wrap_around_theta:
         for n1, n2 in design.gen_active_pairs(stent_design.stent_params, active_nodes):
             graph.add_edge(n1, n2, weight=0.0)
+
+    return graph
+
+def _element_idx_to_something_within(entity: _Entity, distance: float, stent_design: "design.StentDesign"):
+    # TODO - do this a different way, with meshgrid and indices, for example.
+
+    elem_num_to_idx = {
+        iElem: idx for iElem, idx in
+        design.generate_elem_indices(stent_design.stent_params.divs) if
+        idx in stent_design.active_elements}
+
+    # Get the hop distance between individual nodes.
+    elem_idx_to_nodes = _get_elem_idx_to_nodes(stent_design)
+    active_nodes = _get_active_nodes(elem_idx_to_nodes)
+
+    graph = _build_graph_from_design(stent_design)
 
     # Get the node-to-nodes_within_radius
 
@@ -112,9 +142,24 @@ def _element_idx_to_something_within(entity: _Entity, distance: float, stent_des
         raise ValueError(entity)
 
 
+def get_elems_in_centre(stent_design: "design.StentDesign"):
+    graph = _build_graph_from_design(stent_design)
+
+    elem_idx_to_nodes = _get_elem_idx_to_nodes(stent_design)
+
+    nodes_in_cent = set(networkx.center(graph))
+
+    elems_in_cent = {elem for elem, nodes in elem_idx_to_nodes.items() if any(x in nodes_in_cent for x in nodes)}
+    return elems_in_cent
+
+
+
 if __name__ == "__main__":
     stent_params = design.basic_stent_params
     stent_design = design.make_initial_design(stent_params)
+
+    aaa = get_elems_in_centre(stent_design)
+
 
     aaa = element_idx_to_nodes_within(0.2, stent_design)
     for k, v in aaa.items():
