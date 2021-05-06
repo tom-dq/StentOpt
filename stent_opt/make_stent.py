@@ -375,9 +375,10 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
 
     elif optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.oscillate:
         HEART_RATE_HZ = 1.2
+        HEART_RATE_TESTING = 20.0
         OSC_AMP = 0.05  # For now, just 5% of the initial arc length
 
-        amp_osc = amplitude.AmplitudePeriodic("Amp-Osc", HEART_RATE_HZ, 0.0, 1.0, OSC_AMP)
+        amp_osc = amplitude.AmplitudePeriodic("Amp-Osc", HEART_RATE_TESTING, 0.0, 1.0, OSC_AMP)
         step_two_disp = boundary_condition.BoundaryDispRot(
             name="OscillateDisp",
             with_amplitude=amp_osc,
