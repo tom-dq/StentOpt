@@ -227,8 +227,8 @@ active = OptimParams(
     ),
     primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.high_value],
     element_components=[
-        db_defs.ElementPEEQ,
-        # db_defs.ElementStress,
+        # db_defs.ElementPEEQ,
+        db_defs.ElementStress,
         # db_defs.ElementEnergyElastic,
         # db_defs.ElementEnergyPlastic,
     ],
