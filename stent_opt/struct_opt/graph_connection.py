@@ -154,6 +154,10 @@ def get_elems_in_centre(stent_design: "design.StentDesign"):
 
 
 
+def make_hole_away_from_boundary(stent_design: "design.StentDesign"):
+    pass
+
+
 if __name__ == "__main__":
     stent_params = design.basic_stent_params
     stent_design = design.make_initial_design(stent_params)

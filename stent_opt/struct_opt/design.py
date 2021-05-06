@@ -117,17 +117,13 @@ class StentParams(BaseModelForDB):
         elem_z_delta = self.length / (self.divs.Z - 1)
 
         def region_is_ok(inadmissible_region):
+            elem_cent_th = (elem_polar_index.Th + 0.5) * elem_theta_delta  # The half is to get to the centroid
+            elem_cent_z = (elem_polar_index.Z + 0.5) * elem_z_delta
 
-
-
-            threshold_low_theta = inadmissible_region.theta_min / self.angle * self.divs.Th + half_elem_theta
-            threshold_high_theta = inadmissible_region.theta_max / self.angle * self.divs.Th + half_elem_theta
-            if not threshold_low_theta < elem_polar_index.Th < threshold_high_theta:
+            if not inadmissible_region.theta_min < elem_cent_th < inadmissible_region.theta_max:
                 return True
 
-            threshold_low_z = inadmissible_region.z_min / self.length * self.divs.Z + half_elem_z
-            threshold_high_z = inadmissible_region.z_max / self.length * self.divs.Z + half_elem_z
-            if not threshold_low_z < elem_polar_index.Z < threshold_high_z:
+            if not inadmissible_region.z_min < elem_cent_z < inadmissible_region.z_max:
                 return True
 
             return False
@@ -1103,8 +1099,8 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
     return _make_design_from_line_segments(stent_params, line_z_th_points_and_widths, nominal_radius)
 
 
-make_initial_design = make_initial_all_in
-# make_initial_design = make_initial_all_in_with_hole
+# make_initial_design = make_initial_all_in
+make_initial_design = make_initial_all_in_with_hole
 # make_initial_design = make_initial_design_radius_test
 # make_initial_design = make_initial_two_lines
 # make_initial_design = make_initial_design_s_curve
@@ -1132,8 +1128,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=20,  # 31
-        Z=40,  # 120
+        Th=40,  # 31
+        Z=80,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
