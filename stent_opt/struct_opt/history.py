@@ -28,6 +28,7 @@ _nt_class_types = [
     db_defs.ElementPEEQ,
     db_defs.ElementEnergyElastic,
     db_defs.ElementEnergyPlastic,
+    db_defs.ElementFatigueResult,
 ]
 
 

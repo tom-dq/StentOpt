@@ -116,6 +116,14 @@ def _get_primary_ranking_components_raw(include_in_opt, nt_rows) -> typing.Itera
                 include_in_opt=include_in_opt,
             )
 
+    elif isinstance(nt_row, db_defs.ElementFatigueResult):
+        for row in nt_rows:
+            yield PrimaryRankingComponent(
+                comp_name=row.__class__.__name__,
+                elem_id=row.elem_num,
+                value=row.LGoodman,
+                include_in_opt=include_in_opt,
+            )
     else:
         raise ValueError(nt_row)
 

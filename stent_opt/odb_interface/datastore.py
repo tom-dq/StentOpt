@@ -48,10 +48,30 @@ class Datastore:
             cursor.execute(insert_frame, frame)
             frame_rowid = cursor.lastrowid
 
+        self._add_results_with_frame_rowid(many_results, frame_rowid)
+
+    def add_results_on_existing_frame(self, frame, many_results):
+        frame_rowid = self._get_rowid_of_frame_in_db(frame)
+        self._add_results_with_frame_rowid(many_results, frame_rowid)
+
+    def _add_results_with_frame_rowid(self, many_results, frame_rowid):
+        with self.connection:
+            cursor = self.connection.cursor()
             for nt_class, iter_of_nts in itertools.groupby(many_results, type):
                 insert_data = self._generate_insert_string_nt_class(nt_class)
                 with_row_id = (nt._replace(frame_rowid=frame_rowid) for nt in iter_of_nts)
                 cursor.executemany(insert_data, with_row_id)
+
+    def _get_rowid_of_frame_in_db(self, frame):
+        with self.connection:
+            rows = self.connection.execute("SELECT rowid FROM Frame WHERE fn_odb = ? AND instance_name = ? AND step_num = ? AND frame_id = ?",
+                                           (frame.fn_odb, frame.instance_name, frame.step_num, frame.frame_id))
+
+            rows = list(rows)
+            if len(rows) != 1:
+                raise ValueError(frame)
+
+            return rows[0][0]
 
     def add_many_history_results(self, history_results):
         """

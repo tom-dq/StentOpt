@@ -17,11 +17,18 @@ if SAVE_IMAGES:
     import abaqus
 
 
+EXTRACT_ALL_STEPS = False  # If False, only get the last frame of each step.
 
-LAST_FRAME_OF_STEP = True
+STEP_IDX_EXPAND = 0
+STEP_IDX_RELEASE_OSCILLATE = 1
+
+# From here just for testing
+# https://www.engineeringtoolbox.com/steel-endurance-limit-d_1781.html
+TEMP_SIGMA_UTS = 540.0
+TEMP_SIGMA_ENDURANCE = 270.0
 
 from datastore import Datastore
-from db_defs import Frame, NodePos, ElementStress, ElementPEEQ, ElementEnergyElastic, ElementEnergyPlastic, HistoryResult, expected_history_results
+from db_defs import Frame, NodePos, ElementStress, ElementPEEQ, ElementEnergyElastic, ElementEnergyPlastic, ElementFatigueResult, HistoryResult, expected_history_results
 
 # Get the command line option (should be last!).
 fn_odb = sys.argv[-3]
@@ -109,7 +116,7 @@ def get_history_results(this_odb):
                     )
 
 
-def walk_file_frames(this_odb, override_z_val):
+def walk_file_frames(extract_all_steps, this_odb, override_z_val):
     """
     :return type: Iterable[Frame, ExtractionMeta]
     """
@@ -124,7 +131,8 @@ def walk_file_frames(this_odb, override_z_val):
             last_frame_id_of_step = len(one_step.frames) - 1
 
             for frame_id, frame in enumerate(one_step.frames):
-                should_yield = (not LAST_FRAME_OF_STEP or frame_id==last_frame_id_of_step)
+                is_last_step = frame_id == last_frame_id_of_step
+                should_yield = (extract_all_steps or is_last_step)
                 if should_yield:
                     yield (
                         Frame(
@@ -146,12 +154,11 @@ def walk_file_frames(this_odb, override_z_val):
                         )
                     )
 
-                if frame_id == last_frame_id_of_step:
-                    if SAVE_IMAGES:
-                        # Print to file?
-                        fn = r"c:\temp\aba\Mod-{0}-{1}-{2}.png".format(one_instance_name, step_name, frame_id)
-                        abaqus.session.printOptions.setValues(vpBackground=True)
-                        abaqus.session.printToFile(fn, format=abaqusConstants.PNG)
+                if is_last_step and SAVE_IMAGES:
+                    # Print to file?
+                    fn = r"c:\temp\aba\Mod-{0}-{1}-{2}.png".format(one_instance_name, step_name, frame_id)
+                    abaqus.session.printOptions.setValues(vpBackground=True)
+                    abaqus.session.printToFile(fn, format=abaqusConstants.PNG)
 
 
 def get_stresses_one_frame(extraction_meta):
@@ -223,6 +230,58 @@ def get_strain_results_EPDDEN_one_frame(extraction_meta):
         )
 
 
+class StressResultAggregator:
+    working_min = None
+    working_max = None
+
+    def __init__(self):
+        self.working_max = dict()
+        self.working_min = dict()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    def update_frame_results(self, element_stress_iterable):
+        for elem_stress in element_stress_iterable:
+            elem_num = elem_stress.elem_num
+            this_val = elem_stress.von_mises
+
+            for min_max_dict, min_max_func in (
+                    (self.working_min, min),
+                    (self.working_max, max),
+            ):
+                if elem_num in min_max_dict:
+                    new_val = min_max_func(min_max_dict[elem_num], this_val)
+
+                else:
+                    new_val = this_val
+
+                min_max_dict[elem_num] = new_val
+
+    def make_goodman_results(self):
+        elems = set()
+        elems.update(self.working_min.keys())
+        elems.update(self.working_max.keys())
+
+        for elem in sorted(elems):
+            sigma_max = self.working_max[elem]
+            sigma_min = self.working_min[elem]
+
+            s_amp = 0.5 * (sigma_max - sigma_min)
+            s_mean = 0.5 * (sigma_max + sigma_min)
+            l_goodman = s_amp / TEMP_SIGMA_ENDURANCE + s_mean / TEMP_SIGMA_UTS
+
+            yield ElementFatigueResult(
+                frame_rowid=None,
+                elem_num=elem,
+                SAmp=s_amp,
+                SMean=s_mean,
+                LGoodman=l_goodman,
+            )
+
 
 def _add_with_zero_pad(a, b):
     """Add two numpy arrays together, zero padding as needed."""
@@ -276,11 +335,25 @@ def get_results_one_frame(extraction_meta):
 def extract_file_results(fn_odb):
     this_odb = odbAccess.openOdb(fn_odb)
 
-    with Datastore(fn=db_fn) as datastore:
-        for frame_db, extraction_meta in walk_file_frames(this_odb, override_z_val):
+    with Datastore(fn=db_fn) as datastore, StressResultAggregator() as stress_results_aggregator:
+        last_frame_db = None
+        for frame_db, extraction_meta in walk_file_frames(EXTRACT_ALL_STEPS, this_odb, override_z_val):
             print_in_term(frame_db)
+            last_frame_db = frame_db
             all_results = get_results_one_frame(extraction_meta)
+
             datastore.add_frame_and_results(frame_db, all_results)
+
+        # The goodman results need to be extracted from stresses at all frames on the last step.
+        for frame_db, extraction_meta in walk_file_frames(True, this_odb, override_z_val):
+
+            is_release_oscillate_step = frame_db.step_num == STEP_IDX_RELEASE_OSCILLATE
+            if is_release_oscillate_step:
+                stress_result = get_stresses_one_frame(extraction_meta)
+                stress_results_aggregator.update_frame_results(stress_result)
+
+        datastore.add_results_on_existing_frame(last_frame_db, stress_results_aggregator.make_goodman_results())
+
 
         datastore.add_many_history_results( get_history_results(this_odb) )
 
