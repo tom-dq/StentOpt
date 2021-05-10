@@ -48,7 +48,7 @@ class PostExpansionBehaviour(enum.Enum):
 
 T_vol_func = typing.Callable[[VolumeTargetOpts, int], float]
 T_nodal_pos_func = typing.Callable[["OptimParams", bool, "design.StentDesign", typing.Iterable[db_defs.NodePos]], typing.Iterable[score.PrimaryRankingComponent]]   # Accepts a design and some node positions, and generates ranking components.
-
+T_filter_component = typing.Callable[[bool, typing.Iterable[score.PrimaryRankingComponent]], typing.Iterable[score.FilterRankingComponent]]
 
 class OptimParams(typing.NamedTuple):
     """Parameters which control the optimisation."""
@@ -56,6 +56,7 @@ class OptimParams(typing.NamedTuple):
     volume_target_opts: VolumeTargetOpts
     volume_target_func: T_vol_func
     region_gradient: typing.Optional[RegionGradient]  # None to not have the region gradient included.
+    filter_components: typing.List[T_filter_component]
     primary_ranking_fitness_filters: typing.List[common.PrimaryRankingComponentFitnessFilter]
     element_components: typing.List[T_elem_result]
     nodal_position_components: typing.List[T_nodal_pos_func]
@@ -95,6 +96,16 @@ class OptimParams(typing.NamedTuple):
         for node_component in all_defined_funcs:
             include_in_opt = node_component in self.nodal_position_components
             yield include_in_opt, node_component
+
+    def get_all_filter_components(self) -> typing.Iterable[typing.Tuple[bool, T_filter_component]]:
+        all_defined_funcs = [
+            score.constraint_filter_within_fatigue_life,
+            score.constraint_filter_not_yielded_out,
+        ]
+
+        for filter_component in all_defined_funcs:
+            include_in_opt = filter_component in self.filter_components
+            yield include_in_opt, filter_component
 
     def get_all_primary_ranking_fitness_filters(self) -> typing.Iterable[typing.Tuple[bool, common.PrimaryRankingComponentFitnessFilter]]:
         for one_filter in common.PrimaryRankingComponentFitnessFilter:
@@ -225,10 +236,14 @@ active = OptimParams(
         reduce_type=common.RegionReducer.mean_val,
         n_past_increments=5,
     ),
+    filter_components=[
+        score.constraint_filter_not_yielded_out,
+        score.constraint_filter_within_fatigue_life,
+    ],
     primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.high_value],
     element_components=[
-        # db_defs.ElementPEEQ,
-        db_defs.ElementStress,
+        db_defs.ElementPEEQ,
+        # db_defs.ElementStress,
         # db_defs.ElementEnergyElastic,
         # db_defs.ElementEnergyPlastic,
         db_defs.ElementFatigueResult,
@@ -243,8 +258,8 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.03,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=2.0,  # Was 2.0
-    time_released=2.0,
+    time_expansion=1.0,  # Was 2.0
+    time_released=1.0,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,

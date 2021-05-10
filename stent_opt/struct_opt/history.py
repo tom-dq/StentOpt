@@ -57,6 +57,7 @@ class Snapshot(typing.NamedTuple):
         )
 
 class StatusCheckStage(enum.Enum):
+    filtering = enum.auto()
     primary = enum.auto()
     secondary = enum.auto()
     smoothed = enum.auto()
@@ -68,6 +69,7 @@ class StatusCheck(typing.NamedTuple):
     stage: StatusCheckStage
     metric_name: str
     metric_val: float
+    constraint_violation_priority: float
 
     def for_db_form(self):
         return self._replace(stage=self.stage.name)
@@ -176,7 +178,8 @@ iteration_num INTEGER,
 elem_num INTEGER,
 stage TEXT,
 metric_name TEXT,
-metric_val REAL
+metric_val REAL,
+constraint_violation_priority REAL
 )"""
 
 _make_global_parameters_table_ = """CREATE TABLE IF NOT EXISTS GlobalParam(

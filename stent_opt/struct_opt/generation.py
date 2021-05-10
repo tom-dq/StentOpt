@@ -260,13 +260,27 @@ def _hist_status_stage_from_rank_comp(rank_comp: score.T_AnyRankingComponent) ->
         else:
             return history.StatusCheckStage.secondary
 
+    elif isinstance(rank_comp, score.FilterRankingComponent):
+        return history.StatusCheckStage.filtering
+
     raise TypeError(rank_comp)
 
 
 class RankingResults(typing.NamedTuple):
     all_ranks: score.T_ListOfComponentLists
     final_ranking_component: T_index_to_val
+    filter_out_priority: T_index_to_val
     pos_rows: typing.List[db_defs.NodePos]
+
+
+def _combine_constraint_violations_rows(elem_num_to_indices, cons_viol_rows: typing.Iterable[score.FilterRankingComponent]) -> T_index_to_val:
+    # Super simple - just add all the constraint violations together.
+
+    all_cons_viols = collections.Counter()
+    for filter_row in cons_viol_rows:
+        all_cons_viols[filter_row.elem_id] += filter_row.value
+
+    return {elem_num_to_indices[iElem]: val for iElem, val in all_cons_viols.items()}
 
 
 def _get_ranking_functions(
@@ -339,9 +353,20 @@ def _get_ranking_functions(
     sec_rank_name = sec_rank_unsmoothed[0].comp_name + " Smoothed"
     append_additional_output(smoothed, sec_rank_name)
 
+    # Constraint violation filters
+    constraint_violations = []
+    for include_in_opt_comp, one_filter_func in optim_params.get_all_filter_components():
+        this_filter_rows = one_filter_func(include_in_opt_comp, raw_elem_rows)
+        constraint_violations.extend(this_filter_rows)
+        if this_filter_rows:
+            all_ranks.append(this_filter_rows)
+
+    filter_out_priority = _combine_constraint_violations_rows(elem_num_to_indices, constraint_violations)
+
     return RankingResults(
         all_ranks=all_ranks,
         final_ranking_component=smoothed,
+        filter_out_priority=filter_out_priority,
         pos_rows=pos_rows,
     )
 
@@ -381,7 +406,11 @@ def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> t
             elem_num=rank_comp.elem_id,
             stage=_hist_status_stage_from_rank_comp(rank_comp),
             metric_name=rank_comp.comp_name,
-            metric_val=rank_comp.value) for rank_comp_list in ranking_result.all_ranks for rank_comp in rank_comp_list)
+            metric_val=rank_comp.value,
+            constraint_violation_priority=rank_comp.constraint_violation_priority
+        )
+            for rank_comp_list in ranking_result.all_ranks for rank_comp in rank_comp_list
+        )
 
         hist.add_many_status_checks(status_checks)
 
@@ -548,7 +577,7 @@ def evolve_decider_test():
     iter_n_min_1 = 0
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-178")
+    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-368\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -580,7 +609,7 @@ if __name__ == '__main__':
 
     # plot_history_gradient()
 
-    # evolve_decider_test()
+    evolve_decider_test()
     # make_plot_tests()
 
     working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-179")  # 89

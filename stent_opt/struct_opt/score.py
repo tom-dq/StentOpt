@@ -32,12 +32,27 @@ FACES_OF = {
     element.ElemType.C3D8R: _FACES_OF_HEX,
 }
 
-# TODO - add  an "observer" flag to these so we can see results but not use them in the optimisation
+
+class FilterRankingComponent(typing.NamedTuple):
+    comp_name: str
+    elem_id: int
+    value: float  # If there are more than one to remove, highest value is the most "badness"
+    include_in_opt: bool
+
+    @property
+    def constraint_violation_priority(self) -> float:
+        return self.value
+
+
 class PrimaryRankingComponent(typing.NamedTuple):
     comp_name: str
     elem_id: int
     value: float
     include_in_opt: bool
+
+    @property
+    def constraint_violation_priority(self) -> float:
+        return 0.0
 
 
 class SecondaryRankingComponent(typing.NamedTuple):
@@ -46,10 +61,14 @@ class SecondaryRankingComponent(typing.NamedTuple):
     value: float
     include_in_opt: bool
 
+    @property
+    def constraint_violation_priority(self) -> float:
+        return 0.0
+
 
 T_PrimaryList = typing.List[PrimaryRankingComponent]
 T_SecondaryList = typing.List[SecondaryRankingComponent]
-T_AnyRankingComponent = typing.Union[PrimaryRankingComponent, SecondaryRankingComponent]
+T_AnyRankingComponent = typing.Union[PrimaryRankingComponent, SecondaryRankingComponent, FilterRankingComponent]
 T_ListOfComponentLists = typing.List[typing.List[T_AnyRankingComponent]]  # A list of lists, where the sub lists are all primary or all secondary
 
 
@@ -393,6 +412,37 @@ def get_primary_ranking_macro_deformation(optim_params: optimisation_parameters.
             value=statistics.mean(nodal_vals),
             include_in_opt=include_in_opt,
         )
+
+
+def constraint_filter_not_yielded_out(include_in_opt, nt_rows) -> typing.Iterable[FilterRankingComponent]:
+    PEEQ_LIMIT = 0.5
+
+    for nt_row in nt_rows:
+        if isinstance(nt_row, db_defs.ElementPEEQ):
+            should_filter_out = nt_row.PEEQ > PEEQ_LIMIT
+            if should_filter_out:
+                yield FilterRankingComponent(
+                    comp_name="PEEQAllowable",
+                    elem_id=nt_row.elem_num,
+                    value=nt_row.PEEQ,
+                    include_in_opt=include_in_opt,
+                )
+
+def constraint_filter_within_fatigue_life(include_in_opt, nt_rows) -> typing.Iterable[FilterRankingComponent]:
+    FATIGUE_LIMIT = 1.0
+
+    for nt_row in nt_rows:
+        if isinstance(nt_row, db_defs.ElementFatigueResult):
+            should_filter_out = nt_row.LGoodman > FATIGUE_LIMIT
+            if should_filter_out:
+                yield FilterRankingComponent(
+                    comp_name="GoodmanAllowable",
+                    elem_id=nt_row.elem_num,
+                    value=nt_row.LGoodman,
+                    include_in_opt=include_in_opt,
+                )
+
+
 
 
 def _max_delta_angle_of_element(stent_params: "design.StentParams", node_to_pos: typing.Dict[int, base.XYZ], elem_connection) -> float:
