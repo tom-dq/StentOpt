@@ -415,7 +415,7 @@ def get_primary_ranking_macro_deformation(optim_params: optimisation_parameters.
 
 
 def constraint_filter_not_yielded_out(include_in_opt, nt_rows) -> typing.Iterable[FilterRankingComponent]:
-    PEEQ_LIMIT = 0.5
+    PEEQ_LIMIT = 0.02
 
     for nt_row in nt_rows:
         if isinstance(nt_row, db_defs.ElementPEEQ):
@@ -427,6 +427,7 @@ def constraint_filter_not_yielded_out(include_in_opt, nt_rows) -> typing.Iterabl
                     value=nt_row.PEEQ,
                     include_in_opt=include_in_opt,
                 )
+
 
 def constraint_filter_within_fatigue_life(include_in_opt, nt_rows) -> typing.Iterable[FilterRankingComponent]:
     FATIGUE_LIMIT = 1.0

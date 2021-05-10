@@ -1128,12 +1128,12 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=20,  # 31
-        Z=40,  # 120
+        Th=50,  # 31
+        Z=100,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
-    length=5.0, # Was 11.0
+    length=3.5, # Was 11.0
     stent_element_type=element.ElemType.CPS4R,
     balloon=Balloon(
         inner_radius_ratio=0.85,

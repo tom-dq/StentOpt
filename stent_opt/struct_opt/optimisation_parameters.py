@@ -185,7 +185,7 @@ def _get_for_db_funcs():
     ]
 
     all_names = dir(score)
-    good_names = [n for n in all_names if n.startswith("get_primary_ranking")]
+    good_names = [n for n in all_names if n.startswith("get_primary_ranking") or n.startswith("constraint_filter_")]
     for maybe_f_name in good_names:
         maybe_f = getattr(score, maybe_f_name)
         if not callable(maybe_f):

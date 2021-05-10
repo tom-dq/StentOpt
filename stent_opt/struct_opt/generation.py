@@ -1,5 +1,6 @@
 import collections
 import functools
+import itertools
 import pathlib
 import statistics
 import typing
@@ -62,6 +63,7 @@ def get_gradient_input_data(
 
 
 T_index_to_val = typing.Dict[design.PolarIndex, float]
+T_index_to_two_val = typing.Dict[design.PolarIndex, typing.Tuple[int, float, float]]
 def gaussian_smooth(optim_params: optimisation_parameters.OptimParams, stent_params: design.StentParams, unsmoothed: T_index_to_val) -> T_index_to_val:
     # Make a 3D array
 
@@ -272,6 +274,26 @@ class RankingResults(typing.NamedTuple):
     filter_out_priority: T_index_to_val
     pos_rows: typing.List[db_defs.NodePos]
 
+    def get_ordered_ranking_with_filter(self, max_to_filter_out: int) -> T_index_to_two_val:
+        """Makes an "overall" ordering in which the elements to be filtered out are put with the lowest priority."""
+
+        LEFT_ALONE, FILTERED_OUT = 1, -1
+
+        overall_ranking: T_index_to_val = dict()
+
+        # Step one - the values to be filtered out go into the overall list first. where we can't put all the values to be filter out in there, pick the highest filter_priority.
+        first_ordering = itertools.chain( itertools.repeat(FILTERED_OUT, max_to_filter_out), itertools.repeat(LEFT_ALONE) )
+        filter_out_priority_sorted = reversed(sorted((val, key) for key, val in self.filter_out_priority.items()))
+        for should_filter, (filter_val, elem_idx) in zip(first_ordering, filter_out_priority_sorted):
+            overall_ranking[elem_idx] = (should_filter, self.final_ranking_component.get(elem_idx, 0.0))
+
+        # Step two - anything not filtered out already
+        for elem_idx, val in self.final_ranking_component.items():
+            if elem_idx not in overall_ranking:
+                overall_ranking[elem_idx] = (LEFT_ALONE, val)
+
+        return overall_ranking
+
 
 def _combine_constraint_violations_rows(elem_num_to_indices, cons_viol_rows: typing.Iterable[score.FilterRankingComponent]) -> T_index_to_val:
     # Super simple - just add all the constraint violations together.
@@ -281,6 +303,12 @@ def _combine_constraint_violations_rows(elem_num_to_indices, cons_viol_rows: typ
         all_cons_viols[filter_row.elem_id] += filter_row.value
 
     return {elem_num_to_indices[iElem]: val for iElem, val in all_cons_viols.items()}
+
+
+T_filter_applicable_primary_components = typing.Union[db_defs.ElementFatigueResult, db_defs.ElementPEEQ]
+def _get_raw_data_relevant_to_constraint_filter(data: datastore.Datastore, one_frame) -> typing.Iterable[T_filter_applicable_primary_components]:
+    for elem_component in T_filter_applicable_primary_components.__args__:
+        yield from data.get_all_rows_at_frame(elem_component, one_frame)
 
 
 def _get_ranking_functions(
@@ -355,8 +383,9 @@ def _get_ranking_functions(
 
     # Constraint violation filters
     constraint_violations = []
+    aba_db_rows = list(_get_raw_data_relevant_to_constraint_filter(data, one_frame))
     for include_in_opt_comp, one_filter_func in optim_params.get_all_filter_components():
-        this_filter_rows = one_filter_func(include_in_opt_comp, raw_elem_rows)
+        this_filter_rows = list(one_filter_func(include_in_opt_comp, aba_db_rows))
         constraint_violations.extend(this_filter_rows)
         if this_filter_rows:
             all_ranks.append(this_filter_rows)
@@ -466,7 +495,11 @@ def produce_new_generation(working_dir: pathlib.Path, design_prev: design.StentD
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
 
-    new_active_elems = evolve_decider(optim_params, design_prev, ranking_result.final_ranking_component, iter_this)
+    # Max number of elements to change in an iteration limits the number of filter-based reorderings.
+    delta_n_elems = int(optim_params.max_change_in_vol_ratio * design_prev.stent_params.divs.fully_populated_elem_count())
+    sensitivity_ranking = ranking_result.get_ordered_ranking_with_filter(delta_n_elems)
+
+    new_active_elems = evolve_decider(optim_params, design_prev, sensitivity_ranking, iter_this)
 
     elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
 
@@ -609,16 +642,16 @@ if __name__ == '__main__':
 
     # plot_history_gradient()
 
-    evolve_decider_test()
+    # evolve_decider_test()
     # make_plot_tests()
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-179")  # 89
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-378")  # 89
     iter_this = 1
     iter_prev = iter_this - 1
-    make_plot_tests(working_dir, iter_this)
+    # make_plot_tests(working_dir, iter_this)
 
     one_design, one_ranking = process_completed_simulation(working_dir, iter_prev)
-    new_design = produce_new_generation(working_dir, one_design, one_ranking, iter_this)
+    new_design = produce_new_generation(working_dir, one_design, one_ranking, iter_this, "generation.produce_new_generation")
     # print(new_design)
 
 
