@@ -4,6 +4,9 @@ import os
 
 import click
 
+def is_good_fn(f_url) -> bool:
+    return 'It-000' not in f_url and 'opt-' not in f_url
+
 def get_file_size(f_url) -> int:
     req = urllib.request.Request(f_url.strip(), method='HEAD')
     try:
@@ -24,7 +27,8 @@ def order_files(fn_in):
         f_urls = list(f_in.readlines())
 
     f_no_blank = [f_url for f_url in f_urls if f_url.strip()]
-    f_url_sorted = sorted(f_no_blank, key=get_file_size)
+    f_filtered = [f_url for f_url in f_no_blank if is_good_fn(f_url)]
+    f_url_sorted = sorted(f_filtered, key=get_file_size)
 
     fn_out = fn_in + "-ordered"
     with open(fn_out, 'x') as f_out:
