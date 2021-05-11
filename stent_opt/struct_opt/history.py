@@ -69,7 +69,7 @@ class StatusCheck(typing.NamedTuple):
     stage: StatusCheckStage
     metric_name: str
     metric_val: float
-    constraint_violation_priority: float
+    constraint_violation_priority: float = 0.0
 
     def for_db_form(self):
         return self._replace(stage=self.stage.name)
