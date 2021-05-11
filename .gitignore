@@ -8,4 +8,5 @@ __pycache__/
 venv/
 venv-py39/
 py-39/
- 
+.vscode/settings.json
+
