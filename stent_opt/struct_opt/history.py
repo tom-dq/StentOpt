@@ -9,16 +9,18 @@ import typing
 import statistics
 import matplotlib.pyplot as plt
 
-from stent_opt.struct_opt.common import RegionReducer
+from stent_opt.struct_opt.common import RegionReducer, PrimaryRankingComponentFitnessFilter
 from stent_opt.abaqus_model import element
 from stent_opt.struct_opt import design
 from stent_opt.odb_interface import db_defs
 from stent_opt.struct_opt import optimisation_parameters
 
-
+# TODO - fix up this stuff with enums not comparing equal: https://stackoverflow.com/a/40371520
 _enum_types = [
     element.ElemType,
-    RegionReducer
+    RegionReducer,
+    PrimaryRankingComponentFitnessFilter,
+    optimisation_parameters.PostExpansionBehaviour,
 ]
 
 _nt_class_types = [
@@ -26,6 +28,7 @@ _nt_class_types = [
     db_defs.ElementPEEQ,
     db_defs.ElementEnergyElastic,
     db_defs.ElementEnergyPlastic,
+    db_defs.ElementFatigueResult,
 ]
 
 
@@ -34,7 +37,6 @@ def _aggregate_elemental_values(st_vals: typing.Iterable[StatusCheck]) -> typing
 
     for global_status_type in GlobalStatusType.get_elemental_aggregate_values():
         yield global_status_type, global_status_type.compute_aggregate(vals)
-
 
 
 class Snapshot(typing.NamedTuple):
@@ -55,6 +57,7 @@ class Snapshot(typing.NamedTuple):
         )
 
 class StatusCheckStage(enum.Enum):
+    filtering = enum.auto()
     primary = enum.auto()
     secondary = enum.auto()
     smoothed = enum.auto()
@@ -66,6 +69,7 @@ class StatusCheck(typing.NamedTuple):
     stage: StatusCheckStage
     metric_name: str
     metric_val: float
+    constraint_violation_priority: float
 
     def for_db_form(self):
         return self._replace(stage=self.stage.name)
@@ -74,9 +78,9 @@ class StatusCheck(typing.NamedTuple):
         return self._replace(stage=StatusCheckStage[self.stage])
 
 
-class DesignParam(typing.NamedTuple):
+class GlobalParam(typing.NamedTuple):
     param_name: str
-    param_value: typing.Optional[str]
+    param_json: str
 
 
 class OptParam(typing.NamedTuple):
@@ -174,12 +178,13 @@ iteration_num INTEGER,
 elem_num INTEGER,
 stage TEXT,
 metric_name TEXT,
-metric_val REAL
+metric_val REAL,
+constraint_violation_priority REAL
 )"""
 
-_make_design_parameters_table_ = """CREATE TABLE IF NOT EXISTS DesignParam(
+_make_global_parameters_table_ = """CREATE TABLE IF NOT EXISTS GlobalParam(
 param_name TEXT UNIQUE,
-param_value TEXT)"""
+param_value JSON)"""
 
 
 _make_opt_parameters_table_ = """CREATE TABLE IF NOT EXISTS OptParam(
@@ -203,7 +208,7 @@ global_status_value REAL
 _make_tables = [
     _make_snapshot_table,
     _make_status_check_table,
-    _make_design_parameters_table_,
+    _make_global_parameters_table_,
     _make_opt_parameters_table_,
     _make_node_pos_table_,
     _make_global_status_table,
@@ -216,6 +221,7 @@ class History:
     def __init__(self, fn):
         self.fn = fn
         self.connection = sqlite3.connect(fn)
+        self.connection.enable_load_extension(True)
 
         with self.connection:
             for mt in _make_tables:
@@ -275,20 +281,31 @@ class History:
             db_snap = Snapshot(*rows[0])
             return db_snap.from_db()
 
+    def _set_global_param(self, some_param):
+        param_name = some_param.__class__.__name__
+        param_value = some_param.json(indent=2)
+
+        ins_string = self._generate_insert_string_nt_class(GlobalParam)
+        with self.connection:
+            self.connection.execute(ins_string, (param_name,param_value,))
+
+    def _get_global_param(self, some_param_class):
+        with self.connection:
+            rows = self.connection.execute("SELECT param_value FROM GlobalParam WHERE param_name = ?", (some_param_class.__name__,))
+            l_rows = list(rows)
+            assert len(l_rows) == 1
+            data_json = l_rows[0][0]
+
+        return some_param_class.parse_raw(data_json)
+
     def set_stent_params(self, stent_params: "design.StentParams"):
         """Save the model parameters"""
-        data_rows = list(stent_params.to_db_strings())
-        ins_string = self._generate_insert_string_nt_class(DesignParam)
-        with self.connection:
-            self.connection.executemany(ins_string, data_rows)
+        self._set_global_param(stent_params)
 
     def get_stent_params(self) -> "design.StentParams":
         """Get the model parameters"""
-        with self.connection:
-            rows = self.connection.execute("SELECT * FROM DesignParam")
-            l_rows = list(rows)
+        return self._get_global_param(design.StentParams)
 
-        return design.StentParams.from_db_strings(l_rows)
 
     def set_optim_params(self, opt_params: optimisation_parameters.OptimParams):
         """Save the optimisation parameters."""
@@ -490,7 +507,7 @@ def make_history_db(working_dir: typing.Union[str, pathlib.Path]) -> pathlib.Pat
 
 
 def history_write_read_test():
-    with History(r"c:\temp\aaa23456.db") as history:
+    with History(r"c:\temp\aaabbbccc.db") as history:
         orig_stent_params = design.basic_stent_params
         history.set_stent_params(orig_stent_params)
         history.set_optim_params(optimisation_parameters.active)
@@ -566,9 +583,10 @@ def _item_to_db_strings(key, val, this_item_type) -> typing.Iterable[typing.Tupl
         yield key, val.__name__
 
     elif isinstance(val, list):
+        list_sub_type = this_item_type.__args__[0]
         for idx, one_item in enumerate(val):
             # Use the ellipsis to signal we don't know anything about the type of the element in the list - leave it up to the recursive call to deal with it.
-            sub_key, sub_val = next(_item_to_db_strings(f"{key}.[{idx}]", one_item, ...))
+            sub_key, sub_val = next(_item_to_db_strings(f"{key}.[{idx}]", one_item, list_sub_type))
             yield sub_key, sub_val
 
     elif len(matched_nt_class_types) == 1:
@@ -586,12 +604,22 @@ def nt_to_db_strings(nt_instance) -> typing.Iterable[typing.Tuple[str, typing.Op
         yield from _item_to_db_strings(key, val, this_item_type)
 
 
-def single_item_from_string(s):
+def single_item_from_string(s, maybe_target_type):
     """Strings which may be named tuples classes, or functions"""
 
     matches_nt_class = [nt for nt in _nt_class_types if nt.__name__ == s]
     matches_funcs = [f for f in optimisation_parameters._for_db_funcs if f.__name__ == s]
-    matches = matches_nt_class + matches_funcs
+
+    is_an_enum = False
+    try:
+        is_an_enum = issubclass(maybe_target_type, enum.Enum)
+
+    except TypeError:
+        pass
+
+    matches_enum = [e for e in maybe_target_type if e.name == s] if is_an_enum else []
+
+    matches = matches_nt_class + matches_funcs + matches_enum
 
     if len(matches) == 1:
         return matches[0]
@@ -670,7 +698,7 @@ def nt_from_db_strings(nt_class, data):
 
             text_is_a_list = all(is_an_item(k) for k,v in without_prefix_data)
             if text_is_a_list:
-                working_data[prefix] = [single_item_from_string(nt_s) for k, nt_s in without_prefix_data]
+                working_data[prefix] = [single_item_from_string(nt_s, single_type.__args__[0]) for k, nt_s in without_prefix_data]
 
             else:
                 working_data[prefix] = single_type.from_db_strings(without_prefix_data)
@@ -705,8 +733,8 @@ def nt_from_db_strings(nt_class, data):
                     else:
                         raise ValueError("What?")
 
-                elif single_item_from_string(value):
-                    working_data[name] = single_item_from_string(value)
+                elif single_item_from_string(value, base_type):
+                    working_data[name] = single_item_from_string(value, base_type)
 
                 elif base_type == bool:
                     # Get a "0" string for false here...
@@ -741,6 +769,8 @@ def _is_nullable(some_type) -> bool:
     return False
 
 if __name__ == "__main__":
+    history_write_read_test()
+
     for x in GlobalStatusType.get_elemental_aggregate_values():
         print(x)
 

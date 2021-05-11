@@ -1,3 +1,4 @@
+import enum
 import typing
 
 from stent_opt.odb_interface import db_defs
@@ -19,7 +20,7 @@ class VolumeTargetOpts(typing.NamedTuple):
         return history.nt_from_db_strings(cls, data)
 
 
-T_elem_result = typing.Union[db_defs.ElementStress, db_defs.ElementPEEQ, db_defs.ElementEnergyElastic, db_defs.ElementEnergyPlastic]
+T_elem_result = typing.Union[db_defs.ElementStress, db_defs.ElementPEEQ, db_defs.ElementEnergyElastic, db_defs.ElementEnergyPlastic, db_defs.ElementFatigueResult]
 
 
 class RegionGradient(typing.NamedTuple):
@@ -36,9 +37,18 @@ class RegionGradient(typing.NamedTuple):
         return history.nt_from_db_strings(cls, data)
 
 
-T_vol_func = typing.Callable[[VolumeTargetOpts, int], float]
-T_nodal_pos_func = typing.Callable[["design.StentDesign", typing.Iterable[db_defs.NodePos]], typing.Iterable[score.PrimaryRankingComponent]]   # Accepts a design and some node positions, and generates ranking components.
+class PostExpansionBehaviour(enum.Enum):
+    none = enum.auto()
+    release = enum.auto()
+    oscillate = enum.auto()
 
+    @property
+    def requires_second_step(self) -> bool:
+        return self in (PostExpansionBehaviour.release, PostExpansionBehaviour.oscillate)
+
+T_vol_func = typing.Callable[[VolumeTargetOpts, int], float]
+T_nodal_pos_func = typing.Callable[["OptimParams", bool, "design.StentDesign", typing.Iterable[db_defs.NodePos]], typing.Iterable[score.PrimaryRankingComponent]]   # Accepts a design and some node positions, and generates ranking components.
+T_filter_component = typing.Callable[[bool, typing.Iterable[score.PrimaryRankingComponent]], typing.Iterable[score.FilterRankingComponent]]
 
 class OptimParams(typing.NamedTuple):
     """Parameters which control the optimisation."""
@@ -46,15 +56,19 @@ class OptimParams(typing.NamedTuple):
     volume_target_opts: VolumeTargetOpts
     volume_target_func: T_vol_func
     region_gradient: typing.Optional[RegionGradient]  # None to not have the region gradient included.
+    filter_components: typing.List[T_filter_component]
+    primary_ranking_fitness_filters: typing.List[common.PrimaryRankingComponentFitnessFilter]
     element_components: typing.List[T_elem_result]
     nodal_position_components: typing.List[T_nodal_pos_func]
     gaussian_sigma: float
+    local_deformation_stencil_length: float
     working_dir: str
     use_double_precision: bool
     abaqus_output_time_interval: float
     abaqus_target_increment: float
     time_expansion: float
     time_released: typing.Optional[float]  # Make this None to not have a "release" step.
+    post_expansion_behaviour: PostExpansionBehaviour
     analysis_step_type: typing.Type[step.StepBase]
     nodes_shared_with_old_design_to_expand: int    # Only let new elements come in which are attached to existing elements with at least this many nodes. Zero to allow all elements.
     nodes_shared_with_old_design_to_contract: int  # Only let new elements go out which are attached to existing elements with at least this many nodes. Zero to allow all elements.
@@ -62,6 +76,48 @@ class OptimParams(typing.NamedTuple):
     @property
     def release_stent_after_expansion(self) -> bool:
         return bool(self.time_released)
+
+    @property
+    def simulation_has_second_step(self) -> bool:
+        return bool(self.time_released) and self.post_expansion_behaviour.requires_second_step
+
+    def get_all_elem_components(self) -> typing.Iterable[typing.Tuple[bool, T_elem_result]]:
+        """Step through the results, selecting the ones which are contribution to the optimisation"""
+        for elem_component in T_elem_result.__args__:
+            include_in_opt = elem_component in self.element_components
+            yield include_in_opt, elem_component
+
+    def get_all_node_position_components(self) -> typing.Iterable[typing.Tuple[bool, T_nodal_pos_func]]:
+        all_defined_funcs = [
+            score.get_primary_ranking_element_distortion,
+            score.get_primary_ranking_macro_deformation,
+        ]
+
+        for node_component in all_defined_funcs:
+            include_in_opt = node_component in self.nodal_position_components
+            yield include_in_opt, node_component
+
+    def get_all_filter_components(self) -> typing.Iterable[typing.Tuple[bool, T_filter_component]]:
+        all_defined_funcs = [
+            score.constraint_filter_within_fatigue_life,
+            score.constraint_filter_not_yielded_out,
+        ]
+
+        for filter_component in all_defined_funcs:
+            include_in_opt = filter_component in self.filter_components
+            yield include_in_opt, filter_component
+
+    def get_all_primary_ranking_fitness_filters(self) -> typing.Iterable[typing.Tuple[bool, common.PrimaryRankingComponentFitnessFilter]]:
+        for one_filter in common.PrimaryRankingComponentFitnessFilter:
+            include_in_opt = one_filter in self.primary_ranking_fitness_filters
+            yield include_in_opt, one_filter
+
+    @property
+    def single_primary_ranking_fitness_filter(self) -> common.PrimaryRankingComponentFitnessFilter:
+        if len(self.primary_ranking_fitness_filters) != 1:
+            raise ValueError(self.primary_ranking_fitness_filters)
+
+        return self.primary_ranking_fitness_filters[0]
 
     def _target_volume_ratio_clamped(self, stent_design: "design.StentDesign", iter_num: int) -> float:
         existing_volume_ratio = stent_design.volume_ratio()
@@ -129,7 +185,7 @@ def _get_for_db_funcs():
     ]
 
     all_names = dir(score)
-    good_names = [n for n in all_names if n.startswith("get_primary_ranking")]
+    good_names = [n for n in all_names if n.startswith("get_primary_ranking") or n.startswith("constraint_filter_")]
     for maybe_f_name in good_names:
         maybe_f = getattr(score, maybe_f_name)
         if not callable(maybe_f):
@@ -171,6 +227,7 @@ volume_ratio_increase = VolumeTargetOpts(
 )
 
 active = OptimParams(
+    # TODO - next time I make changes to this, migrate it over to pydantic first.
     max_change_in_vol_ratio=0.0025,  # Was 0.0025
     volume_target_opts=volume_ratio_decrease,
     volume_target_func=vol_reduce_then_flat,
@@ -179,23 +236,31 @@ active = OptimParams(
         reduce_type=common.RegionReducer.mean_val,
         n_past_increments=5,
     ),
+    filter_components=[
+        score.constraint_filter_not_yielded_out,
+        score.constraint_filter_within_fatigue_life,
+    ],
+    primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.high_value],
     element_components=[
-        # db_defs.ElementPEEQ,
-        db_defs.ElementStress,
+        db_defs.ElementPEEQ,
+        # db_defs.ElementStress,
         # db_defs.ElementEnergyElastic,
         # db_defs.ElementEnergyPlastic,
+        db_defs.ElementFatigueResult,
     ],
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
-        # score.get_primary_ranking_macro_deformation,
+        score.get_primary_ranking_macro_deformation,
     ],
-    gaussian_sigma=0.15,  # TODO - make this proporional to the element length or something? Was 0.75
+    gaussian_sigma=0.3,  # Was 0.15 forever
+    local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
-    abaqus_output_time_interval=0.1,  # Was 0.1
+    abaqus_output_time_interval=0.03,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=2.0,  # Was 2.0
-    time_released=None,
+    time_expansion=1.0,  # Was 2.0
+    time_released=1.0,
+    post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,

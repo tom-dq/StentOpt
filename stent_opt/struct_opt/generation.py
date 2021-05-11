@@ -1,4 +1,6 @@
 import collections
+import functools
+import itertools
 import pathlib
 import statistics
 import typing
@@ -30,13 +32,12 @@ MAKE_PLOTS = False
 
 
 def get_gradient_input_data(
-        working_dir,
-        raw_component,
+        optim_params: optimisation_parameters.OptimParams,
         iteration_nums: typing.Iterable[int],
 ) -> typing.Iterable[score.GradientInputData]:
     """raw_component is db_defs.ElementStress or db_defs.ElementPEEQ"""
 
-    working_dir = pathlib.Path(working_dir)
+    working_dir = pathlib.Path(optim_params.working_dir)
     history_db_fn = history.make_history_db(working_dir)
 
     with history.History(history_db_fn) as hist:
@@ -51,8 +52,8 @@ def get_gradient_input_data(
                 print(output_db_fn)
                 one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
 
-                raw_rows = list(data.get_all_rows_at_frame(raw_component, one_frame))
-                raw_ranking_components = list(score.get_primary_ranking_components(raw_rows))
+                raw_rows = list(data.get_all_rows_at_frame(optim_params.region_gradient.component, one_frame))
+                raw_ranking_components = list(score.get_primary_ranking_components(True, optim_params.single_primary_ranking_fitness_filter, raw_rows))
                 element_ranking_components = {one_comp.elem_id: one_comp for one_comp in raw_ranking_components}
                 yield score.GradientInputData(
                     iteration_num=iter_num,
@@ -62,15 +63,16 @@ def get_gradient_input_data(
 
 
 T_index_to_val = typing.Dict[design.PolarIndex, float]
+T_index_to_two_val = typing.Dict[design.PolarIndex, typing.Tuple[int, float, float]]
 def gaussian_smooth(optim_params: optimisation_parameters.OptimParams, stent_params: design.StentParams, unsmoothed: T_index_to_val) -> T_index_to_val:
     # Make a 3D array
 
     design_space = stent_params.divs
 
     design_space_elements = design.node_to_elem_design_space(design_space)
-    raw = numpy.zeros(shape=design_space_elements)
-    for (r, th, z), val in unsmoothed.items():
-        raw[r, th, z] = val
+    raw = numpy.zeros(shape=design_space_elements.to_tuple())
+    for polar_index, val in unsmoothed.items():
+        raw[polar_index.R, polar_index.Th, polar_index.Z] = val
 
     def normalised_sigma():
         """Since the sigma depends on the mesh size, we have to normalise it."""
@@ -168,6 +170,12 @@ class CandidatesFor(typing.NamedTuple):
     introduction: typing.FrozenSet[design.PolarIndex]
 
 
+@functools.lru_cache()
+def _get_all_admissible_elements(stent_params):
+    fully_populated = design.generate_elem_indices_admissible(stent_params)
+    return frozenset(elemIdx for _, elemIdx in fully_populated)
+
+
 def get_candidate_elements(
         optim_params: optimisation_parameters.OptimParams,
         design_n_min_1: design.StentDesign,
@@ -175,8 +183,7 @@ def get_candidate_elements(
 
     """Figure out which elements can come and go for the next iteration"""
 
-    fully_populated = design.generate_elem_indices(design_n_min_1.stent_params.divs)
-    fully_populated_indices = frozenset(elemIdx for _, elemIdx in fully_populated)
+    fully_populated_indices = _get_all_admissible_elements(design_n_min_1.stent_params)
 
     def get_adj_elements(last_iter_elems, threshold: int):
         # Prepare the set of nodes to which eligible elements are attached.
@@ -255,13 +262,53 @@ def _hist_status_stage_from_rank_comp(rank_comp: score.T_AnyRankingComponent) ->
         else:
             return history.StatusCheckStage.secondary
 
+    elif isinstance(rank_comp, score.FilterRankingComponent):
+        return history.StatusCheckStage.filtering
+
     raise TypeError(rank_comp)
 
 
 class RankingResults(typing.NamedTuple):
     all_ranks: score.T_ListOfComponentLists
     final_ranking_component: T_index_to_val
+    filter_out_priority: T_index_to_val
     pos_rows: typing.List[db_defs.NodePos]
+
+    def get_ordered_ranking_with_filter(self, max_to_filter_out: int) -> T_index_to_two_val:
+        """Makes an "overall" ordering in which the elements to be filtered out are put with the lowest priority."""
+
+        LEFT_ALONE, FILTERED_OUT = 1, -1
+
+        overall_ranking: T_index_to_val = dict()
+
+        # Step one - the values to be filtered out go into the overall list first. where we can't put all the values to be filter out in there, pick the highest filter_priority.
+        first_ordering = itertools.chain( itertools.repeat(FILTERED_OUT, max_to_filter_out), itertools.repeat(LEFT_ALONE) )
+        filter_out_priority_sorted = reversed(sorted((val, key) for key, val in self.filter_out_priority.items()))
+        for should_filter, (filter_val, elem_idx) in zip(first_ordering, filter_out_priority_sorted):
+            overall_ranking[elem_idx] = (should_filter, self.final_ranking_component.get(elem_idx, 0.0))
+
+        # Step two - anything not filtered out already
+        for elem_idx, val in self.final_ranking_component.items():
+            if elem_idx not in overall_ranking:
+                overall_ranking[elem_idx] = (LEFT_ALONE, val)
+
+        return overall_ranking
+
+
+def _combine_constraint_violations_rows(elem_num_to_indices, cons_viol_rows: typing.Iterable[score.FilterRankingComponent]) -> T_index_to_val:
+    # Super simple - just add all the constraint violations together.
+
+    all_cons_viols = collections.Counter()
+    for filter_row in cons_viol_rows:
+        all_cons_viols[filter_row.elem_id] += filter_row.value
+
+    return {elem_num_to_indices[iElem]: val for iElem, val in all_cons_viols.items()}
+
+
+T_filter_applicable_primary_components = typing.Union[db_defs.ElementFatigueResult, db_defs.ElementPEEQ]
+def _get_raw_data_relevant_to_constraint_filter(data: datastore.Datastore, one_frame) -> typing.Iterable[T_filter_applicable_primary_components]:
+    for elem_component in T_filter_applicable_primary_components.__args__:
+        yield from data.get_all_rows_at_frame(elem_component, one_frame)
 
 
 def _get_ranking_functions(
@@ -280,7 +327,7 @@ def _get_ranking_functions(
         first_grad_track = max(0, final_grad_track - optim_params.region_gradient.n_past_increments)
         grad_track_steps = range(first_grad_track, final_grad_track)
 
-        recent_gradient_input_data = get_gradient_input_data(optim_params.working_dir, optim_params.region_gradient.component, grad_track_steps)
+        recent_gradient_input_data = get_gradient_input_data(optim_params, grad_track_steps)
         vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(design_n_min_1.stent_params, recent_gradient_input_data, statistics.mean))
 
         # Sometimes there won't be data here (i.e., on the first few iterations).
@@ -291,14 +338,16 @@ def _get_ranking_functions(
     raw_elem_rows = []
 
     # Element based funtions
-    for one_component in optim_params.element_components:
-        this_comp_rows = score.get_primary_ranking_components(data.get_all_rows_at_frame(one_component, one_frame))
-        raw_elem_rows.append( list(this_comp_rows) )
+    for include_in_opt_comp, elem_component in optim_params.get_all_elem_components():
+        for include_in_opt_filter, one_filter in optim_params.get_all_primary_ranking_fitness_filters():
+            include_in_opt = include_in_opt_comp and include_in_opt_filter
+            this_comp_rows = score.get_primary_ranking_components(include_in_opt, one_filter, data.get_all_rows_at_frame(elem_component, one_frame))
+            raw_elem_rows.append( list(this_comp_rows) )
 
     # Nodal position based functions
     pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
-    for one_func in optim_params.nodal_position_components:
-        this_comp_rows = one_func(design_n_min_1, pos_rows)
+    for include_in_opt, one_func in optim_params.get_all_node_position_components():
+        this_comp_rows = one_func(optim_params, include_in_opt, design_n_min_1, pos_rows)
         raw_elem_rows.append(list(this_comp_rows))
 
     # Compute the primary and overall ranking components
@@ -321,7 +370,8 @@ def _get_ranking_functions(
             score.SecondaryRankingComponent(
                 comp_name=comp_name,
                 elem_id=elem_indices_to_num[elem_id],
-                value=value
+                value=value,
+                include_in_opt=True,
             ) for elem_id, value in idx_to_val.items()
         ]
 
@@ -331,9 +381,21 @@ def _get_ranking_functions(
     sec_rank_name = sec_rank_unsmoothed[0].comp_name + " Smoothed"
     append_additional_output(smoothed, sec_rank_name)
 
+    # Constraint violation filters
+    constraint_violations = []
+    aba_db_rows = list(_get_raw_data_relevant_to_constraint_filter(data, one_frame))
+    for include_in_opt_comp, one_filter_func in optim_params.get_all_filter_components():
+        this_filter_rows = list(one_filter_func(include_in_opt_comp, aba_db_rows))
+        constraint_violations.extend(this_filter_rows)
+        if this_filter_rows:
+            all_ranks.append(this_filter_rows)
+
+    filter_out_priority = _combine_constraint_violations_rows(elem_num_to_indices, constraint_violations)
+
     return RankingResults(
         all_ranks=all_ranks,
         final_ranking_component=smoothed,
+        filter_out_priority=filter_out_priority,
         pos_rows=pos_rows,
     )
 
@@ -373,7 +435,11 @@ def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> t
             elem_num=rank_comp.elem_id,
             stage=_hist_status_stage_from_rank_comp(rank_comp),
             metric_name=rank_comp.comp_name,
-            metric_val=rank_comp.value) for rank_comp_list in ranking_result.all_ranks for rank_comp in rank_comp_list)
+            metric_val=rank_comp.value,
+            constraint_violation_priority=rank_comp.constraint_violation_priority
+        )
+            for rank_comp_list in ranking_result.all_ranks for rank_comp in rank_comp_list
+        )
 
         hist.add_many_status_checks(status_checks)
 
@@ -429,7 +495,11 @@ def produce_new_generation(working_dir: pathlib.Path, design_prev: design.StentD
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
 
-    new_active_elems = evolve_decider(optim_params, design_prev, ranking_result.final_ranking_component, iter_this)
+    # Max number of elements to change in an iteration limits the number of filter-based reorderings.
+    delta_n_elems = int(optim_params.max_change_in_vol_ratio * design_prev.stent_params.divs.fully_populated_elem_count())
+    sensitivity_ranking = ranking_result.get_ordered_ranking_with_filter(delta_n_elems)
+
+    new_active_elems = evolve_decider(optim_params, design_prev, sensitivity_ranking, iter_this)
 
     elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
 
@@ -464,7 +534,7 @@ def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
     iter_to_pos = {}
 
     # Gradient tracking test
-    recent_gradient_input_data = list(get_gradient_input_data(working_dir, db_defs.ElementStress, history_iters))
+    recent_gradient_input_data = list(get_gradient_input_data(optim_params, history_iters))
 
     vicinity_ranking = list(score.get_primary_ranking_local_region_gradient(stent_params, recent_gradient_input_data, statistics.mean))
     for idx, x in enumerate(vicinity_ranking):
@@ -500,7 +570,7 @@ def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
 
         # Element-based effort functions
         for db_data in [stress_rows]: # [peeq_rows]: #, stress_rows]:
-            all_ranks.append(list(score.get_primary_ranking_components(db_data)))
+            all_ranks.append(list(score.get_primary_ranking_components(True, optim_params.single_primary_ranking_fitness_filter, db_data)))
 
 
     sec_rank = list(score.get_secondary_ranking_sum_of_norm(all_ranks))
@@ -540,7 +610,7 @@ def evolve_decider_test():
     iter_n_min_1 = 0
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-178")
+    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-368\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -575,13 +645,13 @@ if __name__ == '__main__':
     # evolve_decider_test()
     # make_plot_tests()
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-179")  # 89
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-378")  # 89
     iter_this = 1
     iter_prev = iter_this - 1
-    make_plot_tests(working_dir, iter_this)
+    # make_plot_tests(working_dir, iter_this)
 
     one_design, one_ranking = process_completed_simulation(working_dir, iter_prev)
-    new_design = produce_new_generation(working_dir, one_design, one_ranking, iter_this)
+    new_design = produce_new_generation(working_dir, one_design, one_ranking, iter_this, "generation.produce_new_generation")
     # print(new_design)
 
 

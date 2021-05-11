@@ -3,6 +3,7 @@ import enum
 import itertools
 import math
 import typing
+import hashlib
 
 from stent_opt.abaqus_model import base, element
 
@@ -10,15 +11,20 @@ from stent_opt.abaqus_model import base, element
 
 # Convert to and from database string formats.
 from stent_opt.struct_opt import history
+from stent_opt.struct_opt.common import BaseModelForDB
 
 # These can be serialised and deserialised
 # from stent_opt.struct_opt.history import nt_to_db_strings, nt_from_db_strings, Snapshot
+from stent_opt.struct_opt.graph_connection import get_elems_in_centre
 
 
-class PolarIndex(typing.NamedTuple):
+class PolarIndex(BaseModelForDB):
     R: int
     Th: int
     Z: int
+
+    class Config:
+        frozen = True
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
@@ -33,7 +39,15 @@ class PolarIndex(typing.NamedTuple):
         r_elems = max(self.R - 1, 1)
         return z_elems * th_elems * r_elems
 
+    def to_tuple(self) -> typing.Tuple[int]:
+        return (self.R, self.Th, self.Z)
 
+    def __lt__(self, other):
+        return self.to_tuple() < other.to_tuple()
+
+    def __hash__(self):
+        """For some reason the default hash was not reliable."""
+        return hash(self.to_tuple())
 
 class Actuation(enum.Enum):
     direct_pressure = enum.auto()
@@ -42,7 +56,7 @@ class Actuation(enum.Enum):
     enforced_displacement_plane = enum.auto()
 
 
-class Balloon(typing.NamedTuple):
+class Balloon(BaseModelForDB):
     inner_radius_ratio: float
     overshoot_ratio: float
     foldover_param: float
@@ -56,7 +70,7 @@ class Balloon(typing.NamedTuple):
         return history.nt_from_db_strings(cls, data)
 
 
-class Cylinder(typing.NamedTuple):
+class Cylinder(BaseModelForDB):
     initial_radius_ratio: float
     overshoot_ratio: float
     divs: PolarIndex
@@ -69,7 +83,21 @@ class Cylinder(typing.NamedTuple):
         return history.nt_from_db_strings(cls, data)
 
 
-class StentParams(typing.NamedTuple):
+class InadmissibleRegion(BaseModelForDB):
+    theta_min: float
+    theta_max: float
+    z_min: float
+    z_max: float
+
+    def to_db_strings(self):
+        yield from history.nt_to_db_strings(self)
+
+    @classmethod
+    def from_db_strings(cls, data):
+        return history.nt_from_db_strings(cls, data)
+
+
+class StentParams(BaseModelForDB):
     angle: float
     divs: PolarIndex
     r_min: float
@@ -79,9 +107,35 @@ class StentParams(typing.NamedTuple):
     balloon: typing.Optional[Balloon]
     cylinder: typing.Optional[Cylinder]
     expansion_ratio: typing.Optional[float]
+    inadmissible_regions: typing.Tuple[InadmissibleRegion]
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
+
+    def polar_index_admissible(self, elem_polar_index: PolarIndex):
+        elem_theta_delta = self.angle / (self.divs.Th - 1)
+        elem_z_delta = self.length / (self.divs.Z - 1)
+
+        def region_is_ok(inadmissible_region):
+            elem_cent_th = (elem_polar_index.Th + 0.5) * elem_theta_delta  # The half is to get to the centroid
+            elem_cent_z = (elem_polar_index.Z + 0.5) * elem_z_delta
+
+            if not inadmissible_region.theta_min < elem_cent_th < inadmissible_region.theta_max:
+                return True
+
+            if not inadmissible_region.z_min < elem_cent_z < inadmissible_region.z_max:
+                return True
+
+            return False
+
+        for inadmissible_region in self.inadmissible_regions:
+            # TODO - get this watertight for off-by-one, rounding and centroid concerns.
+            if not region_is_ok(inadmissible_region):
+                return False
+
+        return True
+
+
 
     @classmethod
     def from_db_strings(cls, data):
@@ -199,11 +253,13 @@ class StentDesign(typing.NamedTuple):
         fully_populated = self.stent_params.divs.fully_populated_elem_count()
         return active_elements / fully_populated
 
+
 def node_to_elem_design_space(divs: PolarIndex) -> PolarIndex:
-    return divs._replace(
-        R=max(divs.R - 1, 1), # Special case if we're at R=1 - that means plate elements.
+    return PolarIndex(
+        R=max(divs.R - 1, 1),  # Special case if we're at R=1 - that means plate elements.
         Th=divs.Th - 1,
-        Z=divs.Z - 1)
+        Z=divs.Z - 1,
+    )
 
 
 def node_from_index(divs: PolarIndex, iR, iTh, iZ):
@@ -228,7 +284,6 @@ def generate_node_indices(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int,
 
         yield iNode, PolarIndex(R=iR, Th=iTh, Z=iZ)
 
-
 def generate_stent_boundary_nodes(stent_params: StentParams) -> typing.Iterable[PolarIndex]:
     """Not in order!"""
 
@@ -245,6 +300,10 @@ def generate_stent_boundary_nodes(stent_params: StentParams) -> typing.Iterable[
 def generate_elem_indices(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int, PolarIndex]]:
     divs_minus_one = node_to_elem_design_space(divs)
     yield from generate_node_indices(divs_minus_one)
+
+
+def generate_elem_indices_admissible(stent_params: StentParams) -> typing.Iterable[typing.Tuple[int, PolarIndex]]:
+    yield from ((i, pe) for i, pe in generate_elem_indices(stent_params.divs) if stent_params.polar_index_admissible(pe))
 
 
 
@@ -504,13 +563,15 @@ def get_single_element_connection(stent_params: StentParams, i: PolarIndex) -> t
 
 def generate_stent_part_elements(stent_params: StentParams) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
     if stent_params.stent_element_dimensions == 2:
-        yield from generate_plate_elements_all(stent_params.divs, stent_params.stent_element_type)
+        all_elems = generate_plate_elements_all(stent_params.divs, stent_params.stent_element_type)
 
     elif stent_params.stent_element_dimensions == 3:
-        yield from generate_brick_elements_all(stent_params.divs)
+        all_elems = generate_brick_elements_all(stent_params.divs)
 
     else:
         raise ValueError(stent_params.stent_element_dimensions)
+
+    yield from ((pe, i, e) for (pe, i, e) in all_elems if stent_params.polar_index_admissible(pe))
 
 
 def generate_brick_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
@@ -774,6 +835,19 @@ def make_initial_all_in(stent_params: StentParams) -> StentDesign:
     )
 
 
+def make_initial_all_in_with_hole(stent_params: StentParams) -> StentDesign:
+    all_in_design = make_initial_all_in(stent_params)
+
+    cent_elems = get_elems_in_centre(all_in_design)
+    without_centre = set(all_in_design.active_elements) - set(cent_elems)
+
+    return StentDesign(
+        stent_params=stent_params,
+        active_elements=frozenset(without_centre),
+        label="WithoutCent",
+    )
+
+
 def make_initial_two_lines(stent_params: StentParams) -> StentDesign:
     """Make a simpler sharp corner with straight edges."""
     width = 0.25
@@ -1025,9 +1099,11 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
     return _make_design_from_line_segments(stent_params, line_z_th_points_and_widths, nominal_radius)
 
 
+# make_initial_design = make_initial_all_in
+make_initial_design = make_initial_all_in_with_hole
 # make_initial_design = make_initial_design_radius_test
 # make_initial_design = make_initial_two_lines
-make_initial_design = make_initial_design_s_curve
+# make_initial_design = make_initial_design_s_curve
 
 
 
@@ -1041,13 +1117,10 @@ def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snap
         label=snapshot.label,
     )
 
-def show_initial_model_test(stent_design: StentDesign):
-    node_positions = {polar_index: xyz.to_xyz() for _, polar_index, xyz in generate_nodes(stent_design.stent_params)}
-    poly_list = []
-    for face_nodes, val in single_faces_and_vals:
-        verts = [node_position[iNode] for iNode in face_nodes]
-
-        poly_list.append( (verts, val))
+def show_initial_model_test():
+    from stent_opt.struct_opt import display
+    stent_design = make_initial_design(basic_stent_params)
+    display.show_design(stent_design)
 
 
 
@@ -1055,12 +1128,12 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=100,  # 31
-        Z=1000,  # 120
+        Th=50,  # 31
+        Z=100,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
-    length=11.0,
+    length=3.5, # Was 11.0
     stent_element_type=element.ElemType.CPS4R,
     balloon=Balloon(
         inner_radius_ratio=0.85,
@@ -1081,14 +1154,40 @@ dylan_r10n1_params = StentParams(
             Z=2,
         ),
     ),
-    expansion_ratio=4.0,  # 2.0
+    expansion_ratio=2.0,  # 2.0
+    inadmissible_regions=[
+        InadmissibleRegion(
+            theta_min=20,
+            theta_max=40,
+            z_min=0,
+            z_max=2.5,
+        )
+    ],
 )
 
-basic_stent_params = dylan_r10n1_params._replace(balloon=None, cylinder=None)
 
+basic_stent_params = dylan_r10n1_params.copy_with_updates(balloon=None, cylinder=None)
+
+print(basic_stent_params)
 
 
 if __name__ == "__main__":
+    show_initial_model_test()
+    #  check we can serialise and deserialse the optimisation parameters
+
+
+    data = dylan_r10n1_params.json(indent=2)
+    print(data)
+
+
+    again = StentParams.parse_raw(data)
+
+    print(again)
+    print(dylan_r10n1_params)
+    assert dylan_r10n1_params == again
+
+
+if 213==234:
 
     ref_length = basic_stent_params.theta_arc_initial / 6
     f = _radius_test_param_curve(basic_stent_params, r_minor=ref_length, r_major=2*ref_length, D=3*ref_length )

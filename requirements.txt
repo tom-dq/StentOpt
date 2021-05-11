@@ -7,4 +7,5 @@ matplotlib
 scipy
 rmsd
 networkx
+pydantic
 

@@ -255,7 +255,7 @@ class SortableDataclass:
 @dataclasses.dataclass(frozen=True)
 class LoadBoundaryBase(SortableDataclass):
     name: str  # All loads have to have this!
-    with_amplitude: typing.Optional["with_amplitude.Amplitude"]
+    with_amplitude: typing.Optional["with_amplitude.AmplitudeBase"]
 
     def produce_inp_lines(self, action: Action) -> typing.Iterable[str]:
         raise NotImplementedError()

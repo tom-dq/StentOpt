@@ -3,7 +3,9 @@ import typing
 import colorsys
 
 import matplotlib as mpl
+from matplotlib.collections import PolyCollection
 import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d as a3
 import matplotlib.colors as mcolors
 import pylab as pl
@@ -116,11 +118,39 @@ def render_status(
     show_polygons(f"{title_prefix} {comp_type}", poly_list, bg_col)
 
 
+def show_design(stent_design: "design.StentDesign"):
+    # This is for 2D designs
 
-def show_polygons(title, poly_list, bg_col):
+    # Oh gawd but this is a one off I swear
+    from stent_opt.struct_opt.design import generate_nodes, generate_stent_part_elements
+    node_position = {iNode: xyz.to_xyz() for iNode, polar_index, xyz in generate_nodes(stent_design.stent_params)}
 
-    ax = a3.Axes3D(pl.figure(figsize=(10.5, 7)))
-    fig = ax.figure
+    poly_list = []
+    for idx, iElem, elem in generate_stent_part_elements(stent_design.stent_params):
+        if idx in stent_design.active_elements:
+            verts = [node_position[iNode] for iNode in elem.connection]
+            poly_list.append((verts, 1.0))
+
+    show_polygons(f"show_design", poly_list, (0.9, 0.9, 0.9), dims=2)
+
+
+
+
+
+def show_polygons(title, poly_list, bg_col, dims: int):
+
+    if dims == 3:
+        is_3d = True
+        ax = a3.Axes3D(pl.figure(figsize=(10.5, 7)))
+        fig = ax.figure
+
+    elif dims == 2:
+        is_3d = False
+        fig = plt.figure(figsize=(10.5, 7))
+        ax = fig.gca()
+
+    else:
+        raise ValueError(dims)
 
     min_c = min(val for _, val in poly_list)
     max_c = max(val for _, val in poly_list)
@@ -147,7 +177,16 @@ def show_polygons(title, poly_list, bg_col):
     all_verts = [vert for vert, _ in poly_list]
     all_colours = [colour_mapping.to_rgba(val) for _, val in poly_list]
 
-    tri = a3.art3d.Poly3DCollection(all_verts)
+    if is_3d:
+        tri = a3.art3d.Poly3DCollection(all_verts)
+
+    else:
+        all_verts_2d = []
+        for one_poly in all_verts:
+            verts_2d =  [(x, y) for x, y, z in one_poly]
+            all_verts_2d.append(verts_2d)
+        tri = PolyCollection(all_verts_2d)
+
     tri.set_facecolors(all_colours)
     # tri.set_edgecolor('k')
 
@@ -155,7 +194,10 @@ def show_polygons(title, poly_list, bg_col):
     ax.set_facecolor(bg_col)
     #fig.patch.set_facecolor(bg_col)
 
-    ax.add_collection3d(tri)
+    if is_3d:
+        ax.add_collection3d(tri)
+    else:
+        ax.add_collection(tri)
 
     # Colourbar
     axins = inset_axes(ax,
@@ -168,15 +210,22 @@ def show_polygons(title, poly_list, bg_col):
 
     fig.colorbar(colour_mapping, cax=axins, orientation='horizontal')
 
-    ax.set_xlim3d(*get_lim(0))
-    ax.set_ylim3d(*get_lim(1))
-    ax.set_zlim3d(*get_lim(2))
+    if is_3d:
+        ax.set_xlim3d(*get_lim(0))
+        ax.set_ylim3d(*get_lim(1))
+        ax.set_zlim3d(*get_lim(2))
 
-    # Hide the 3D axis
-    ax.set_axis_off()
+    else:
+        ax.set_xlim(*get_lim(0))
+        ax.set_ylim(*get_lim(1))
 
-    ax.azim = VIEW_ANGLE.azim
-    ax.elev = VIEW_ANGLE.elev
+
+
+    if is_3d:
+        # Hide the 3D axis
+        ax.set_axis_off()
+        ax.azim = VIEW_ANGLE.azim
+        ax.elev = VIEW_ANGLE.elev
 
     pl.show()
 
