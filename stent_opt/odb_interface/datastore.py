@@ -116,6 +116,13 @@ class Datastore:
             for row in rows:
                 yield named_tuple_class(*row)
 
+    def get_all_rows(self, named_tuple_class):
+        with self.connection:
+            select_string = "SELECT * FROM {0} ORDER BY frame_rowid".format(named_tuple_class.__name__)
+            rows = self.connection.execute(select_string)
+            for row in rows:
+                yield named_tuple_class(*row)
+
     def get_final_history_result(self):
         with self.connection:
             rows = self.connection.execute("SELECT * FROM HistoryResult ORDER BY history_identifier, step_num, simulation_time DESC")
