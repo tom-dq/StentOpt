@@ -85,23 +85,24 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
             # Z may not span the whole thing...
             min_idx_z = min(idx.Z for idx in iNode_to_idx_active.values())
 
-            def get_boundary_node_set(node_idx: design.PolarIndex):
-                # TODO - make "is_in_bottom_chunk" generalisable and more robust.
-                vert_distant = (node_idx.Z - min_idx_z) * stent_params.single_element_z_span
-                is_in_bottom_chunk = vert_distant < 0.5
+            if sub_model_info.is_full_model:
+                def get_boundary_node_set(node_idx: design.PolarIndex):
+                    # TODO - make "is_in_bottom_chunk" generalisable and more robust.
+                    vert_distant = (node_idx.Z - min_idx_z) * stent_params.single_element_z_span
+                    is_in_bottom_chunk = vert_distant < 0.5
 
-                if node_idx.Th == 0 and is_in_bottom_chunk: yield design.GlobalNodeSetNames.PlanarStentTheta0
-                if node_idx.Th == stent_params.divs.Th-1 and is_in_bottom_chunk: yield design.GlobalNodeSetNames.PlanarStentThetaMax
-                if node_idx.Z == min_idx_z: yield design.GlobalNodeSetNames.PlanarStentZMin
+                    if node_idx.Th == 0 and is_in_bottom_chunk: yield design.GlobalNodeSetNames.PlanarStentTheta0
+                    if node_idx.Th == stent_params.divs.Th-1 and is_in_bottom_chunk: yield design.GlobalNodeSetNames.PlanarStentThetaMax
+                    if node_idx.Z == min_idx_z: yield design.GlobalNodeSetNames.PlanarStentZMin
 
-            boundary_set_name_to_nodes = collections.defaultdict(set)
-            for iNode, idx in iNode_to_idx_active.items():
-                for node_set in get_boundary_node_set(idx):
-                    boundary_set_name_to_nodes[node_set.name].add(iNode)
+                boundary_set_name_to_nodes = collections.defaultdict(set)
+                for iNode, idx in iNode_to_idx_active.items():
+                    for node_set in get_boundary_node_set(idx):
+                        boundary_set_name_to_nodes[node_set.name].add(iNode)
 
-            for node_set_name, nodes in boundary_set_name_to_nodes.items():
-                one_node_set = node.NodeSet(stent_part, node_set_name, frozenset(nodes))
-                stent_part.add_node_set(one_node_set)
+                for node_set_name, nodes in boundary_set_name_to_nodes.items():
+                    one_node_set = node.NodeSet(stent_part, node_set_name, frozenset(nodes))
+                    stent_part.add_node_set(one_node_set)
 
         model.add_instance(one_instance)
 
@@ -279,6 +280,7 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
 
 
 def apply_loads(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, sub_model_info: patch_manager.SubModelInfoBase, model: main.AbaqusModel):
+    _create_steps(optim_params, model)
     if sub_model_info.is_sub_model:
         _apply_boundary_conds_submodel(sub_model_info, model)
 
@@ -292,20 +294,25 @@ def _apply_boundary_conds_submodel(sub_model_info: patch_manager.SubModelInfoBas
     stent_part = stent_instance.base_part
     step1 = model.steps[0]
 
+    used_node_nums = set()
+    for one_elem in stent_part.elements.values():
+        used_node_nums.update(one_elem.connection)
+
     for node_num, dof_to_amp in sub_model_info.boundary_node_enforced_displacements():
-        one_bound_node_set = node.NodeSet(stent_part, f"Nodeset-N{node_num}", frozenset({node_num}))
-        stent_part.add_node_set(one_bound_node_set)
+        if node_num in used_node_nums:
+            one_bound_node_set = node.NodeSet(stent_part, f"Nodeset-N{node_num}", frozenset({node_num}))
+            stent_part.add_node_set(one_bound_node_set)
 
-        for dof, amp in dof_to_amp.items():
-            patch_bound_disp = boundary_condition.BoundaryDispRot(
-                name=f"Bound-{node_num}-{dof}",
-                with_amplitude=amp,
-                components=(
-                    boundary_condition.DispRotBoundComponent(node_set=one_bound_node_set, dof=dof, value=1.0),
-                ),
-            )
+            for dof, amp in dof_to_amp.items():
+                patch_bound_disp = boundary_condition.BoundaryDispRot(
+                    name=f"Bound-{node_num}-{dof}",
+                    with_amplitude=amp,
+                    components=(
+                        boundary_condition.DispRotBoundComponent(node_set=one_bound_node_set, dof=dof, value=1.0),
+                    ),
+                )
 
-            model.add_load_starting_from(step1, patch_bound_disp)
+                model.add_load_starting_from(step1, patch_bound_disp)
 
 
 def _apply_loads_full(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
@@ -319,8 +326,7 @@ def _apply_loads_full(optim_params: optimisation_parameters.OptimParams, stent_p
         _apply_loads_pressure(optim_params, stent_params, model)
 
 
-def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
-
+def _create_steps(optim_params: optimisation_parameters.OptimParams, model: main.AbaqusModel):
     step_expand = optim_params.analysis_step_type(
         name=f"ExpandHold",
         step_time=optim_params.time_expansion,
@@ -329,20 +335,22 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
 
     if optim_params.simulation_has_second_step:
         if optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.release:
-            step_two = optim_params.analysis_step_type(
-                name=f"Release",
-                step_time=optim_params.time_released,
-            )
+            step2_name = "Release"
+
         elif optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.oscillate:
-            step_two = optim_params.analysis_step_type(
-                name=f"Oscillate",
-                step_time=optim_params.time_released,
-            )
+            step2_name = "Oscillate"
 
         else:
             raise ValueError(optim_params.post_expansion_behaviour)
 
+        step_two = optim_params.analysis_step_type(
+            name=step2_name,
+            step_time=optim_params.time_released,
+        )
         model.add_step(step_two)
+
+
+def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
 
     # Maximum displacement
     max_displacement = stent_params.theta_arc_initial * (stent_params.expansion_ratio - 1.0)
@@ -409,10 +417,10 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
     )
 
 
-    model.add_load_specific_steps([step_expand], expand_disp)
-    if optim_params.simulation_has_second_step: model.add_load_specific_steps([step_two], step_two_disp)
-    model.add_load_specific_steps([step_expand], hold_base1)
-    if optim_params.simulation_has_second_step: model.add_load_specific_steps([step_two], hold_base2)
+    model.add_load_specific_steps([model.steps[0]], expand_disp)
+    if optim_params.simulation_has_second_step: model.add_load_specific_steps([model.steps[1]], step_two_disp)
+    model.add_load_specific_steps([model.steps[0]], hold_base1)
+    if optim_params.simulation_has_second_step: model.add_load_specific_steps([model.steps[1]], hold_base2)
 
     if optim_params.release_stent_after_expansion:
         # Rebound pressure (kind of like the blood vessel squeezing in).
@@ -436,7 +444,7 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
             value=pressure_load,
         )
 
-        model.add_load_specific_steps([step_two], inner_pressure)
+        model.add_load_specific_steps([model.steps[1]], inner_pressure)
 
 
 def _apply_loads_enforced_disp_rigid_cyl(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
@@ -641,7 +649,8 @@ def make_stent_model(optim_params: optimisation_parameters.OptimParams, stent_de
     model = make_a_stent(optim_params, stent_design, sub_model_info)
     create_surfaces(stent_design.stent_params, model)
     apply_loads(optim_params, stent_design.stent_params, sub_model_info, model)
-    add_interaction(stent_design.stent_params, model)
-    apply_boundaries(stent_design.stent_params, model)
+    if sub_model_info.is_full_model:
+        add_interaction(stent_design.stent_params, model)
+        apply_boundaries(stent_design.stent_params, model)
     print(fn_inp, f"Volume Ratio={stent_design.volume_ratio()}", sep='\t')
     write_model(model, fn_inp)

@@ -502,9 +502,9 @@ def plot_history(hist_fn):
     plt.show()
 
 
-def make_fn_in_dir(working_dir: pathlib.Path, ext: str, iter_num: int):
+def make_fn_in_dir(working_dir: pathlib.Path, ext: str, iter_num: int, suffix: str=''):
     """e.g., iter_num=123 and ext=".inp" """
-    intermediary = working_dir / f'It-{str(iter_num).rjust(6, "0")}.XXX'
+    intermediary = working_dir / f'It-{str(iter_num).rjust(6, "0")}{suffix}.XXX'
     return intermediary.with_suffix(ext)
 
 

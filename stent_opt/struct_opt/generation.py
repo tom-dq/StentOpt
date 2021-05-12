@@ -17,6 +17,9 @@ from stent_opt.abaqus_model import base
 from stent_opt.struct_opt import design, display, score, history, optimisation_parameters
 
 from stent_opt.struct_opt import patch_manager
+from stent_opt.struct_opt import element_bucket
+from stent_opt.struct_opt import construct_model
+
 
 class Tail(enum.Enum):
     bottom = enum.auto()
@@ -408,8 +411,8 @@ def _get_ranking_functions(
     )
 
 
-def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int):
-    """Build the patch submodels"""
+def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Iterable[patch_manager.SubModelInfo]:
+    """Build the patch submodel info"""
 
     db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
     history_db = history.make_history_db(working_dir)
@@ -418,7 +421,8 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int):
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
 
-    elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
+    elem_num_to_indices = {elem_num: polar_index for elem_num, polar_index in design.generate_elem_indices(stent_params.divs)}
+    elem_indices_to_num = {polar_index: elem_num for elem_num, polar_index in elem_num_to_indices.items()}
 
     with history.History(history_db) as hist:
         snapshot_n_min_1 = hist.get_snapshot(iter_prev)
@@ -430,21 +434,60 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int):
 
     candidates_for = get_candidate_elements(optim_params, design_n_min_1)
 
-    with patch_manager.PatchManager() as patch_man:
-        pass
+    # Build the networkx graph so we can get the connectivity easily
+    graph_fe_elems = {
+        elem_num: element_bucket.Element(elem_num, design.get_single_element_connection(stent_params, polar_index))
+        for elem_num, polar_index in elem_num_to_indices.items()
+    }
+
+    graph = element_bucket.build_graph(graph_fe_elems.values())
+
+    with patch_manager.PatchManager() as this_patch_manager:
+        with datastore.Datastore(db_fn_prev) as data:
+            this_patch_manager.ingest_node_pos(data.get_all_frames(), data.get_all_rows(db_defs.NodePos))
+
+        for initial_active_state, elem_idxs in (
+                (True, candidates_for.removal),
+                (False, candidates_for.introduction),
+        ):
+            for polar_index in elem_idxs:
+                reference_elem_num = elem_indices_to_num[polar_index]
+                graph_elem = graph_fe_elems[reference_elem_num]
+
+                boundary_node_nums, interior_fe_elems = element_bucket.get_fe_nodes_on_boundary_interface(graph, optim_params.patch_hops, graph_elem)
+                elem_nums = frozenset(fe_elem.num for fe_elem in interior_fe_elems)
+                for this_trial_active_state in (False, True):
+
+                    yield patch_manager.SubModelInfo(
+                        boundary_node_nums=boundary_node_nums,
+                        patch_manager=this_patch_manager,
+                        stent_design=design_n_min_1,
+                        elem_nums=elem_nums,
+                        reference_elem_num=reference_elem_num,
+                        initial_active_state=initial_active_state,
+                        this_trial_active_state=this_trial_active_state,
+                    )
 
 
 
-
-def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> typing.Tuple[design.StentDesign, RankingResults]:
+def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> typing.Tuple[design.StentDesign, RankingResults, typing.List[str]]:
     """Processes the results of a completed simulation and returns it's design and results to produce the next iteration."""
 
-    db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
     history_db = history.make_history_db(working_dir)
-
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
+
+    # TEMP! For now tack this bit in here. Later, move it out to another function...
+    extra_inp_pool = []
+    for sub_model_info in prepare_patch_models(working_dir, iter_prev):
+        sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, sub_model_info.make_inp_suffix())
+        construct_model.make_stent_model(optim_params, sub_model_info.stent_design, sub_model_info, sub_fn_inp)
+        extra_inp_pool.append(sub_fn_inp)
+
+    # End TEMP
+
+    db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
 
     # Go between num (1234) and idx (5, 6, 7)...
     elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
@@ -516,7 +559,7 @@ def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> t
         ]
         hist.add_many_global_status_checks(vol_ratios)
 
-    return design_n_min_1, ranking_result
+    return design_n_min_1, ranking_result, extra_inp_pool
 
 T_ProdNewGen = typing.Callable[
     [pathlib.Path, design.StentDesign, RankingResults, int, str],
@@ -681,12 +724,19 @@ if __name__ == '__main__':
     # evolve_decider_test()
     # make_plot_tests()
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-378")  # 89
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-406")  # 89
     iter_this = 1
     iter_prev = iter_this - 1
     # make_plot_tests(working_dir, iter_this)
 
-    one_design, one_ranking = process_completed_simulation(working_dir, iter_prev)
+    one_design, one_ranking, extra_inp_pool = process_completed_simulation(working_dir, iter_prev)
+
+    from stent_opt.make_stent import run_model
+    from stent_opt.struct_opt.optimisation_parameters import active
+    for sub_inp in extra_inp_pool:
+        print(sub_inp)
+        run_model(active, sub_inp, force_single_core=True)
+
     new_design = produce_new_generation(working_dir, one_design, one_ranking, iter_this, "generation.produce_new_generation")
     # print(new_design)
 

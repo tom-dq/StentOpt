@@ -45,7 +45,7 @@ class Bucket:
 
 
 
-def _build_graph(elems: typing.Iterable[Element]) -> networkx.Graph:
+def build_graph(elems: typing.Iterable[Element]) -> networkx.Graph:
 
     """Confusingly, the "Nodes" in the graph are the elements in the FE mesh"""
     G = networkx.Graph()
@@ -63,9 +63,52 @@ def _build_graph(elems: typing.Iterable[Element]) -> networkx.Graph:
 
     for fe_node, fe_elems in node_to_elems.items():
         for fe_elem1, fe_elem2 in itertools.permutations(fe_elems, 2):
-            G.add_edge(fe_elem1, fe_elem2)
+            G.add_edge(fe_elem1, fe_elem2, fe_node_num=fe_node)
 
     return G
+
+
+
+def get_fe_nodes_on_boundary_interface(g: networkx.Graph, k_cutoff: int, fe_elem_source: Element
+            ) -> typing.Tuple[ typing.FrozenSet[int], typing.FrozenSet[Element] ]:
+
+    def get_fe_elems_at_cutoff(k):
+        all_elems_within = set()
+        elems_on_interface = set()
+        for fe_elem, level in networkx.single_source_shortest_path_length(g, fe_elem_source, k).items():
+            all_elems_within.add(fe_elem)
+            if k == level:
+                elems_on_interface.add(fe_elem)
+
+        return elems_on_interface, all_elems_within
+
+    inside_interface, inside_all_fe_elems = get_fe_elems_at_cutoff(k_cutoff)
+    outside_interface, _ = get_fe_elems_at_cutoff(k_cutoff+1)
+
+    # Edges between the "inside" and "outside" elements are the interface nodes.
+    boundary_nodes = set()
+    for fe_elem_inside, fe_elem_outside, fe_node_num in networkx.edge_boundary(g, inside_interface, outside_interface, data="fe_node_num"):
+        boundary_nodes.add(fe_node_num)
+
+    return frozenset(boundary_nodes), frozenset(inside_all_fe_elems)
+
+
+
+def test_boundary():
+    elems = [
+        Element(11, (111,1111,)),
+        Element(22, (111,222,)),
+        Element(33, (222,333,)),
+        Element(44, (333,444,)),
+        Element(55, (444,555,)),
+        Element(66, (555,666,)),
+        Element(77, (666,6666,)),
+    ]
+
+    g = build_graph(elems)
+
+    one_hop, _ = get_fe_nodes_on_boundary_interface(g, 1, elems[0])
+    assert one_hop == frozenset({222,})
 
 
 def network_traverse_test():
@@ -77,13 +120,14 @@ def network_traverse_test():
         Element(5, (1001, 1002, 1003, 1004)),
     ]
 
-    G = _build_graph(elems)
+    G = build_graph(elems)
 
     for c in networkx.connected_components(G):
         print(c)
 
 
     print(G)
+
 
 TElem = typing.TypeVar("TElem")
 def get_connected_elements(elem_to_conn: typing.Dict[TElem, typing.Tuple[int]]) -> typing.Iterable[ typing.Set[TElem] ]:
@@ -140,4 +184,4 @@ def test_buckets():
     print("All OK")
 
 if __name__ == "__main__":
-    network_traverse_test()
+    test_boundary()

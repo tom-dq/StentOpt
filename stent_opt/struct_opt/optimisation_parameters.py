@@ -72,10 +72,18 @@ class OptimParams(typing.NamedTuple):
     analysis_step_type: typing.Type[step.StepBase]
     nodes_shared_with_old_design_to_expand: int    # Only let new elements come in which are attached to existing elements with at least this many nodes. Zero to allow all elements.
     nodes_shared_with_old_design_to_contract: int  # Only let new elements go out which are attached to existing elements with at least this many nodes. Zero to allow all elements.
+    patch_hops: typing.Optional[int]  # 0 means patch is just the element in question. 1 means a maximum 3x3 patch, 2 means maximum 5x5, etc. None means no patches
 
     @property
     def release_stent_after_expansion(self) -> bool:
         return bool(self.time_released)
+
+    @property
+    def do_patch_analysis(self) -> bool:
+        if self.patch_hops == None:
+            return False
+
+        return True
 
     @property
     def simulation_has_second_step(self) -> bool:
@@ -258,12 +266,13 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.02,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=0.8,  # Was 2.0
-    time_released=0.5,
+    time_expansion=2.0,  # Was 2.0
+    time_released=2.0,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
+    patch_hops=2,
 )
 
 active = active._replace(region_gradient=None)  # TODO - put this back after done with all the compel testing

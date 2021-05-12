@@ -38,14 +38,18 @@ def kill_process_id(proc_id: int):
 
     process.kill()
 
-def run_model(optim_params, inp_fn):
+def run_model(optim_params, inp_fn, force_single_core: bool):
     old_working_dir = os.getcwd()
 
 
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    n_cpus = this_computer.n_cpus_abaqus_explicit if optim_params.is_explicit else this_computer.n_cpus_abaqus_implicit
+    if force_single_core:
+        n_cpus = 1
+    else:
+        n_cpus = this_computer.n_cpus_abaqus_explicit if optim_params.is_explicit else this_computer.n_cpus_abaqus_implicit
+
     args = ['abaqus.bat', f'cpus={n_cpus}', f'job={fn_solo}']
 
     # This seems to need to come right after "job" in the argument list
@@ -105,7 +109,7 @@ def _from_scract_setup(working_dir):
     current_design = design.make_initial_design(stent_params)
     construct_model.make_stent_model(optim_params, current_design, patch_manager.FullModelInfo(), fn_inp)
 
-    run_model(optim_params, fn_inp)
+    run_model(optim_params, fn_inp, force_single_core=False)
     perform_extraction(
         history.make_fn_in_dir(working_dir, ".odb", starting_i),
         history.make_fn_in_dir(working_dir, ".db", starting_i),
@@ -150,14 +154,18 @@ def process_pool_run_and_process(run_one_args: RunOneArgs):
     fn_inp = history.make_fn_in_dir(run_one_args.working_dir, ".inp", run_one_args.iter_this)
     fn_odb = history.make_fn_in_dir(run_one_args.working_dir, ".odb", run_one_args.iter_this)
 
-    run_model(run_one_args.optim_params, fn_inp)
+    run_model(run_one_args.optim_params, fn_inp, force_single_core=False)
 
     fn_db_current = history.make_fn_in_dir(run_one_args.working_dir, ".db", run_one_args.iter_this)
 
     with lock:
         perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract)
 
-    generation.process_completed_simulation(run_one_args.working_dir, run_one_args.iter_this)
+    _, _, extra_inp_pool = generation.process_completed_simulation(run_one_args.working_dir, run_one_args.iter_this)
+
+    for sub_inp in extra_inp_pool:
+        print(sub_inp)
+        run_model(run_one_args.optim_params, sub_inp, force_single_core=True)
 
     return f"[{multiprocessing.current_process().name}] {run_one_args.iter_this} done."
 
@@ -205,7 +213,10 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
     while True:
         # Extract ONE from the previous generation
-        one_design, one_ranking = generation.process_completed_simulation(working_dir, iter_prev)
+        one_design, one_ranking, extra_inp_pool = generation.process_completed_simulation(working_dir, iter_prev)
+        for sub_inp in extra_inp_pool:
+            print(sub_inp)
+            run_model(optim_params, sub_inp, force_single_core=True)
 
         all_new_designs_this_iter = []
         done = False
@@ -258,6 +269,11 @@ if __name__ == "__main__":
     stent_params = design.basic_stent_params
     optim_params = optimisation_parameters.active._replace(working_dir=str(this_computer.working_dir))
     # optim_params = optimisation_parameters.active._replace(working_dir=r"E:\Simulations\StentOpt\AA-256")
+
+    # Check the serialisation
+    optim_param_data = list(optim_params.to_db_strings())
+    optim_param_data_again = optimisation_parameters.OptimParams.from_db_strings(optim_param_data)
+    assert optim_params == optim_param_data_again
 
     do_opt(stent_params, optim_params)
 

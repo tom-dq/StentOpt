@@ -1,5 +1,6 @@
 import abc
 import collections
+import dataclasses
 import typing
 
 from stent_opt.odb_interface import db_defs
@@ -13,9 +14,11 @@ T_DataList = typing.List[typing.Tuple[float, float]]
 class PatchManager:
     """Handles the patch boundary conditions, etc"""
     node_dof_to_list: typing.Dict[typing.Tuple[int, int], T_DataList] = None
+    nodes_we_have_results_for: typing.Set[int] = None
 
     def __init__(self):
         self.node_dof_to_list = collections.defaultdict(list)
+        self.nodes_we_have_results_for = set()
 
     def __enter__(self):
         return self
@@ -28,6 +31,7 @@ class PatchManager:
         # Look up the total simulation time from the frame
         frame_rowid_to_total_time = {frame.rowid: frame.simulation_time for frame in all_frames}
         for node_pos in node_pos_rows:
+            self.nodes_we_have_results_for.add(node_pos.node_num)
             simulation_time = frame_rowid_to_total_time[node_pos.frame_rowid]
             for dof, val in ( (X, node_pos.X), (Y, node_pos.Y) ):
                 key = (node_pos.node_num, dof)
@@ -49,18 +53,20 @@ class PatchManager:
         def gen_points():
             prev_point = (-1234, -2345)  # I know I know but as if that's ever going to be in there...
             for point in working_list:
-                time_close = abs(point[0] - prev_point[0]) > EPS
-                if time_close:
+                time_decent_step = abs(point[0] - prev_point[0]) > EPS
+                if time_decent_step:
                     prev_point = point
                     yield point
 
                 else:
-                    disp_close = abs(point[1] - prev_point[1]) > EPS
+                    disp_close = abs(point[1] - prev_point[1]) < EPS
                     if disp_close:
                         # This is fine...
                         pass
 
                     else:
+                        print(prev_point)
+                        print(point)
                         raise ValueError(f"Got two points with close time but not close displacements... {prev_point} vs {point}.")
 
         return list(gen_points())
@@ -74,39 +80,67 @@ class PatchManager:
         )
 
 T_nodenum_dof_amp = typing.Tuple[int, typing.Dict[int, amplitude.Amplitude]]
+
+@dataclasses.dataclass()
 class SubModelInfoBase:
-    is_sub_model: bool = None
-    boundary_node_nums: typing.FrozenSet[int] = None
-    patch_manager: PatchManager = None
+    boundary_node_nums: typing.FrozenSet[int]
+    patch_manager: PatchManager
 
     @abc.abstractmethod
     def elem_in_submodel(self, elem_num: int) -> bool:
         raise NotImplementedError()
 
+    @property
+    @abc.abstractmethod
+    def is_sub_model(self) -> bool:
+        raise NotImplementedError()
+
+    @property
+    def is_full_model(self) -> bool:
+        return not self.is_sub_model
+
     def boundary_node_enforced_displacements(self) -> typing.Iterable[T_nodenum_dof_amp]:
         # This will only ever do anything for the real submodel
         for node_num in self.boundary_node_nums:
-            this_node_dict = {dof: self.patch_manager.produce_amplitude_for(node_num, dof) for dof in (X, Y)}
-            yield node_num, this_node_dict
+            if node_num in self.patch_manager.nodes_we_have_results_for:
+                this_node_dict = {dof: self.patch_manager.produce_amplitude_for(node_num, dof) for dof in (X, Y)}
+                yield node_num, this_node_dict
 
 
+@dataclasses.dataclass()
 class FullModelInfo(SubModelInfoBase):
-    is_sub_model = False
     boundary_node_nums: typing.FrozenSet[int] = frozenset()
+    patch_manager: PatchManager = None
+
     def elem_in_submodel(self, elem_num: int) -> bool:
         return True
 
+    @property
+    def is_sub_model(self) -> bool:
+        return False
 
+
+@dataclasses.dataclass()
 class SubModelInfo(SubModelInfoBase):
-    is_sub_model = True
-    patch_manager: PatchManager = None
-    elem_nums: typing.FrozenSet[int] = None
-    boundary_node_nums: typing.FrozenSet[int] = None
+    boundary_node_nums: typing.FrozenSet[int]
+    patch_manager: PatchManager
+    stent_design: typing.Any
 
-    def __init__(self, patch_manager: PatchManager, elem_nums: typing.Iterable[int], boundary_nodes: typing.Iterable[int]):
-        self.patch_manager = patch_manager
-        self.elem_nums = frozenset(elem_nums)
-        self.boundary_node_nums = frozenset(boundary_nodes)
+    elem_nums: typing.FrozenSet[int]
+    reference_elem_num: int
+    initial_active_state: bool
+    this_trial_active_state: bool
 
     def elem_in_submodel(self, elem_num: int) -> bool:
+        if elem_num == self.reference_elem_num:
+            return self.this_trial_active_state
+
         return elem_num in self.elem_nums
+
+    @property
+    def is_sub_model(self) -> bool:
+        return True
+
+    def make_inp_suffix(self) -> str:
+        state = "On" if self.this_trial_active_state else "Off"
+        return f"-N{self.reference_elem_num}-{state}"
