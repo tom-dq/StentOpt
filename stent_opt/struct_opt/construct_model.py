@@ -10,7 +10,7 @@ from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalNode
 from stent_opt.struct_opt import patch_manager
 
 
-def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign):
+def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign, sub_model_info: patch_manager.SubModelInfoBase):
 
     model = main.AbaqusModel("StentModel")
 
@@ -68,9 +68,9 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
             stent_part.add_node_validated(iNode, one_node_polar.to_xyz())
 
         # Make the elements.
-        for idx, iElem, one_elem in design.generate_stent_part_elements(stent_params):
-            if idx in stent_design.active_elements:
-                stent_part.add_element_validate(iElem, one_elem)
+        for idx, elem_num, one_elem in design.generate_stent_part_elements(stent_params):
+            if idx in stent_design.active_elements and sub_model_info.elem_in_submodel(elem_num):
+                stent_part.add_element_validate(elem_num, one_elem)
 
         one_instance = instance.Instance(base_part=stent_part)
 
@@ -278,7 +278,37 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
             create_elem_surface(instance_cyl, all_cyl_elements, GlobalSurfNames.CYL_INNER, surface.SurfaceFace.SNEG)
 
 
-def apply_loads(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
+def apply_loads(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, sub_model_info: patch_manager.SubModelInfoBase, model: main.AbaqusModel):
+    if sub_model_info.is_sub_model:
+        _apply_boundary_conds_submodel(sub_model_info, model)
+
+    else:
+        _apply_loads_full(optim_params, stent_params, model)
+
+
+def _apply_boundary_conds_submodel(sub_model_info: patch_manager.SubModelInfoBase, model: main.AbaqusModel):
+
+    stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
+    stent_part = stent_instance.base_part
+    step1 = model.steps[0]
+
+    for node_num, dof_to_amp in sub_model_info.boundary_node_enforced_displacements():
+        one_bound_node_set = node.NodeSet(stent_part, f"Nodeset-N{node_num}", frozenset({node_num}))
+        stent_part.add_node_set(one_bound_node_set)
+
+        for dof, amp in dof_to_amp.items():
+            patch_bound_disp = boundary_condition.BoundaryDispRot(
+                name=f"Bound-{node_num}-{dof}",
+                with_amplitude=amp,
+                components=(
+                    boundary_condition.DispRotBoundComponent(node_set=one_bound_node_set, dof=dof, value=1.0),
+                ),
+            )
+
+            model.add_load_starting_from(step1, patch_bound_disp)
+
+
+def _apply_loads_full(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
     if stent_params.actuation == Actuation.rigid_cylinder:
         _apply_loads_enforced_disp_rigid_cyl(optim_params, stent_params, model)
 
@@ -608,9 +638,9 @@ def write_model(model: main.AbaqusModel, fn_inp):
 
 
 def make_stent_model(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign, sub_model_info: patch_manager.SubModelInfoBase, fn_inp: str):
-    model = make_a_stent(optim_params, stent_design)
+    model = make_a_stent(optim_params, stent_design, sub_model_info)
     create_surfaces(stent_design.stent_params, model)
-    apply_loads(optim_params, stent_design.stent_params, model)
+    apply_loads(optim_params, stent_design.stent_params, sub_model_info, model)
     add_interaction(stent_design.stent_params, model)
     apply_boundaries(stent_design.stent_params, model)
     print(fn_inp, f"Volume Ratio={stent_design.volume_ratio()}", sep='\t')

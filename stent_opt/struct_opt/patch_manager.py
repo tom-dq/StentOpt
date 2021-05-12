@@ -5,7 +5,7 @@ import typing
 from stent_opt.odb_interface import db_defs
 from stent_opt.abaqus_model import amplitude
 
-X, Y = 0, 1
+X, Y = 1, 2
 
 
 T_DataList = typing.List[typing.Tuple[float, float]]
@@ -73,30 +73,35 @@ class PatchManager:
             data=xy_data,
         )
 
-
+T_nodenum_dof_amp = typing.Tuple[int, typing.Dict[int, amplitude.Amplitude]]
 class SubModelInfoBase:
+    is_sub_model: bool = None
+    boundary_node_nums: typing.FrozenSet[int] = None
+    patch_manager: PatchManager = None
+
     @abc.abstractmethod
     def elem_in_submodel(self, elem_num: int) -> bool:
         raise NotImplementedError()
 
-    @abc.abstractmethod
-    def node_enforced_displacement(self, node_num: int, dof: int) -> typing.Optional[amplitude.Amplitude]:
-        raise NotImplementedError()
+    def boundary_node_enforced_displacements(self) -> typing.Iterable[T_nodenum_dof_amp]:
+        # This will only ever do anything for the real submodel
+        for node_num in self.boundary_node_nums:
+            this_node_dict = {dof: self.patch_manager.produce_amplitude_for(node_num, dof) for dof in (X, Y)}
+            yield node_num, this_node_dict
 
 
 class FullModelInfo(SubModelInfoBase):
+    is_sub_model = False
+    boundary_node_nums: typing.FrozenSet[int] = frozenset()
     def elem_in_submodel(self, elem_num: int) -> bool:
         return True
 
-    def node_enforced_displacement(self, node_num: int, dof: int) -> typing.Optional[amplitude.Amplitude]:
-        return None
-
 
 class SubModelInfo(SubModelInfoBase):
+    is_sub_model = True
     patch_manager: PatchManager = None
     elem_nums: typing.FrozenSet[int] = None
     boundary_node_nums: typing.FrozenSet[int] = None
-
 
     def __init__(self, patch_manager: PatchManager, elem_nums: typing.Iterable[int], boundary_nodes: typing.Iterable[int]):
         self.patch_manager = patch_manager
@@ -105,10 +110,3 @@ class SubModelInfo(SubModelInfoBase):
 
     def elem_in_submodel(self, elem_num: int) -> bool:
         return elem_num in self.elem_nums
-
-    def node_enforced_displacement(self, node_num: int, dof: int) -> typing.Optional[amplitude.Amplitude]:
-        if node_num in self.boundary_node_nums:
-            return self.patch_manager.produce_amplitude_for(node_num, dof)
-
-
-

@@ -16,6 +16,7 @@ from stent_opt.odb_interface import datastore, db_defs
 from stent_opt.abaqus_model import base
 from stent_opt.struct_opt import design, display, score, history, optimisation_parameters
 
+from stent_opt.struct_opt import patch_manager
 
 class Tail(enum.Enum):
     bottom = enum.auto()
@@ -405,6 +406,34 @@ def _get_ranking_functions(
         filter_out_priority=filter_out_priority,
         pos_rows=pos_rows,
     )
+
+
+def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int):
+    """Build the patch submodels"""
+
+    db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
+    history_db = history.make_history_db(working_dir)
+
+    with history.History(history_db) as hist:
+        stent_params = hist.get_stent_params()
+        optim_params = hist.get_opt_params()
+
+    elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
+
+    with history.History(history_db) as hist:
+        snapshot_n_min_1 = hist.get_snapshot(iter_prev)
+        design_n_min_1 = design.StentDesign(
+            stent_params=stent_params,
+            active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements)),
+            label=snapshot_n_min_1.label,
+        )
+
+    candidates_for = get_candidate_elements(optim_params, design_n_min_1)
+
+    with patch_manager.PatchManager() as patch_man:
+        pass
+
+
 
 
 def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> typing.Tuple[design.StentDesign, RankingResults]:
