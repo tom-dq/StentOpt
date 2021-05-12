@@ -69,7 +69,7 @@ class StatusCheck(typing.NamedTuple):
     stage: StatusCheckStage
     metric_name: str
     metric_val: float
-    constraint_violation_priority: float
+    constraint_violation_priority: float = 0.0
 
     def for_db_form(self):
         return self._replace(stage=self.stage.name)
@@ -135,7 +135,13 @@ class GlobalStatusType(enum.Enum):
             return sum(elemental_vals)
 
         elif self in (GlobalStatusType.aggregate_p10, GlobalStatusType.aggregate_p90):
-            quants = statistics.quantiles(elemental_vals, n=10)
+            try:
+                quants = statistics.quantiles(elemental_vals, n=10)
+
+            except statistics.StatisticsError:
+                # Need two or more data points - if we don't have that, just use the mean
+                return GlobalStatusType.aggregate_mean.compute_aggregate(elemental_vals)
+
             if self == GlobalStatusType.aggregate_p10:
                 return quants[0]
 

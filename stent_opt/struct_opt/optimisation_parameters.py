@@ -242,8 +242,8 @@ active = OptimParams(
     ],
     primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.high_value],
     element_components=[
-        db_defs.ElementPEEQ,
-        # db_defs.ElementStress,
+        # db_defs.ElementPEEQ,
+        db_defs.ElementStress,
         # db_defs.ElementEnergyElastic,
         # db_defs.ElementEnergyPlastic,
         db_defs.ElementFatigueResult,
@@ -259,7 +259,7 @@ active = OptimParams(
     abaqus_output_time_interval=0.03,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
     time_expansion=1.0,  # Was 2.0
-    time_released=1.0,
+    time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,

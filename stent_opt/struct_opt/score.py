@@ -97,6 +97,9 @@ def _get_primary_ranking_components_raw(include_in_opt, nt_rows) -> typing.Itera
     """All the nt_rows should be the same type"""
 
     nt_rows = list(nt_rows)
+    if not nt_rows:
+        return
+
     nt_row = nt_rows[0]
 
     if isinstance(nt_row, db_defs.ElementPEEQ):
@@ -166,6 +169,10 @@ def _get_primary_ranking_deviation(include_in_opt: bool, central_value_producer,
 
 
 def get_primary_ranking_components(include_in_opt: bool, one_filter: common.PrimaryRankingComponentFitnessFilter, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+
+    nt_rows = list(nt_rows)
+    if not nt_rows:
+        return
 
     if one_filter == common.PrimaryRankingComponentFitnessFilter.high_value:
         nt_producer = _get_primary_ranking_components_raw(include_in_opt, nt_rows)
@@ -415,14 +422,14 @@ def get_primary_ranking_macro_deformation(optim_params: optimisation_parameters.
 
 
 def constraint_filter_not_yielded_out(include_in_opt, nt_rows) -> typing.Iterable[FilterRankingComponent]:
-    PEEQ_LIMIT = 0.02
+    PEEQ_LIMIT = 0.05
 
     for nt_row in nt_rows:
         if isinstance(nt_row, db_defs.ElementPEEQ):
             should_filter_out = nt_row.PEEQ > PEEQ_LIMIT
             if should_filter_out:
                 yield FilterRankingComponent(
-                    comp_name="PEEQAllowable",
+                    comp_name=f"PEEQAllowable>{PEEQ_LIMIT}",
                     elem_id=nt_row.elem_num,
                     value=nt_row.PEEQ,
                     include_in_opt=include_in_opt,
@@ -437,7 +444,7 @@ def constraint_filter_within_fatigue_life(include_in_opt, nt_rows) -> typing.Ite
             should_filter_out = nt_row.LGoodman > FATIGUE_LIMIT
             if should_filter_out:
                 yield FilterRankingComponent(
-                    comp_name="GoodmanAllowable",
+                    comp_name=f"GoodmanAllowable>{FATIGUE_LIMIT}",
                     elem_id=nt_row.elem_num,
                     value=nt_row.LGoodman,
                     include_in_opt=include_in_opt,
@@ -487,7 +494,7 @@ def _removed_observer_only_components(list_of_lists: typing.List[typing.List[Pri
     for one_list in list_of_lists:
         for_inclusion_set = {prc.include_in_opt for prc in one_list}
         if len(for_inclusion_set) != 1:
-            raise ValueError("How did we get here?", for_inclusion_set, one_list[0])
+            raise ValueError("How did we get here?", for_inclusion_set, one_list[0:])
 
         for_inclusion = for_inclusion_set.pop()
         if for_inclusion:

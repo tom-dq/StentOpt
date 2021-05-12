@@ -175,6 +175,12 @@ def _get_all_admissible_elements(stent_params):
     fully_populated = design.generate_elem_indices_admissible(stent_params)
     return frozenset(elemIdx for _, elemIdx in fully_populated)
 
+@functools.lru_cache()
+def _get_all_elements(stent_params):
+    fully_populated = design.generate_elem_indices(stent_params.divs)
+    return frozenset(elemIdx for _, elemIdx in fully_populated)
+
+
 
 def get_candidate_elements(
         optim_params: optimisation_parameters.OptimParams,
@@ -184,6 +190,7 @@ def get_candidate_elements(
     """Figure out which elements can come and go for the next iteration"""
 
     fully_populated_indices = _get_all_admissible_elements(design_n_min_1.stent_params)
+    fully_populated_indices_including_inadmissable = _get_all_elements(design_n_min_1.stent_params)
 
     def get_adj_elements(last_iter_elems, threshold: int):
         # Prepare the set of nodes to which eligible elements are attached.
@@ -213,7 +220,7 @@ def get_candidate_elements(
 
         return frozenset(working_set)
 
-    indicies_holes = fully_populated_indices - design_n_min_1.active_elements
+    indicies_holes = fully_populated_indices_including_inadmissable - design_n_min_1.active_elements
 
     return CandidatesFor(
         removal=get_adj_elements(indicies_holes, optim_params.nodes_shared_with_old_design_to_contract),

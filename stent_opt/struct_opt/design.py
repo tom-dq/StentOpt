@@ -1099,8 +1099,8 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
     return _make_design_from_line_segments(stent_params, line_z_th_points_and_widths, nominal_radius)
 
 
-# make_initial_design = make_initial_all_in
-make_initial_design = make_initial_all_in_with_hole
+make_initial_design = make_initial_all_in
+# make_initial_design = make_initial_all_in_with_hole
 # make_initial_design = make_initial_design_radius_test
 # make_initial_design = make_initial_two_lines
 # make_initial_design = make_initial_design_s_curve
@@ -1128,8 +1128,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=50,  # 31
-        Z=100,  # 120
+        Th=30,  # 31
+        Z=60,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
