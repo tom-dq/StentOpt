@@ -10,6 +10,7 @@ from stent_opt.struct_opt import design
 from stent_opt.struct_opt import construct_model
 from stent_opt.struct_opt.design import StentParams
 from stent_opt.struct_opt import generation, optimisation_parameters
+from stent_opt.struct_opt import patch_manager
 # from stent_opt.struct_opt import generation_FORCE, chains
 
 from stent_opt.struct_opt import history
@@ -102,7 +103,7 @@ def _from_scract_setup(working_dir):
     starting_i = 0
     fn_inp = history.make_fn_in_dir(working_dir, ".inp", starting_i)
     current_design = design.make_initial_design(stent_params)
-    construct_model.make_stent_model(optim_params, current_design, fn_inp)
+    construct_model.make_stent_model(optim_params, current_design, patch_manager.FullModelInfo(), fn_inp)
 
     run_model(optim_params, fn_inp)
     perform_extraction(
@@ -220,7 +221,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
             fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_this)
 
-            construct_model.make_stent_model(optim_params, one_new_design, fn_inp)
+            construct_model.make_stent_model(optim_params, one_new_design, patch_manager.FullModelInfo(), fn_inp)
 
             arg_list.append(RunOneArgs(working_dir, optim_params, iter_this, one_design.stent_params.nodal_z_override_in_odb, working_dir_extract))
 

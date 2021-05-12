@@ -7,6 +7,8 @@ from stent_opt.struct_opt import optimisation_parameters, design
 from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalNodeSetNames, Actuation, StentParams, \
     GlobalSurfNames
 
+from stent_opt.struct_opt import patch_manager
+
 
 def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign):
 
@@ -605,7 +607,7 @@ def write_model(model: main.AbaqusModel, fn_inp):
             fOut.write(l + "\n")
 
 
-def make_stent_model(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign, fn_inp: str):
+def make_stent_model(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign, sub_model_info: patch_manager.SubModelInfoBase, fn_inp: str):
     model = make_a_stent(optim_params, stent_design)
     create_surfaces(stent_design.stent_params, model)
     apply_loads(optim_params, stent_design.stent_params, model)

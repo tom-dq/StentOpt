@@ -1,4 +1,4 @@
-
+import abc
 import collections
 import typing
 
@@ -6,6 +6,7 @@ from stent_opt.odb_interface import db_defs
 from stent_opt.abaqus_model import amplitude
 
 X, Y = 0, 1
+
 
 T_DataList = typing.List[typing.Tuple[float, float]]
 
@@ -71,3 +72,43 @@ class PatchManager:
             name=f"N{node_num}-{dof_name}",
             data=xy_data,
         )
+
+
+class SubModelInfoBase:
+    @abc.abstractmethod
+    def elem_in_submodel(self, elem_num: int) -> bool:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def node_enforced_displacement(self, node_num: int, dof: int) -> typing.Optional[amplitude.Amplitude]:
+        raise NotImplementedError()
+
+
+class FullModelInfo(SubModelInfoBase):
+    def elem_in_submodel(self, elem_num: int) -> bool:
+        return True
+
+    def node_enforced_displacement(self, node_num: int, dof: int) -> typing.Optional[amplitude.Amplitude]:
+        return None
+
+
+class SubModelInfo(SubModelInfoBase):
+    patch_manager: PatchManager = None
+    elem_nums: typing.FrozenSet[int] = None
+    boundary_node_nums: typing.FrozenSet[int] = None
+
+
+    def __init__(self, patch_manager: PatchManager, elem_nums: typing.Iterable[int], boundary_nodes: typing.Iterable[int]):
+        self.patch_manager = patch_manager
+        self.elem_nums = frozenset(elem_nums)
+        self.boundary_node_nums = frozenset(boundary_nodes)
+
+    def elem_in_submodel(self, elem_num: int) -> bool:
+        return elem_num in self.elem_nums
+
+    def node_enforced_displacement(self, node_num: int, dof: int) -> typing.Optional[amplitude.Amplitude]:
+        if node_num in self.boundary_node_nums:
+            return self.patch_manager.produce_amplitude_for(node_num, dof)
+
+
+
