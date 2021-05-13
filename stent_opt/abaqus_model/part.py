@@ -26,19 +26,24 @@ class Part:
     def name_instance(self) -> str:
         return f"{self.name}-1"
 
-    def add_node_validated(self, iNode: int, node: base.XYZ):
+    def add_node_validated(self, iNode: int, node: base.XYZ, node_elem_offset: int):
         """Adds a node and validates it."""
         if not isinstance(node, base.XYZ):
             raise ValueError(node)
 
-        self.nodes[iNode] = node
+        self.nodes[iNode + node_elem_offset] = node
 
-    def add_element_validate(self, iElem: int, element: element.Element):
+    def add_element_validate(self, iElem: int, in_element: element.Element, node_elem_offset: int = 0):
         """Adds an element and makes sure all the nodes it references exist."""
-        if not all(x in self.nodes for x in element.connection):
-            raise ValueError(f"unconnected nodes on {element}")
 
-        self.elements[iElem] = element
+        # Transform the element if needs be
+        iElem_offset = iElem + node_elem_offset
+        element_offset = element.Element(name=in_element.name, connection=tuple(iNode+node_elem_offset for iNode in in_element.connection))
+
+        if not all(x in self.nodes for x in element_offset.connection):
+            raise ValueError(f"unconnected nodes on {element_offset}")
+
+        self.elements[iElem_offset] = element_offset
 
 
     def produce_inp_lines(self) -> typing.Iterable[str]:

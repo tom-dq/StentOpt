@@ -85,6 +85,7 @@ T_nodenum_dof_amp = typing.Tuple[int, typing.Dict[int, amplitude.Amplitude]]
 class SubModelInfoBase:
     boundary_node_nums: typing.FrozenSet[int]
     patch_manager: PatchManager
+    node_elem_offset: int
 
     @abc.abstractmethod
     def elem_in_submodel(self, elem_num: int) -> bool:
@@ -106,11 +107,22 @@ class SubModelInfoBase:
                 this_node_dict = {dof: self.patch_manager.produce_amplitude_for(node_num, dof) for dof in (X, Y)}
                 yield node_num, this_node_dict
 
+    @abc.abstractmethod
+    def real_to_model_node(self, node_num: int) -> int:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def real_to_model_elem(self, elem_num: int) -> int:
+        raise NotImplementedError()
+
+
+
 
 @dataclasses.dataclass()
 class FullModelInfo(SubModelInfoBase):
     boundary_node_nums: typing.FrozenSet[int] = frozenset()
     patch_manager: PatchManager = None
+    node_elem_offset: int = 0
 
     def elem_in_submodel(self, elem_num: int) -> bool:
         return True
@@ -118,6 +130,12 @@ class FullModelInfo(SubModelInfoBase):
     @property
     def is_sub_model(self) -> bool:
         return False
+
+    def real_to_model_node(self, node_num: int) -> int:
+        return node_num
+
+    def real_to_model_elem(self, elem_num: int) -> int:
+        return elem_num
 
 
 @dataclasses.dataclass()
@@ -130,6 +148,8 @@ class SubModelInfo(SubModelInfoBase):
     reference_elem_num: int
     initial_active_state: bool
     this_trial_active_state: bool
+    node_elem_offset: int
+
 
     def elem_in_submodel(self, elem_num: int) -> bool:
         if elem_num == self.reference_elem_num:
@@ -144,3 +164,10 @@ class SubModelInfo(SubModelInfoBase):
     def make_inp_suffix(self) -> str:
         state = "On" if self.this_trial_active_state else "Off"
         return f"-N{self.reference_elem_num}-{state}"
+
+    def real_to_model_node(self, node_num: int) -> int:
+        return node_num + self.node_elem_offset
+
+    def real_to_model_elem(self, elem_num: int) -> int:
+        return elem_num + self.node_elem_offset
+

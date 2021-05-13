@@ -39,6 +39,9 @@ class PolarIndex(BaseModelForDB):
         r_elems = max(self.R - 1, 1)
         return z_elems * th_elems * r_elems
 
+    def fully_populated_node_count(self) -> int:
+        return self.R * self.Th * self.Z
+
     def to_tuple(self) -> typing.Tuple[int]:
         return (self.R, self.Th, self.Z)
 
@@ -1127,8 +1130,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=50,  # 31
-        Z=100,  # 120
+        Th=20,  # 31
+        Z=30,  # 120
     ),
     r_min=0.65,
     r_max=0.75,

@@ -440,6 +440,10 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
         for elem_num, polar_index in elem_num_to_indices.items()
     }
 
+    # Get the offsets for node and element numbers. If the max nodes are 2345, go in steps of 10000
+    delta_offset = 10 ** (len(str(stent_params.divs.fully_populated_node_count())))
+    offset_counter = itertools.count(delta_offset, delta_offset)
+
     graph = element_bucket.build_graph(graph_fe_elems.values())
 
     with patch_manager.PatchManager() as this_patch_manager:
@@ -466,6 +470,7 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
                         reference_elem_num=reference_elem_num,
                         initial_active_state=initial_active_state,
                         this_trial_active_state=this_trial_active_state,
+                        node_elem_offset=next(offset_counter),
                     )
 
 
@@ -480,11 +485,11 @@ def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> t
 
     # TEMP! For now tack this bit in here. Later, move it out to another function...
     extra_inp_pool = []
-    for sub_model_info in prepare_patch_models(working_dir, iter_prev):
-        sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, sub_model_info.make_inp_suffix())
-        construct_model.make_stent_model(optim_params, sub_model_info.stent_design, sub_model_info, sub_fn_inp)
-        extra_inp_pool.append(sub_fn_inp)
-
+    sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, "-testsub")
+    sub_model_infos = list(prepare_patch_models(working_dir, iter_prev))
+    testing_sub_mod_infos = [sub_model_infos[0], sub_model_infos[-1]]
+    construct_model.make_stent_model(optim_params, sub_model_infos[0].stent_design, testing_sub_mod_infos, sub_fn_inp)
+    extra_inp_pool.append(sub_fn_inp)
     # End TEMP
 
     db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
@@ -724,7 +729,7 @@ if __name__ == '__main__':
     # evolve_decider_test()
     # make_plot_tests()
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-406")  # 89
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-411")  # 89
     iter_this = 1
     iter_prev = iter_this - 1
     # make_plot_tests(working_dir, iter_this)

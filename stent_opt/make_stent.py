@@ -45,7 +45,7 @@ def run_model(optim_params, inp_fn, force_single_core: bool):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    if force_single_core:
+    if force_single_core and False:
         n_cpus = 1
     else:
         n_cpus = this_computer.n_cpus_abaqus_explicit if optim_params.is_explicit else this_computer.n_cpus_abaqus_implicit
@@ -107,7 +107,7 @@ def _from_scract_setup(working_dir):
     starting_i = 0
     fn_inp = history.make_fn_in_dir(working_dir, ".inp", starting_i)
     current_design = design.make_initial_design(stent_params)
-    construct_model.make_stent_model(optim_params, current_design, patch_manager.FullModelInfo(), fn_inp)
+    construct_model.make_stent_model(optim_params, current_design, [patch_manager.FullModelInfo()], fn_inp)
 
     run_model(optim_params, fn_inp, force_single_core=False)
     perform_extraction(
@@ -232,7 +232,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
             fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_this)
 
-            construct_model.make_stent_model(optim_params, one_new_design, patch_manager.FullModelInfo(), fn_inp)
+            construct_model.make_stent_model(optim_params, one_new_design, [patch_manager.FullModelInfo()], fn_inp)
 
             arg_list.append(RunOneArgs(working_dir, optim_params, iter_this, one_design.stent_params.nodal_z_override_in_odb, working_dir_extract))
 
