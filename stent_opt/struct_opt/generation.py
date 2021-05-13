@@ -554,12 +554,12 @@ def process_completed_simulation(working_dir: pathlib.Path, run_one_args: RunOne
         global_status_raw = list(data.get_final_history_result())
 
     if run_one_args.is_full_model:
-        _log_completed_in_history_db(history_db, ranking_result, global_status_raw, optim_params, design_n_min_1)
+        _log_completed_in_history_db(history_db, ranking_result, global_status_raw, optim_params, design_n_min_1, iter_prev)
 
     return design_n_min_1, ranking_result
 
 
-def _log_completed_in_history_db(history_db, ranking_result, global_status_raw, optim_params, design_n_min_1):
+def _log_completed_in_history_db(history_db, ranking_result, global_status_raw, optim_params, design_n_min_1, iter_prev):
 
     pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in ranking_result.pos_rows}
 
