@@ -31,6 +31,9 @@ except KeyError:
 # - Rasterise and build (offline) the images of each step.
 
 
+FULL_INFO_MODEL_LIST = [patch_manager.FullModelInfo()]
+
+
 def kill_process_id(proc_id: int):
     process = psutil.Process(proc_id)
     for proc in process.children(recursive=True):
@@ -100,7 +103,8 @@ def perform_extraction(odb_fn, out_db_fn, override_z_val, working_dir_extract):
 
 
 
-def _from_scract_setup(working_dir):
+def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
+    init(mp_lock)
     history_db_fn = history.make_history_db(working_dir)
 
     with history.History(history_db_fn) as hist:
@@ -135,8 +139,9 @@ def _from_scract_setup(working_dir):
 
     # Run the patch models to complete the sensitivity.
     patch_suffix_to_submod_infos = generation.produce_patch_models(working_dir, 0)
+    child_patch_run_one_args = []
     for patch_suffix, model_infos in patch_suffix_to_submod_infos.items():
-        run_args_patch = RunOneArgs(
+        run_args_patch = generation.RunOneArgs(
             working_dir=working_dir,
             optim_params=optim_params,
             iter_this=0,
@@ -144,10 +149,24 @@ def _from_scract_setup(working_dir):
             working_dir_extract=working_dir_extract,
             model_infos=model_infos,
             patch_suffix=patch_suffix,
+            child_patch_run_one_args=tuple(),
+            executed_feedback_text="",
         )
 
-        process_pool_run_and_process(run_args_patch)
+        out_run_one_args = process_pool_run_and_process(run_args_patch)
+        child_patch_run_one_args.append(out_run_one_args)
 
+    return generation.RunOneArgs(
+        working_dir=working_dir,
+        optim_params=optim_params,
+        iter_this=0,
+        nodal_z_override_in_odb=stent_params.nodal_z_override_in_odb,
+        working_dir_extract=working_dir_extract,
+        model_infos=FULL_INFO_MODEL_LIST,
+        patch_suffix='',
+        child_patch_run_one_args=tuple(child_patch_run_one_args),
+        executed_feedback_text=f"{multiprocessing.current_process().name} Finished Initial Setup"
+    )
 
 # TEMP! This is for trialing new designs
 new_design_trials: typing.List[typing.Tuple[generation.T_ProdNewGen, str]] = []
@@ -161,25 +180,10 @@ new_design_trials.append((generation.produce_new_generation, "generation.produce
 # print(f"Doing {len(new_design_trials)} trails each time...")
 
 
-class RunOneArgs(typing.NamedTuple):
-    working_dir: pathlib.Path
-    optim_params: optimisation_parameters.OptimParams
-    iter_this: int
-    nodal_z_override_in_odb: float
-    working_dir_extract: str
-    model_infos: typing.List[patch_manager.SubModelInfoBase]
-    patch_suffix: str
-
-    @property
-    def fn_inp(self) -> pathlib.Path:
-        return history.make_fn_in_dir(self.working_dir, ".inp", self.iter_this, self.patch_suffix)
-
-    @property
-    def is_full_model(self) -> bool:
-        return not bool(self.patch_suffix)
 
 
-def process_pool_run_and_process(run_one_args: RunOneArgs):
+def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
+    """This returns a new version of the input argument, with info about the children filled in."""
 
     fn_odb = run_one_args.fn_inp.with_suffix('.odb')
 
@@ -191,6 +195,7 @@ def process_pool_run_and_process(run_one_args: RunOneArgs):
         perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract)
 
     # Sensitivity analysis with the "finite difference method"
+    child_patch_run_one_args = []
     if run_one_args.is_full_model:
 
         patch_suffix_to_submod_infos = generation.produce_patch_models(run_one_args.working_dir,  run_one_args.iter_this)
@@ -198,9 +203,13 @@ def process_pool_run_and_process(run_one_args: RunOneArgs):
             run_args_patch = run_one_args._replace(model_infos=model_infos, patch_suffix=patch_suffix)
 
             # Recursive but only one layer deep!
-            process_pool_run_and_process(run_args_patch)
+            out_run_one_args = process_pool_run_and_process(run_args_patch)
+            child_patch_run_one_args.append(out_run_one_args)
 
-    return f"[{multiprocessing.current_process().name}] {run_one_args.fn_inp.name} done."
+    return run_one_args._replace(
+        child_patch_run_one_args=tuple(child_patch_run_one_args),
+        executed_feedback_text=f"{multiprocessing.current_process().name} Finished {run_one_args.fn_inp}"
+    )
 
 
 def init(l):
@@ -210,6 +219,7 @@ def init(l):
 
 
 def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.OptimParams):
+    mp_lock = multiprocessing.Lock()
     working_dir = pathlib.Path(optim_params.working_dir)
     history_db_fn = history.make_history_db(working_dir)
 
@@ -230,7 +240,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
                 raise ValueError(r"Something changed with the stent params - can't use this one!")
 
     if start_from_scratch:
-        _from_scract_setup(working_dir)
+        run_one_args_completed = _from_scract_setup(working_dir, mp_lock)
         main_loop_start_i = 1
 
     else:
@@ -243,60 +253,52 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     iter_prev = main_loop_start_i - 1
     previous_max_i = iter_prev
 
+
     while True:
         # Extract ONE from the previous generation
-        one_design, one_ranking = generation.process_completed_full_simulation(working_dir, iter_prev)
+        one_design, one_ranking = generation.process_completed_simulation(working_dir, run_one_args_completed)
 
-        all_new_designs_this_iter = []
-        done = False
-        # Potentialy make many new models.
+        # for iter_this, (new_gen_func, new_gen_descip) in enumerate(new_design_trials, start=previous_max_i+1):
+        iter_this = iter_prev + 1
+        new_gen_descip = "generation.produce_new_generation"
+        one_new_design = generation.produce_new_generation(working_dir, one_design, one_ranking, iter_this, new_gen_descip)
 
-        arg_list = []
-        for iter_this, (new_gen_func, new_gen_descip) in enumerate(new_design_trials, start=previous_max_i+1):
-            one_new_design = new_gen_func(working_dir, one_design, one_ranking, iter_this, new_gen_descip)
+        new_elements = one_new_design.active_elements - one_design.active_elements
+        removed_elements = one_design.active_elements - one_new_design.active_elements
+        print(f"[{iter_prev} -> {iter_this}]\t{new_gen_descip}\tAdded: {len(new_elements)}\tRemoved: {len(removed_elements)}.")
 
-            new_elements = one_new_design.active_elements - one_design.active_elements
-            removed_elements = one_design.active_elements - one_new_design.active_elements
-            print(f"[{iter_prev} -> {iter_this}]\t{new_gen_descip}\tAdded: {len(new_elements)}\tRemoved: {len(removed_elements)}.")
+        fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_this)
 
-            fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_this)
+        construct_model.make_stent_model(optim_params, one_new_design, FULL_INFO_MODEL_LIST, fn_inp)
 
-            construct_model.make_stent_model(optim_params, one_new_design, [patch_manager.FullModelInfo()], fn_inp)
+        run_one_args_input = generation.RunOneArgs(
+            working_dir=working_dir,
+            optim_params=optim_params,
+            iter_this=iter_this,
+            nodal_z_override_in_odb=one_design.stent_params.nodal_z_override_in_odb,
+            working_dir_extract=working_dir_extract,
+            model_infos=[patch_manager.FullModelInfo()],
+            patch_suffix='',
+            child_patch_run_one_args=tuple(),
+            executed_feedback_text='',
+        )
 
-            arg_list.append(RunOneArgs(
-                working_dir=working_dir,
-                optim_params=optim_params,
-                iter_this=iter_this,
-                nodal_z_override_in_odb=one_design.stent_params.nodal_z_override_in_odb,
-                working_dir_extract=working_dir_extract,
-                model_infos=[patch_manager.FullModelInfo()],
-                patch_suffix='',
-            ))
-
-            done = optim_params.is_converged(one_design, one_new_design, iter_this)
-
-            all_new_designs_this_iter.append((iter_this, one_new_design))
-
-            previous_max_i = max(previous_max_i, iter_this)
+        done = optim_params.is_converged(one_design, one_new_design, iter_this)
 
         MULTI_PROCESS_POOL = False
-        l = multiprocessing.Lock()
+
         if MULTI_PROCESS_POOL:
-            with multiprocessing.Pool(processes=4, initializer=init, initargs=(l,)) as pool:
+            with multiprocessing.Pool(processes=4, initializer=init, initargs=(mp_lock,)) as pool:
 
-                for res in pool.imap_unordered(process_pool_run_and_process, arg_list):
-                    print(res)
-
-            if len(all_new_designs_this_iter) > 1:
-                warning = Warning("Arbitrary choice out of all new designs.")
-                print(warning)
+                for run_one_args_completed in pool.imap_unordered(process_pool_run_and_process, [run_one_args_input]):
+                    print(run_one_args_completed.executed_feedback_text)
 
         else:
-            init(l)
-            for run_one_args in arg_list:
-                process_pool_run_and_process(run_one_args)
+            init(mp_lock)
+            run_one_args_completed = process_pool_run_and_process(run_one_args_input)
+            print(run_one_args_completed.executed_feedback_text)
 
-        iter_prev, one_design = all_new_designs_this_iter[0]
+        iter_prev, one_design = iter_this, one_new_design
 
         if done:
             break

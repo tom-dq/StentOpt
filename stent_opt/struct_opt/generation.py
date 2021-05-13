@@ -35,6 +35,28 @@ MAKE_PLOTS = False
 # Zero based node indexes from Figure 28.1.1–1 in the Abaqus manual
 
 
+class RunOneArgs(typing.NamedTuple):
+    working_dir: pathlib.Path
+    optim_params: optimisation_parameters.OptimParams
+    iter_this: int
+    nodal_z_override_in_odb: float
+    working_dir_extract: str
+    model_infos: typing.List[patch_manager.SubModelInfoBase]
+    patch_suffix: str
+    child_patch_run_one_args: typing.Tuple["RunOneArgs"]
+    executed_feedback_text: str
+
+    @property
+    def fn_inp(self) -> pathlib.Path:
+        return history.make_fn_in_dir(self.working_dir, ".inp", self.iter_this, self.patch_suffix)
+
+    @property
+    def is_full_model(self) -> bool:
+        return not bool(self.patch_suffix)
+
+
+
+
 def get_gradient_input_data(
         optim_params: optimisation_parameters.OptimParams,
         iteration_nums: typing.Iterable[int],
@@ -482,7 +504,7 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     with history.History(history_db) as hist:
         optim_params = hist.get_opt_params()
 
-    inp_fn_to_patch_list = dict()
+    suffix_to_patch_list = dict()
 
     # TODO - batch these up or something...
     sub_model_infos = list(prepare_patch_models(working_dir, iter_prev))
@@ -495,13 +517,16 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     ):
         sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, suffix)
         construct_model.make_stent_model(optim_params, sub_model_infos[0].stent_design, sub_model_info_list, sub_fn_inp)
-        inp_fn_to_patch_list[suffix] = sub_model_info_list
+        suffix_to_patch_list[suffix] = sub_model_info_list
 
-    return inp_fn_to_patch_list
+    return suffix_to_patch_list
 
 
-def process_completed_full_simulation(working_dir: pathlib.Path, iter_prev: int) -> typing.Tuple[design.StentDesign, RankingResults]:
+
+def process_completed_simulation(working_dir: pathlib.Path, run_one_args: RunOneArgs) -> typing.Tuple[design.StentDesign, RankingResults]:
     """Processes the results of a completed simulation and returns it's design and results to produce the next iteration."""
+
+    iter_prev = run_one_args.iter_this
 
     history_db = history.make_history_db(working_dir)
     with history.History(history_db) as hist:
@@ -521,10 +546,20 @@ def process_completed_full_simulation(working_dir: pathlib.Path, iter_prev: int)
             label=snapshot_n_min_1.label,
         )
 
+    # TODO - somewhere around here, branch out into the run_one_args.child_patch_run_one_args stuff and get the "ranking" results for the patch.
+
     # Get the data from the previously run simulation.
     with datastore.Datastore(db_fn_prev) as data:
         ranking_result = _get_ranking_functions(optim_params, iter_prev, design_n_min_1, data)
         global_status_raw = list(data.get_final_history_result())
+
+    if run_one_args.is_full_model:
+        _log_completed_in_history_db(history_db, ranking_result, global_status_raw, optim_params, design_n_min_1)
+
+    return design_n_min_1, ranking_result
+
+
+def _log_completed_in_history_db(history_db, ranking_result, global_status_raw, optim_params, design_n_min_1):
 
     pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in ranking_result.pos_rows}
 
@@ -580,7 +615,7 @@ def process_completed_full_simulation(working_dir: pathlib.Path, iter_prev: int)
         ]
         hist.add_many_global_status_checks(vol_ratios)
 
-    return design_n_min_1, ranking_result
+
 
 T_ProdNewGen = typing.Callable[
     [pathlib.Path, design.StentDesign, RankingResults, int, str],
@@ -750,7 +785,7 @@ if __name__ == '__main__':
     iter_prev = iter_this - 1
     # make_plot_tests(working_dir, iter_this)
 
-    one_design, one_ranking = process_completed_full_simulation(working_dir, iter_prev)
+    one_design, one_ranking = process_completed_simulation(working_dir, iter_prev)
 
 
     from stent_opt.make_stent import run_model

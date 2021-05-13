@@ -174,17 +174,11 @@ def get_primary_ranking_components(include_in_opt: bool, one_filter: common.Prim
     if not nt_rows:
         return
 
-    if one_filter == common.PrimaryRankingComponentFitnessFilter.high_value:
-        nt_producer = _get_primary_ranking_components_raw(include_in_opt, nt_rows)
-
-    elif one_filter == common.PrimaryRankingComponentFitnessFilter.close_to_mean:
-        nt_producer = _get_primary_ranking_deviation(include_in_opt, statistics.mean, nt_rows)
-
-    elif one_filter == common.PrimaryRankingComponentFitnessFilter.close_to_median:
-        nt_producer = _get_primary_ranking_deviation(include_in_opt, statistics.median, nt_rows)
+    if one_filter.is_deviation_from_central_value:
+        nt_producer = _get_primary_ranking_deviation(include_in_opt, one_filter.get_central_value_function(), nt_rows)
 
     else:
-        raise ValueError(one_filter)
+        nt_producer = _get_primary_ranking_components_raw(include_in_opt, nt_rows)
 
     # Add on the suffix for the filter.
     with_filter_suffix = (prc._replace(comp_name=f"{prc.comp_name} {one_filter.name}") for prc in nt_producer)
