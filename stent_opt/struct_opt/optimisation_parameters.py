@@ -272,7 +272,7 @@ active = OptimParams(
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=2,
+    patch_hops=4,
 )
 
 active = active._replace(region_gradient=None)  # TODO - put this back after done with all the compel testing
