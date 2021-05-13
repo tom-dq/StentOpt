@@ -3,7 +3,7 @@ import statistics
 import typing
 
 from stent_opt.abaqus_model import main, material, section, part, instance, node, element, surface, amplitude, \
-    boundary_condition, load, step, interaction_property, interaction
+    boundary_condition, load, step, interaction_property, interaction, base
 from stent_opt.struct_opt import optimisation_parameters, design
 from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalNodeSetNames, Actuation, StentParams, \
     GlobalSurfNames
@@ -64,10 +64,23 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
             transform_to_cyl=transform_to_cyl,
         )
 
+        # Node offsets
+        offset_single = stent_design.stent_params.get_span_of_patch_connectivity_buffered(optim_params.patch_hops).to_xyz()
+        n_offset_rows = int(1.3 * len(sub_model_infos)**0.5)
+
         # Make the nodes.
-        for sub_model_info in sub_model_infos:
+
+
+        for sub_mod_idx, sub_model_info in enumerate(sub_model_infos):
+            if optim_params.offset_submodels:
+                off_row, off_col = divmod(sub_mod_idx, n_offset_rows)
+
+            else:
+                off_row, off_col = 0, 0
+
+            this_offset = base.XYZ(off_col * offset_single.x, off_row*offset_single.y, 0.0)
             for iNode, one_node_polar in node_pos.items():
-                stent_part.add_node_validated(iNode, one_node_polar.to_xyz(), node_elem_offset=sub_model_info.node_elem_offset)
+                stent_part.add_node_validated(iNode,this_offset + one_node_polar.to_xyz(), node_elem_offset=sub_model_info.node_elem_offset)
 
         # Make the elements.
         for sub_model_info in sub_model_infos:
@@ -75,14 +88,14 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
                 if idx in stent_design.active_elements and sub_model_info.elem_in_submodel(elem_num):
                     stent_part.add_element_validate(elem_num, one_elem, node_elem_offset=sub_model_info.node_elem_offset)
 
+        # Remove any nodes which are not used
+        stent_part.squeeze_unused_nodes()
+
         one_instance = instance.Instance(base_part=stent_part)
 
         if element_dimensions == 2:
             # Create the node sets on the boundary
-            used_node_nums = set()
-            for one_elem in stent_part.elements.values():
-                used_node_nums.update(one_elem.connection)
-
+            used_node_nums = stent_part.get_used_node_nums()
             iNode_to_idx_active = {iNode: idx for iNode, idx, _ in node_num_idx_pos if iNode in used_node_nums}
 
             if full_model:
@@ -304,9 +317,7 @@ def _apply_boundary_conds_submodel(sub_model_infos: typing.Iterable[patch_manage
     stent_part = stent_instance.base_part
     step1 = model.steps[0]
 
-    used_node_nums = set()
-    for one_elem in stent_part.elements.values():
-        used_node_nums.update(one_elem.connection)
+    used_node_nums = stent_part.get_used_node_nums()
 
     for sub_model_info in sub_model_infos:
         for node_num, dof_to_amp in sub_model_info.boundary_node_enforced_displacements():

@@ -73,6 +73,7 @@ class OptimParams(typing.NamedTuple):
     nodes_shared_with_old_design_to_expand: int    # Only let new elements come in which are attached to existing elements with at least this many nodes. Zero to allow all elements.
     nodes_shared_with_old_design_to_contract: int  # Only let new elements go out which are attached to existing elements with at least this many nodes. Zero to allow all elements.
     patch_hops: typing.Optional[int]  # 0 means patch is just the element in question. 1 means a maximum 3x3 patch, 2 means maximum 5x5, etc. None means no patches
+    offset_submodels: bool
 
     @property
     def release_stent_after_expansion(self) -> bool:
@@ -273,6 +274,7 @@ active = OptimParams(
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
     patch_hops=4,
+    offset_submodels=True,
 )
 
 active = active._replace(region_gradient=None)  # TODO - put this back after done with all the compel testing

@@ -45,7 +45,6 @@ class Part:
 
         self.elements[iElem_offset] = element_offset
 
-
     def produce_inp_lines(self) -> typing.Iterable[str]:
         yield f"*Part, name={self.name}"
         yield from self.nodes.produce_inp_lines()
@@ -105,6 +104,20 @@ class Part:
         all_elem_set_name = all_elem_set.get_name(set_context)
 
         yield from self.common_section.produce_inp_lines(all_elem_set)
+
+    def get_used_node_nums(self) -> typing.FrozenSet[int]:
+        used_node_nums = set()
+        for one_elem in self.elements.values():
+            used_node_nums.update(one_elem.connection)
+
+        return frozenset(used_node_nums)
+
+    def squeeze_unused_nodes(self):
+        used_nodes = self.get_used_node_nums()
+
+        to_go_node_nums = {iNode for iNode in self.nodes if iNode not in used_nodes}
+        for iNode in to_go_node_nums:
+            del self.nodes[iNode]
 
 
 def make_part_test() -> Part:

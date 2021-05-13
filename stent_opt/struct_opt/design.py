@@ -212,6 +212,15 @@ class StentParams(BaseModelForDB):
     def single_element_z_span(self) -> float:
         return self.length / self.divs.Z
 
+    def get_span_of_patch_connectivity_buffered(self, patch_hops: typing.Optional[int]) -> base.RThZ:
+        if patch_hops:
+            num_elem_span = 3 * patch_hops
+
+        else:
+            num_elem_span = 1
+
+        return num_elem_span * base.RThZ(self.single_element_r_span, self.single_element_theta_span, self.single_element_z_span)
+
     @property
     def wrap_around_theta(self) -> bool:
         """Defines whether or not there are symmetrical boundary conditions between theta=0 and theta=th_max"""
