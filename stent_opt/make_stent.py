@@ -45,7 +45,7 @@ def run_model(optim_params, inp_fn, force_single_core: bool):
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
     #print(multiprocessing.current_process().name, fn_solo)
-    if force_single_core and False:
+    if force_single_core:
         n_cpus = 1
     else:
         n_cpus = this_computer.n_cpus_abaqus_explicit if optim_params.is_explicit else this_computer.n_cpus_abaqus_implicit
@@ -103,6 +103,10 @@ def perform_extraction(odb_fn, out_db_fn, override_z_val, working_dir_extract):
 def _from_scract_setup(working_dir):
     history_db_fn = history.make_history_db(working_dir)
 
+    with history.History(history_db_fn) as hist:
+        stent_params = hist.get_stent_params()
+        optim_params = hist.get_opt_params()
+
     # Do the initial setup from a first model.
     starting_i = 0
     fn_inp = history.make_fn_in_dir(working_dir, ".inp", starting_i)
@@ -129,6 +133,21 @@ def _from_scract_setup(working_dir):
 
         hist.add_snapshot(snapshot)
 
+    # Run the patch models to complete the sensitivity.
+    patch_suffix_to_submod_infos = generation.produce_patch_models(working_dir, 0)
+    for patch_suffix, model_infos in patch_suffix_to_submod_infos.items():
+        run_args_patch = RunOneArgs(
+            working_dir=working_dir,
+            optim_params=optim_params,
+            iter_this=0,
+            nodal_z_override_in_odb=stent_params.nodal_z_override_in_odb,
+            working_dir_extract=working_dir_extract,
+            model_infos=model_infos,
+            patch_suffix=patch_suffix,
+        )
+
+        process_pool_run_and_process(run_args_patch)
+
 
 # TEMP! This is for trialing new designs
 new_design_trials: typing.List[typing.Tuple[generation.T_ProdNewGen, str]] = []
@@ -141,34 +160,47 @@ new_design_trials: typing.List[typing.Tuple[generation.T_ProdNewGen, str]] = []
 new_design_trials.append((generation.produce_new_generation, "generation.produce_new_generation"))
 # print(f"Doing {len(new_design_trials)} trails each time...")
 
+
 class RunOneArgs(typing.NamedTuple):
     working_dir: pathlib.Path
     optim_params: optimisation_parameters.OptimParams
     iter_this: int
     nodal_z_override_in_odb: float
     working_dir_extract: str
+    model_infos: typing.List[patch_manager.SubModelInfoBase]
+    patch_suffix: str
+
+    @property
+    def fn_inp(self) -> pathlib.Path:
+        return history.make_fn_in_dir(self.working_dir, ".inp", self.iter_this, self.patch_suffix)
+
+    @property
+    def is_full_model(self) -> bool:
+        return not bool(self.patch_suffix)
 
 
 def process_pool_run_and_process(run_one_args: RunOneArgs):
 
-    fn_inp = history.make_fn_in_dir(run_one_args.working_dir, ".inp", run_one_args.iter_this)
-    fn_odb = history.make_fn_in_dir(run_one_args.working_dir, ".odb", run_one_args.iter_this)
+    fn_odb = run_one_args.fn_inp.with_suffix('.odb')
 
-    run_model(run_one_args.optim_params, fn_inp, force_single_core=False)
+    run_model(run_one_args.optim_params, run_one_args.fn_inp, force_single_core=False)
 
-    fn_db_current = history.make_fn_in_dir(run_one_args.working_dir, ".db", run_one_args.iter_this)
+    fn_db_current = history.make_fn_in_dir(run_one_args.working_dir, ".db", run_one_args.iter_this, run_one_args.patch_suffix)
 
     with lock:
         perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract)
 
-    _, _, extra_inp_pool = generation.process_completed_simulation(run_one_args.working_dir, run_one_args.iter_this)
+    # Sensitivity analysis with the "finite difference method"
+    if run_one_args.is_full_model:
 
-    for sub_inp in extra_inp_pool:
-        print(sub_inp)
-        run_model(run_one_args.optim_params, sub_inp, force_single_core=True)
+        patch_suffix_to_submod_infos = generation.produce_patch_models(run_one_args.working_dir,  run_one_args.iter_this)
+        for patch_suffix, model_infos in patch_suffix_to_submod_infos.items():
+            run_args_patch = run_one_args._replace(model_infos=model_infos, patch_suffix=patch_suffix)
 
-    return f"[{multiprocessing.current_process().name}] {run_one_args.iter_this} done."
+            # Recursive but only one layer deep!
+            process_pool_run_and_process(run_args_patch)
 
+    return f"[{multiprocessing.current_process().name}] {run_one_args.fn_inp.name} done."
 
 
 def init(l):
@@ -213,10 +245,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
     while True:
         # Extract ONE from the previous generation
-        one_design, one_ranking, extra_inp_pool = generation.process_completed_simulation(working_dir, iter_prev)
-        for sub_inp in extra_inp_pool:
-            print(sub_inp)
-            run_model(optim_params, sub_inp, force_single_core=True)
+        one_design, one_ranking = generation.process_completed_full_simulation(working_dir, iter_prev)
 
         all_new_designs_this_iter = []
         done = False
@@ -234,7 +263,15 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
             construct_model.make_stent_model(optim_params, one_new_design, [patch_manager.FullModelInfo()], fn_inp)
 
-            arg_list.append(RunOneArgs(working_dir, optim_params, iter_this, one_design.stent_params.nodal_z_override_in_odb, working_dir_extract))
+            arg_list.append(RunOneArgs(
+                working_dir=working_dir,
+                optim_params=optim_params,
+                iter_this=iter_this,
+                nodal_z_override_in_odb=one_design.stent_params.nodal_z_override_in_odb,
+                working_dir_extract=working_dir_extract,
+                model_infos=[patch_manager.FullModelInfo()],
+                patch_suffix='',
+            ))
 
             done = optim_params.is_converged(one_design, one_new_design, iter_this)
 

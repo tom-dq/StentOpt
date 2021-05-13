@@ -475,28 +475,38 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
 
 
 
-def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> typing.Tuple[design.StentDesign, RankingResults, typing.List[str]]:
+def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Dict[
+        str, typing.List[patch_manager.SubModelInfoBase]]:
+
+    history_db = history.make_history_db(working_dir)
+    with history.History(history_db) as hist:
+        optim_params = hist.get_opt_params()
+
+    inp_fn_to_patch_list = dict()
+
+    # TODO - batch these up or something...
+    sub_model_infos = list(prepare_patch_models(working_dir, iter_prev))
+    for suffix, sub_model_info_list in (
+            ("-sub5A", sub_model_infos[0:5]),
+            ("-sub5B", sub_model_infos[5:10]),
+            # ("-sub20", sub_model_infos[0:20]),
+            # ("-sub200", sub_model_infos[0:200]),
+            # ("-suball", sub_model_infos),
+    ):
+        sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, suffix)
+        construct_model.make_stent_model(optim_params, sub_model_infos[0].stent_design, sub_model_info_list, sub_fn_inp)
+        inp_fn_to_patch_list[suffix] = sub_model_info_list
+
+    return inp_fn_to_patch_list
+
+
+def process_completed_full_simulation(working_dir: pathlib.Path, iter_prev: int) -> typing.Tuple[design.StentDesign, RankingResults]:
     """Processes the results of a completed simulation and returns it's design and results to produce the next iteration."""
 
     history_db = history.make_history_db(working_dir)
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
-
-    # TEMP! For now tack this bit in here. Later, move it out to another function...
-    extra_inp_pool = []
-
-    sub_model_infos = list(prepare_patch_models(working_dir, iter_prev))
-    for suffix, sub_model_info_list in (
-            ("-sub5", sub_model_infos[0:5]),
-            ("-sub20", sub_model_infos[0:20]),
-            ("-sub200", sub_model_infos[0:200]),
-            ("-suball", sub_model_infos),
-    ):
-        sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, suffix)
-        construct_model.make_stent_model(optim_params, sub_model_infos[0].stent_design, sub_model_info_list, sub_fn_inp)
-        extra_inp_pool.append(sub_fn_inp)
-    # End TEMP
 
     db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
 
@@ -570,7 +580,7 @@ def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> t
         ]
         hist.add_many_global_status_checks(vol_ratios)
 
-    return design_n_min_1, ranking_result, extra_inp_pool
+    return design_n_min_1, ranking_result
 
 T_ProdNewGen = typing.Callable[
     [pathlib.Path, design.StentDesign, RankingResults, int, str],
@@ -740,7 +750,8 @@ if __name__ == '__main__':
     iter_prev = iter_this - 1
     # make_plot_tests(working_dir, iter_this)
 
-    one_design, one_ranking, extra_inp_pool = process_completed_simulation(working_dir, iter_prev)
+    one_design, one_ranking = process_completed_full_simulation(working_dir, iter_prev)
+
 
     from stent_opt.make_stent import run_model
     from stent_opt.struct_opt.optimisation_parameters import active
