@@ -11,7 +11,7 @@ from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalNode
 from stent_opt.struct_opt import patch_manager
 
 
-def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign, full_model: bool, sub_model_infos: typing.Iterable[patch_manager.SubModelInfoBase]):
+def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign, full_model: bool, sub_model_infos: typing.List[patch_manager.SubModelInfoBase]):
 
     model = main.AbaqusModel("StentModel")
 
@@ -65,11 +65,13 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
         )
 
         # Node offsets
-        offset_single = stent_design.stent_params.get_span_of_patch_connectivity_buffered(optim_params.patch_hops).to_xyz()
+        node_idx_to_pos = {node_idx: one_node_pos for _, node_idx, one_node_pos in node_num_idx_pos}
+        node_idx_single = design.PolarIndex(R=0, Th=1, Z=1)
+        offset_single = optim_params.elem_span_for_patch_buffered * node_idx_to_pos[node_idx_single]
+
         n_offset_rows = int(1.3 * len(sub_model_infos)**0.5)
 
         # Make the nodes.
-
 
         for sub_mod_idx, sub_model_info in enumerate(sub_model_infos):
             if optim_params.offset_submodels:
@@ -315,7 +317,6 @@ def apply_loads(
 def _apply_boundary_conds_submodel(sub_model_infos: typing.Iterable[patch_manager.SubModelInfoBase], model: main.AbaqusModel):
     stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
     stent_part = stent_instance.base_part
-    step1 = model.steps[0]
 
     used_node_nums = stent_part.get_used_node_nums()
 
@@ -335,7 +336,7 @@ def _apply_boundary_conds_submodel(sub_model_infos: typing.Iterable[patch_manage
                         ),
                     )
 
-                    model.add_load_starting_from(step1, patch_bound_disp)
+                    model.add_load_specific_steps(model.steps, patch_bound_disp)
 
 
 def _apply_loads_full(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
@@ -383,7 +384,7 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
         amplitude.XY(0.8*optim_params.time_expansion, 1.0),
         amplitude.XY(optim_params.time_expansion, 1.0),
     )
-    amp = amplitude.Amplitude("Amp-1", amp_data)
+    amp = amplitude.Amplitude("Amp-1", amp_data, amplitude.TimeReference.step_time)
 
     stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
     stent_part = stent_instance.base_part
@@ -458,7 +459,7 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
             amplitude.XY(optim_params.time_released, pressure_load),
         )
 
-        amp_pressure = amplitude.Amplitude("Amp-Press", amp_data)
+        amp_pressure = amplitude.Amplitude("Amp-Press", amp_data, amplitude.TimeReference.step_time)
 
         inner_pressure = load.PressureLoad(
             name="Pressure",
@@ -491,7 +492,7 @@ def _apply_loads_enforced_disp_rigid_cyl(optim_params: optimisation_parameters.O
         amplitude.XY(optim_params.time_expansion, 0),
     )
 
-    amp = amplitude.Amplitude("Amp-1", amp_data)
+    amp = amplitude.Amplitude("Amp-1", amp_data, amplitude.TimeReference.step_time)
 
     cyl_inst = model.get_only_instance_base_part_name(GlobalPartNames.CYL_INNER)
     node_set = cyl_inst.base_part.node_sets[GlobalNodeSetNames.RigidCyl.name]
@@ -537,7 +538,7 @@ def _apply_loads_pressure(optim_params: optimisation_parameters.OptimParams, ste
         amplitude.XY(optim_params.time_expansion, 0.05*max_pressure),
     )
 
-    amp = amplitude.Amplitude("Amp-1", amp_data)
+    amp = amplitude.Amplitude("Amp-1", amp_data, amplitude.TimeReference.step_time)
 
     one_load = load.PressureLoad(
         name="Pressure",

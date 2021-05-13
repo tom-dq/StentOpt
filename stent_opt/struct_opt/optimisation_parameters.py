@@ -87,6 +87,14 @@ class OptimParams(typing.NamedTuple):
         return True
 
     @property
+    def elem_span_for_patch_buffered(self) -> int:
+        if self.patch_hops:
+            return 3 * self.patch_hops
+
+        else:
+            return 1
+
+    @property
     def simulation_has_second_step(self) -> bool:
         return bool(self.time_released) and self.post_expansion_behaviour.requires_second_step
 
@@ -267,13 +275,13 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.02,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=0.5,  # Was 2.0
-    time_released=0.3,
+    time_expansion=1.0,  # Was 2.0
+    time_released=1.0,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=4,
+    patch_hops=3,
     offset_submodels=True,
 )
 

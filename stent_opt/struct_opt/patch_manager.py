@@ -30,6 +30,7 @@ class PatchManager:
 
         # Look up the total simulation time from the frame
         frame_rowid_to_total_time = {frame.rowid: frame.simulation_time for frame in all_frames}
+        node_pos_rows = list(node_pos_rows)  # For debugging
         for node_pos in node_pos_rows:
             self.nodes_we_have_results_for.add(node_pos.node_num)
             simulation_time = frame_rowid_to_total_time[node_pos.frame_rowid]
@@ -77,6 +78,7 @@ class PatchManager:
         return amplitude.Amplitude(
             name=f"N{node_num}-{dof_name}",
             data=xy_data,
+            time_ref=amplitude.TimeReference.total_time,
         )
 
 T_nodenum_dof_amp = typing.Tuple[int, typing.Dict[int, amplitude.Amplitude]]

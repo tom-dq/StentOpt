@@ -485,11 +485,17 @@ def process_completed_simulation(working_dir: pathlib.Path, iter_prev: int) -> t
 
     # TEMP! For now tack this bit in here. Later, move it out to another function...
     extra_inp_pool = []
-    sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, "-testsub")
+
     sub_model_infos = list(prepare_patch_models(working_dir, iter_prev))
-    testing_sub_mod_infos = [sub_model_infos[0], sub_model_infos[-1]]
-    construct_model.make_stent_model(optim_params, sub_model_infos[0].stent_design, testing_sub_mod_infos, sub_fn_inp)
-    extra_inp_pool.append(sub_fn_inp)
+    for suffix, sub_model_info_list in (
+            ("-sub5", sub_model_infos[0:5]),
+            ("-sub20", sub_model_infos[0:20]),
+            ("-sub200", sub_model_infos[0:200]),
+            ("-suball", sub_model_infos),
+    ):
+        sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, suffix)
+        construct_model.make_stent_model(optim_params, sub_model_infos[0].stent_design, sub_model_info_list, sub_fn_inp)
+        extra_inp_pool.append(sub_fn_inp)
     # End TEMP
 
     db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
@@ -729,7 +735,7 @@ if __name__ == '__main__':
     # evolve_decider_test()
     # make_plot_tests()
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-411")  # 89
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-418")  # 89
     iter_this = 1
     iter_prev = iter_this - 1
     # make_plot_tests(working_dir, iter_this)

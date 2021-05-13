@@ -1,4 +1,5 @@
 import dataclasses
+import enum
 import typing
 
 from stent_opt.abaqus_model import base
@@ -6,6 +7,11 @@ from stent_opt.abaqus_model import base
 class XY(typing.NamedTuple):
     x: float
     y: float
+
+
+class TimeReference(enum.Enum):
+    step_time = enum.auto()
+    total_time = enum.auto()
 
 
 def _eight_or_fewer_per_line(in_data: typing.Iterable[float]) -> typing.Iterable[str]:
@@ -30,9 +36,11 @@ class AmplitudeBase:
 class Amplitude(AmplitudeBase):
     name: str
     data: typing.Tuple[XY, ...]
+    time_ref: TimeReference
 
     def make_inp_lines(self) -> typing.Iterable[str]:
-        yield f"*Amplitude, name={base.quoted_if_necessary(self.name)}"
+        time_ref_suffix = ", time=TOTAL TIME" if self.time_ref == TimeReference.total_time else ''
+        yield f"*Amplitude, name={base.quoted_if_necessary(self.name)}{time_ref_suffix}"
 
         def generate_single_points() -> typing.Iterable[float]:
             for datum in self.data:
@@ -84,7 +92,8 @@ def make_test_amplitude() -> Amplitude:
 
     return Amplitude(
         name="Spike",
-        data=data
+        data=data,
+        time_ref=TimeReference.step_time,
     )
 
 
