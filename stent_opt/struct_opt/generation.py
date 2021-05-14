@@ -269,7 +269,6 @@ def get_candidate_elements(
 
     new_introduction = existing_next_round - design_n_min_1.active_elements
 
-    # TODO - top corner of fully populated design is not in the candidates for removal - I think it should be?
     return CandidatesFor(
         removal=removal,
         existing_next_round=existing_next_round,
