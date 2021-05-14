@@ -93,6 +93,48 @@ class LineOfBestFit(typing.NamedTuple):
     c: float
 
 
+def composite_stress_peeq_energy(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+    """(0.1+vM) * (0.01+PEEQ) * (MaxOverallElasticEnergy - ElasticEnergy + 0.01)"""
+
+    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
+        vM = type_to_val[db_defs.ElementStress]
+        PEEQ = type_to_val[db_defs.ElementPEEQ]
+        ElasticEnergy = type_to_val[db_defs.ElementEnergyElastic]
+
+        elast_energy_min, elast_enery_max = row_type_to_range[db_defs.ElementEnergyElastic]
+
+        one_val = (0.1 + vM) * (0.01 + PEEQ) * (elast_enery_max - ElasticEnergy + 0.01)
+        yield db_defs.ElementCustomComposite(
+            frame_rowid=None,
+            elem_num=elem_num,
+            comp_val=one_val,
+        )
+
+composite_active = composite_stress_peeq_energy
+
+def compute_composite_ranking_component(nt_rows_all_from_frame) -> typing.Iterable[db_defs.ElementCustomComposite]:
+    """This computes a composite function based on existing results in the Datastore. Called after Abaqus has populated it."""
+
+    # Get the min and max of all the primary quantities
+    nt_rows_all_from_frame = list(nt_rows_all_from_frame)
+
+    row_type_to_value = collections.defaultdict(list)
+    elem_num_to_type_to_rows = collections.defaultdict(dict)
+
+    for row in nt_rows_all_from_frame:
+        row_type = type(row)
+        row_type_to_value[row_type].append(row.get_last_value())
+
+        # Let us look up, say, elem 12, vM Stress.
+        elem_num_to_type_to_rows[row.elem_num][row_type] = row.get_last_value()
+
+    row_type_to_range = {}
+    for row_type, all_vals in row_type_to_value.items():
+        row_type_to_range[row_type] = min(all_vals), max(all_vals)
+
+    yield from composite_active(row_type_to_range, elem_num_to_type_to_rows)
+
+
 def _get_primary_ranking_components_raw(include_in_opt, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
     """All the nt_rows should be the same type"""
 
@@ -147,6 +189,15 @@ def _get_primary_ranking_components_raw(include_in_opt, nt_rows) -> typing.Itera
                 include_in_opt=include_in_opt,
             )
 
+    elif isinstance(nt_row, db_defs.ElementCustomComposite):
+        for row in nt_rows:
+            yield PrimaryRankingComponent(
+                comp_name=composite_active.__doc__,
+                elem_id=row.elem_num,
+                value=row.comp_val,
+                include_in_opt=include_in_opt,
+            )
+
     elif isinstance(nt_row, db_defs.ElementGlobalPatchSensitivity):
         for row in nt_rows:
             yield PrimaryRankingComponent(
@@ -155,6 +206,7 @@ def _get_primary_ranking_components_raw(include_in_opt, nt_rows) -> typing.Itera
                 value=row.gradient_from_patch,
                 include_in_opt=include_in_opt,
             )
+
     else:
         raise ValueError(nt_row)
 

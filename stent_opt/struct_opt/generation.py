@@ -47,6 +47,8 @@ class RunOneArgs(typing.NamedTuple):
     patch_suffix: str
     child_patch_run_one_args: typing.Tuple["RunOneArgs"]
     executed_feedback_text: str
+    do_run_model_TESTING: bool
+    do_run_extraction_TESTING: bool
 
     @property
     def fn_inp(self) -> pathlib.Path:
@@ -637,6 +639,13 @@ def process_completed_simulation(run_one_args: RunOneArgs
 
     db_fn_prev = history.make_fn_in_dir(run_one_args.working_dir, ".db", iter_prev, run_one_args.patch_suffix)
 
+    # Add any composite results which need to be added.
+    with datastore.Datastore(db_fn_prev) as data:
+        one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
+        abaqus_created_primary_rows = data.get_all_rows_at_frame_any_element_type(one_frame)
+        composite_primary_rows = score.compute_composite_ranking_component(abaqus_created_primary_rows)
+        data.add_results_on_existing_frame(one_frame, composite_primary_rows)
+
     # Go between num (1234) and idx (5, 6, 7)...
     elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
 
@@ -902,7 +911,8 @@ def run_test_process_completed_simulation():
     from stent_opt.struct_opt.design import basic_stent_params as stent_params
     from stent_opt.make_stent import run_model, working_dir_extract, FULL_INFO_MODEL_LIST, process_pool_run_and_process
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-454")
+    # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-454")
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-36")
 
     testing_run_one_args_skeleton = RunOneArgs(
         working_dir=working_dir,
@@ -914,9 +924,11 @@ def run_test_process_completed_simulation():
         patch_suffix='',
         child_patch_run_one_args=tuple(),
         executed_feedback_text='',
+        do_run_model_TESTING=False,
+        do_run_extraction_TESTING=False,
     )
 
-    testing_run_one_args_completed = process_pool_run_and_process(testing_run_one_args_skeleton, do_run_model=False, do_run_extraction=False)
+    testing_run_one_args_completed = process_pool_run_and_process(testing_run_one_args_skeleton)
     one_design, one_ranking = process_completed_simulation(testing_run_one_args_completed)
 
 

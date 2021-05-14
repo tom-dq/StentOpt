@@ -122,6 +122,14 @@ class Datastore:
             for row in rows:
                 yield named_tuple_class(*row)
 
+    def get_all_rows_at_frame_any_element_type(self, frame):
+        # ElementStress, ElementPEEQ, etc...
+        nt_class_names = [x for x in dir(db_defs) if x.startswith("Element")]
+        for nt_class_name in nt_class_names:
+            named_tuple_class = getattr(db_defs, nt_class_name)
+            for row in self.get_all_rows_at_frame(named_tuple_class, frame):
+                yield row
+
     def get_all_rows(self, named_tuple_class):
         with self.connection:
             select_string = "SELECT * FROM {0} ORDER BY frame_rowid".format(named_tuple_class.__name__)

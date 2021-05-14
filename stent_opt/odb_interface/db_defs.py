@@ -74,6 +74,12 @@ def _make_nt_and_table_create(table_name, result_entity, field_names):
     nt_fields.extend(field_names)
     NT_type = collections.namedtuple(table_name, nt_fields)
 
+    # Add a "get last field" method... so hacky!
+    def get_last_value(self):
+        return getattr(self, field_names[-1])
+
+    NT_type.get_last_value = get_last_value
+
     create_table_fields = ["{0} REAL".format(f_name) for f_name in field_names]
 
     create_table_string = """CREATE TABLE IF NOT EXISTS {0}(
@@ -94,6 +100,7 @@ ElementEnergyElastic = _make_nt_and_table_create("ElementEnergyElastic", ResultE
 ElementEnergyPlastic = _make_nt_and_table_create("ElementEnergyPlastic", ResultEntity.elem_num, ("EPDDEN",))
 ElementFatigueResult = _make_nt_and_table_create("ElementFatigueResult", ResultEntity.elem_num, ("SAmp", "SMean", "LGoodman",))
 ElementGlobalPatchSensitivity = _make_nt_and_table_create("ElementGlobalPatchSensitivity", ResultEntity.elem_num, ("gradient_from_patch",))
+ElementCustomComposite = _make_nt_and_table_create("ElementCustomComposite", ResultEntity.elem_num, ("comp_val",))
 
 expected_history_results = ["ALLSE", "ALLPD", "ALLKE", "ALLWK"]
 

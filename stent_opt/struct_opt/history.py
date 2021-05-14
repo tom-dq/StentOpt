@@ -34,6 +34,7 @@ _nt_class_types = [
     db_defs.ElementEnergyElastic,
     db_defs.ElementEnergyPlastic,
     db_defs.ElementFatigueResult,
+    db_defs.ElementCustomComposite,
 ]
 
 

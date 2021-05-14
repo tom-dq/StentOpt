@@ -27,6 +27,7 @@ T_elem_result = typing.Union[
     db_defs.ElementEnergyPlastic,
     db_defs.ElementFatigueResult,
     db_defs.ElementGlobalPatchSensitivity,
+    db_defs.ElementCustomComposite,
 ]
 
 
@@ -301,10 +302,11 @@ active = OptimParams(
     primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.high_value],
     element_components=[
         # db_defs.ElementPEEQ,
-        db_defs.ElementStress,
+        # db_defs.ElementStress,
         # db_defs.ElementEnergyElastic,
         # db_defs.ElementEnergyPlastic,
         # db_defs.ElementFatigueResult,
+        db_defs.ElementCustomComposite,
     ],
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
@@ -315,15 +317,15 @@ active = OptimParams(
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
-    abaqus_output_time_interval=0.025,  # Was 0.1
+    abaqus_output_time_interval=0.01,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=0.1,  # Was 2.0
+    time_expansion=2.0,  # Was 2.0
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=3,
+    patch_hops=2,
     offset_submodels=True,
 )
 

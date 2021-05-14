@@ -152,6 +152,8 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
             patch_suffix=patch_suffix,
             child_patch_run_one_args=tuple(),
             executed_feedback_text="",
+            do_run_model_TESTING=True,
+            do_run_extraction_TESTING=True,
         )
         all_run_one_args_in.append(run_args_patch)
 
@@ -178,7 +180,9 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
         model_infos=FULL_INFO_MODEL_LIST,
         patch_suffix='',
         child_patch_run_one_args=tuple(child_patch_run_one_args),
-        executed_feedback_text=f"{multiprocessing.current_process().name} Finished Initial Setup"
+        executed_feedback_text=f"{multiprocessing.current_process().name} Finished Initial Setup",
+        do_run_model_TESTING=True,
+        do_run_extraction_TESTING=True,
     )
 
 # TEMP! This is for trialing new designs
@@ -195,16 +199,16 @@ new_design_trials.append((generation.produce_new_generation, "generation.produce
 
 
 
-def process_pool_run_and_process(run_one_args: generation.RunOneArgs, do_run_model: bool=True, do_run_extraction: bool=True) -> generation.RunOneArgs:
+def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
     """This returns a new version of the input argument, with info about the children filled in."""
 
     fn_odb = run_one_args.fn_inp.with_suffix('.odb')
 
-    if do_run_model: run_model(run_one_args.optim_params, run_one_args.fn_inp, force_single_core=False)
+    if run_one_args.do_run_model_TESTING: run_model(run_one_args.optim_params, run_one_args.fn_inp, force_single_core=False)
 
     fn_db_current = history.make_fn_in_dir(run_one_args.working_dir, ".db", run_one_args.iter_this, run_one_args.patch_suffix)
 
-    if do_run_extraction:
+    if run_one_args.do_run_extraction_TESTING:
         # with lock:
             perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract)
 
@@ -282,7 +286,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     previous_max_i = iter_prev
 
 
-    while iter_prev < 1:
+    while True:
         # Extract ONE from the previous generation
         one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
         if len(model_info_to_rank) != 1:
@@ -313,6 +317,8 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
             patch_suffix='',
             child_patch_run_one_args=tuple(),
             executed_feedback_text='',
+            do_run_model_TESTING=True,
+            do_run_extraction_TESTING=True,
         )
 
         done = optim_params.is_converged(one_design, one_new_design, iter_this)
