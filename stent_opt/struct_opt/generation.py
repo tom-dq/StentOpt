@@ -19,6 +19,7 @@ from stent_opt.struct_opt import design, display, score, history, optimisation_p
 from stent_opt.struct_opt import patch_manager
 from stent_opt.struct_opt import element_bucket
 from stent_opt.struct_opt import construct_model
+from stent_opt.struct_opt import computer
 
 
 class Tail(enum.Enum):
@@ -547,14 +548,17 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
 
     sub_model_infos = list(prepare_patch_models(working_dir, iter_prev))
 
-    # TODO - batch these up and multi-process!
-    for suffix, sub_model_info_list in (
-            #("-sub5A", sub_model_infos[0:5]),
-            #("-sub5Z", sub_model_infos[-5:]),
-            # ("-sub20", sub_model_infos[0:20]),
-            # ("-sub200", sub_model_infos[0:200]),
-            ("-suball", sub_model_infos),
-    ):
+    # Batch them up into even-ish chunks
+    chunk_size_ideal = len(sub_model_infos) // computer.this_computer.n_abaqus_parallel_solves
+    chunk_size = max(20, chunk_size_ideal)  # Don't need to make it too crazy tiny...
+    print(f"chunk_size_ideal = {chunk_size_ideal}")
+
+    # https://stackoverflow.com/a/312464
+    def get_prefix_and_smi():
+        for sm_idx, i in enumerate(range(0, len(sub_model_infos), chunk_size), start=1):
+            yield f'-P{sm_idx}', sub_model_infos[i:i + chunk_size]
+
+    for suffix, sub_model_info_list in get_prefix_and_smi():
         # This will not occur if patch_hops is None.
         if sub_model_info_list:
             sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, suffix)

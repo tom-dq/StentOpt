@@ -139,6 +139,7 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
 
     # Run the patch models to complete the sensitivity.
     patch_suffix_to_submod_infos = generation.produce_patch_models(working_dir, 0)
+    all_run_one_args_in = []
     child_patch_run_one_args = []
     for patch_suffix, model_infos in patch_suffix_to_submod_infos.items():
         run_args_patch = generation.RunOneArgs(
@@ -152,9 +153,21 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
             child_patch_run_one_args=tuple(),
             executed_feedback_text="",
         )
+        all_run_one_args_in.append(run_args_patch)
 
-        out_run_one_args = process_pool_run_and_process(run_args_patch)
-        child_patch_run_one_args.append(out_run_one_args)
+    # Can fork a pool here if needs be...
+    if this_computer.n_abaqus_parallel_solves > 1:
+        with multiprocessing.Pool(processes=this_computer.n_abaqus_parallel_solves, initializer=init, initargs=(mp_lock,)) as pool:
+            for out_run_one_args in pool.imap_unordered(process_pool_run_and_process, all_run_one_args_in):
+                print(f"   "+out_run_one_args.executed_feedback_text)
+                child_patch_run_one_args.append(out_run_one_args)
+
+    else:
+        init(mp_lock)
+        for run_args_patch in all_run_one_args_in:
+            out_run_one_args = process_pool_run_and_process(run_args_patch)
+            print(f"   "+out_run_one_args.executed_feedback_text)
+            child_patch_run_one_args.append(out_run_one_args)
 
     return generation.RunOneArgs(
         working_dir=working_dir,
@@ -192,7 +205,7 @@ def process_pool_run_and_process(run_one_args: generation.RunOneArgs, do_run_mod
     fn_db_current = history.make_fn_in_dir(run_one_args.working_dir, ".db", run_one_args.iter_this, run_one_args.patch_suffix)
 
     if do_run_extraction:
-        with lock:
+        # with lock:
             perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract)
 
     # Sensitivity analysis with the "finite difference method"
@@ -200,12 +213,26 @@ def process_pool_run_and_process(run_one_args: generation.RunOneArgs, do_run_mod
     if run_one_args.is_full_model:
 
         patch_suffix_to_submod_infos = generation.produce_patch_models(run_one_args.working_dir, run_one_args.iter_this)
+        all_run_one_args_in = []
         for patch_suffix, model_infos in patch_suffix_to_submod_infos.items():
             run_args_patch = run_one_args._replace(model_infos=model_infos, patch_suffix=patch_suffix)
+            all_run_one_args_in.append(run_args_patch)
 
-            # Recursive but only one layer deep!
-            out_run_one_args = process_pool_run_and_process(run_args_patch, do_run_model=do_run_model, do_run_extraction=do_run_extraction)
-            child_patch_run_one_args.append(out_run_one_args)
+        # Recursive but only one layer deep! And fan out at this point to multi-core...
+        if this_computer.n_abaqus_parallel_solves > 1:
+            with multiprocessing.Pool(processes=this_computer.n_abaqus_parallel_solves) as pool:
+                for out_run_one_args in pool.imap_unordered(process_pool_run_and_process, all_run_one_args_in):
+                    print(f"   " + out_run_one_args.executed_feedback_text)
+                    child_patch_run_one_args.append(out_run_one_args)
+
+        else:
+            for run_args_patch in all_run_one_args_in:
+                out_run_one_args = process_pool_run_and_process(run_args_patch)
+                print(f"   " + out_run_one_args.executed_feedback_text)
+                child_patch_run_one_args.append(out_run_one_args)
+
+            # out_run_one_args = process_pool_run_and_process(run_args_patch, do_run_model=do_run_model, do_run_extraction=do_run_extraction)
+            # child_patch_run_one_args.append(out_run_one_args)
 
     return run_one_args._replace(
         child_patch_run_one_args=tuple(child_patch_run_one_args),
@@ -255,7 +282,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     previous_max_i = iter_prev
 
 
-    while True:
+    while iter_prev < 1:
         # Extract ONE from the previous generation
         one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
         if len(model_info_to_rank) != 1:
@@ -291,7 +318,6 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         done = optim_params.is_converged(one_design, one_new_design, iter_this)
 
         MULTI_PROCESS_POOL = False
-
         if MULTI_PROCESS_POOL:
             with multiprocessing.Pool(processes=4, initializer=init, initargs=(mp_lock,)) as pool:
 

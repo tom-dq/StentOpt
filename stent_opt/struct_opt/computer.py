@@ -9,6 +9,7 @@ import psutil
 class Computer(typing.NamedTuple):
     n_cpus_abaqus_explicit: int
     n_cpus_abaqus_implicit: int
+    n_abaqus_parallel_solves: int
     base_working_dir: str
     working_dir: str
     fig_size: typing.Tuple[int, int]
@@ -36,7 +37,7 @@ if psutil.cpu_count(logical=False) == 2:
 
 elif psutil.cpu_count(logical=False) == 8:
     n_cpus = 1  # TEMP! Was 8
-    base_working_dir = r"E:\Simulations\StentOpt"
+    base_working_dir = r"C:\Simulations\StentOpt"
     fig_size = (1600, 800)  #  (2000, 1350)
 
 elif psutil.cpu_count(logical=False) == 6:
@@ -52,6 +53,7 @@ else:
 this_computer = Computer(
     n_cpus_abaqus_explicit=n_cpus,
     n_cpus_abaqus_implicit=1,
+    n_abaqus_parallel_solves=6,
     base_working_dir=base_working_dir,
     working_dir=_get_next_free_dir(base_working_dir),
     # working_dir=r"E:\Simulations\StentOpt\AA-134",
