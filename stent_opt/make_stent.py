@@ -182,28 +182,29 @@ new_design_trials.append((generation.produce_new_generation, "generation.produce
 
 
 
-def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
+def process_pool_run_and_process(run_one_args: generation.RunOneArgs, do_run_model: bool=True, do_run_extraction: bool=True) -> generation.RunOneArgs:
     """This returns a new version of the input argument, with info about the children filled in."""
 
     fn_odb = run_one_args.fn_inp.with_suffix('.odb')
 
-    run_model(run_one_args.optim_params, run_one_args.fn_inp, force_single_core=False)
+    if do_run_model: run_model(run_one_args.optim_params, run_one_args.fn_inp, force_single_core=False)
 
     fn_db_current = history.make_fn_in_dir(run_one_args.working_dir, ".db", run_one_args.iter_this, run_one_args.patch_suffix)
 
-    with lock:
-        perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract)
+    if do_run_extraction:
+        with lock:
+            perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract)
 
     # Sensitivity analysis with the "finite difference method"
     child_patch_run_one_args = []
     if run_one_args.is_full_model:
 
-        patch_suffix_to_submod_infos = generation.produce_patch_models(run_one_args.working_dir,  run_one_args.iter_this)
+        patch_suffix_to_submod_infos = generation.produce_patch_models(run_one_args.working_dir, run_one_args.iter_this)
         for patch_suffix, model_infos in patch_suffix_to_submod_infos.items():
             run_args_patch = run_one_args._replace(model_infos=model_infos, patch_suffix=patch_suffix)
 
             # Recursive but only one layer deep!
-            out_run_one_args = process_pool_run_and_process(run_args_patch)
+            out_run_one_args = process_pool_run_and_process(run_args_patch, do_run_model=do_run_model, do_run_extraction=do_run_extraction)
             child_patch_run_one_args.append(out_run_one_args)
 
     return run_one_args._replace(
@@ -256,7 +257,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
     while True:
         # Extract ONE from the previous generation
-        one_design, one_ranking = generation.process_completed_simulation(working_dir, run_one_args_completed)
+        one_design, one_ranking = generation.process_completed_simulation(run_one_args_completed)
 
         # for iter_this, (new_gen_func, new_gen_descip) in enumerate(new_design_trials, start=previous_max_i+1):
         iter_this = iter_prev + 1
@@ -313,6 +314,10 @@ if __name__ == "__main__":
     optim_param_data = list(optim_params.to_db_strings())
     optim_param_data_again = optimisation_parameters.OptimParams.from_db_strings(optim_param_data)
     assert optim_params == optim_param_data_again
+
+    stent_param_data = stent_params.json(indent=2)
+    stent_param_again = design.StentParams.parse_raw(stent_param_data)
+    assert stent_params == stent_param_again
 
     do_opt(stent_params, optim_params)
 

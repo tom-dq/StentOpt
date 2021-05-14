@@ -303,7 +303,8 @@ def _hist_status_stage_from_rank_comp(rank_comp: score.T_AnyRankingComponent) ->
 
 class RankingResults(typing.NamedTuple):
     all_ranks: score.T_ListOfComponentLists
-    final_ranking_component: T_index_to_val
+    final_ranking_component_unsmoothed: T_index_to_val
+    final_ranking_component_smoothed: T_index_to_val
     filter_out_priority: T_index_to_val
     pos_rows: typing.List[db_defs.NodePos]
 
@@ -318,10 +319,10 @@ class RankingResults(typing.NamedTuple):
         first_ordering = itertools.chain( itertools.repeat(FILTERED_OUT, max_to_filter_out), itertools.repeat(LEFT_ALONE) )
         filter_out_priority_sorted = reversed(sorted((val, key) for key, val in self.filter_out_priority.items()))
         for should_filter, (filter_val, elem_idx) in zip(first_ordering, filter_out_priority_sorted):
-            overall_ranking[elem_idx] = (should_filter, self.final_ranking_component.get(elem_idx, 0.0))
+            overall_ranking[elem_idx] = (should_filter, self.final_ranking_component_smoothed.get(elem_idx, 0.0))
 
         # Step two - anything not filtered out already
-        for elem_idx, val in self.final_ranking_component.items():
+        for elem_idx, val in self.final_ranking_component_smoothed.items():
             if elem_idx not in overall_ranking:
                 overall_ranking[elem_idx] = (LEFT_ALONE, val)
 
@@ -387,7 +388,7 @@ def _get_ranking_functions(
     all_ranks.extend(raw_elem_rows)
 
     # Compute a secondary rank from all the first ones.
-    sec_rank_unsmoothed = list(score.get_secondary_ranking_sum_of_norm(all_ranks))
+    sec_rank_unsmoothed = list(score.get_secondary_ranking_scaled_sum(all_ranks))
     all_ranks.append(sec_rank_unsmoothed)
 
     # Smooth the final result
@@ -427,14 +428,16 @@ def _get_ranking_functions(
 
     return RankingResults(
         all_ranks=all_ranks,
-        final_ranking_component=smoothed,
+        final_ranking_component_unsmoothed=unsmoothed,
+        final_ranking_component_smoothed=smoothed,
         filter_out_priority=filter_out_priority,
         pos_rows=pos_rows,
     )
 
 
-def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Iterable[patch_manager.SubModelInfo]:
-    """Build the patch submodel info"""
+T_PatchModelPair = typing.Tuple[patch_manager.SubModelInfo, patch_manager.SubModelInfo]
+def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Iterable[T_PatchModelPair]:
+    """Build the patch submodel info. They come in pairs so the "with" and "without" cases are solved on the same """
 
     db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
     history_db = history.make_history_db(working_dir)
@@ -442,6 +445,9 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
+
+    if not optim_params.do_patch_analysis:
+        return
 
     elem_num_to_indices = {elem_num: polar_index for elem_num, polar_index in design.generate_elem_indices(stent_params.divs)}
     elem_indices_to_num = {polar_index: elem_num for elem_num, polar_index in elem_num_to_indices.items()}
@@ -506,8 +512,9 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
 
     suffix_to_patch_list = dict()
 
-    # TODO - batch these up or something...
     sub_model_infos = list(prepare_patch_models(working_dir, iter_prev))
+
+    # TODO - batch these up better!
     for suffix, sub_model_info_list in (
             ("-sub5A", sub_model_infos[0:5]),
             ("-sub5B", sub_model_infos[5:10]),
@@ -515,25 +522,33 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
             # ("-sub200", sub_model_infos[0:200]),
             # ("-suball", sub_model_infos),
     ):
-        sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, suffix)
-        construct_model.make_stent_model(optim_params, sub_model_infos[0].stent_design, sub_model_info_list, sub_fn_inp)
-        suffix_to_patch_list[suffix] = sub_model_info_list
+        # This will not occur if patch_hops is None.
+        if sub_model_infos:
+            sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, suffix)
+            construct_model.make_stent_model(optim_params, sub_model_infos[0].stent_design, sub_model_info_list, sub_fn_inp)
+            suffix_to_patch_list[suffix] = sub_model_info_list
 
     return suffix_to_patch_list
 
 
 
-def process_completed_simulation(working_dir: pathlib.Path, run_one_args: RunOneArgs) -> typing.Tuple[design.StentDesign, RankingResults]:
-    """Processes the results of a completed simulation and returns it's design and results to produce the next iteration."""
+def process_completed_simulation(run_one_args: RunOneArgs) -> typing.Tuple[design.StentDesign, RankingResults]:
+    """Processes the results of a completed simulation and returns its design and results to produce the next iteration."""
 
     iter_prev = run_one_args.iter_this
 
-    history_db = history.make_history_db(working_dir)
+    history_db = history.make_history_db(run_one_args.working_dir)
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
 
-    db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
+    db_fn_prev = history.make_fn_in_dir(run_one_args.working_dir, ".db", iter_prev)
+
+    # Get any patch results and include them in the mix.
+    patch_ranking_results = []
+    for run_one_args_patch in run_one_args.child_patch_run_one_args:
+        _, patch_rank = process_completed_simulation(run_one_args_patch)
+        patch_ranking_results.append(patch_rank)
 
     # Go between num (1234) and idx (5, 6, 7)...
     elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
@@ -545,8 +560,6 @@ def process_completed_simulation(working_dir: pathlib.Path, run_one_args: RunOne
             active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements)),
             label=snapshot_n_min_1.label,
         )
-
-    # TODO - somewhere around here, branch out into the run_one_args.child_patch_run_one_args stuff and get the "ranking" results for the patch.
 
     # Get the data from the previously run simulation.
     with datastore.Datastore(db_fn_prev) as data:
@@ -773,23 +786,45 @@ def evolve_decider_test():
 
 
 
+def run_test_process_completed_simulation():
+
+
+    from stent_opt.struct_opt.optimisation_parameters import active
+    from stent_opt.struct_opt.design import basic_stent_params as stent_params
+    from stent_opt.make_stent import run_model, working_dir_extract, FULL_INFO_MODEL_LIST, process_pool_run_and_process
+
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-438")
+
+    testing_run_one_args_skeleton = RunOneArgs(
+        working_dir=working_dir,
+        optim_params=active,
+        iter_this=0,
+        nodal_z_override_in_odb=stent_params.nodal_z_override_in_odb,
+        working_dir_extract=working_dir_extract,
+        model_infos=FULL_INFO_MODEL_LIST,
+        patch_suffix='',
+        child_patch_run_one_args=tuple(),
+        executed_feedback_text='',
+    )
+
+    testing_run_one_args_completed = process_pool_run_and_process(testing_run_one_args_skeleton, do_run_model=False, do_run_extraction=False)
+    one_design, one_ranking = process_completed_simulation(testing_run_one_args_completed)
+
+
+
 if __name__ == '__main__':
+
+    run_test_process_completed_simulation()
 
     # plot_history_gradient()
 
     # evolve_decider_test()
     # make_plot_tests()
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-418")  # 89
-    iter_this = 1
-    iter_prev = iter_this - 1
-    # make_plot_tests(working_dir, iter_this)
-
-    one_design, one_ranking = process_completed_simulation(working_dir, iter_prev)
 
 
-    from stent_opt.make_stent import run_model
-    from stent_opt.struct_opt.optimisation_parameters import active
+
+
     for sub_inp in extra_inp_pool:
         print(sub_inp)
         run_model(active, sub_inp, force_single_core=True)

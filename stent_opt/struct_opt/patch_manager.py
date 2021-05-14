@@ -152,7 +152,6 @@ class SubModelInfo(SubModelInfoBase):
     this_trial_active_state: bool
     node_elem_offset: int
 
-
     def elem_in_submodel(self, elem_num: int) -> bool:
         if elem_num == self.reference_elem_num:
             return self.this_trial_active_state

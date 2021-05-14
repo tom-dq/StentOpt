@@ -60,6 +60,7 @@ class OptimParams(typing.NamedTuple):
     primary_ranking_fitness_filters: typing.List[common.PrimaryRankingComponentFitnessFilter]
     element_components: typing.List[T_elem_result]
     nodal_position_components: typing.List[T_nodal_pos_func]
+    final_target_measure: common.GlobalStatusType
     gaussian_sigma: float
     local_deformation_stencil_length: float
     working_dir: str
@@ -125,7 +126,7 @@ class OptimParams(typing.NamedTuple):
             yield include_in_opt, filter_component
 
     def get_all_primary_ranking_fitness_filters(self) -> typing.Iterable[typing.Tuple[bool, common.PrimaryRankingComponentFitnessFilter]]:
-        for one_filter in common.PrimaryRankingComponentFitnessFilter:
+        for one_filter in common.PrimaryRankingComponentFitnessFilter.get_components_to_even_consider():
             include_in_opt = one_filter in self.primary_ranking_fitness_filters
             yield include_in_opt, one_filter
 
@@ -259,29 +260,30 @@ active = OptimParams(
     ],
     primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.high_value],
     element_components=[
-        db_defs.ElementPEEQ,
-        # db_defs.ElementStress,
+        # db_defs.ElementPEEQ,
+        db_defs.ElementStress,
         # db_defs.ElementEnergyElastic,
         # db_defs.ElementEnergyPlastic,
-        db_defs.ElementFatigueResult,
+        # db_defs.ElementFatigueResult,
     ],
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
-        score.get_primary_ranking_macro_deformation,
+        # score.get_primary_ranking_macro_deformation,
     ],
+    final_target_measure=history.GlobalStatusType.aggregate_p_norm_4,
     gaussian_sigma=0.3,  # Was 0.15 forever
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
     abaqus_output_time_interval=0.02,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=2.0,  # Was 2.0
-    time_released=2.0,
+    time_expansion=0.1,  # Was 2.0
+    time_released=0.1,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=4,
+    patch_hops=3,
     offset_submodels=True,
 )
 

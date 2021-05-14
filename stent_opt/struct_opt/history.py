@@ -9,11 +9,15 @@ import typing
 import statistics
 import matplotlib.pyplot as plt
 
-from stent_opt.struct_opt.common import RegionReducer, PrimaryRankingComponentFitnessFilter
+from stent_opt.struct_opt.common import RegionReducer, PrimaryRankingComponentFitnessFilter, GlobalStatusType
 from stent_opt.abaqus_model import element
 from stent_opt.struct_opt import design
 from stent_opt.odb_interface import db_defs
 from stent_opt.struct_opt import optimisation_parameters
+
+
+
+
 
 # TODO - fix up this stuff with enums not comparing equal: https://stackoverflow.com/a/40371520
 _enum_types = [
@@ -21,6 +25,7 @@ _enum_types = [
     RegionReducer,
     PrimaryRankingComponentFitnessFilter,
     optimisation_parameters.PostExpansionBehaviour,
+    GlobalStatusType,
 ]
 
 _nt_class_types = [
@@ -96,59 +101,7 @@ class NodePosition(typing.NamedTuple):
     z: float
 
 
-class GlobalStatusType(enum.Enum):
-    abaqus_history_result = enum.auto()
-    current_volume_ratio = enum.auto()
-    target_volume_ratio = enum.auto()
-    aggregate_min = enum.auto()
-    aggregate_p10 = enum.auto()
-    aggregate_mean = enum.auto()
-    aggregate_median = enum.auto()
-    aggregate_p90 = enum.auto()
-    aggregate_max = enum.auto()
-    aggregate_st_dev = enum.auto()
-    aggregate_sum = enum.auto()
 
-    @classmethod
-    def get_elemental_aggregate_values(cls):
-        for name, enum_obj in cls.__members__.items():
-            if name.startswith("aggregate_"):
-                yield enum_obj
-
-    def compute_aggregate(self, elemental_vals: typing.List[float]) -> float:
-        if self == GlobalStatusType.aggregate_min:
-            return min(elemental_vals)
-
-        elif self == GlobalStatusType.aggregate_max:
-            return max(elemental_vals)
-
-        elif self == GlobalStatusType.aggregate_mean:
-            return statistics.mean(elemental_vals)
-
-        elif self == GlobalStatusType.aggregate_median:
-            return statistics.median(elemental_vals)
-
-        elif self == GlobalStatusType.aggregate_st_dev:
-            return statistics.stdev(elemental_vals)
-
-        elif self == GlobalStatusType.aggregate_sum:
-            return sum(elemental_vals)
-
-        elif self in (GlobalStatusType.aggregate_p10, GlobalStatusType.aggregate_p90):
-            try:
-                quants = statistics.quantiles(elemental_vals, n=10)
-
-            except statistics.StatisticsError:
-                # Need two or more data points - if we don't have that, just use the mean
-                return GlobalStatusType.aggregate_mean.compute_aggregate(elemental_vals)
-
-            if self == GlobalStatusType.aggregate_p10:
-                return quants[0]
-
-            elif self == GlobalStatusType.aggregate_p90:
-                return quants[-1]
-
-        raise ValueError(f"Did not know what to return for {self}")
 
 
 class PlottablePoint(typing.NamedTuple):

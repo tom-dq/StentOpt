@@ -497,7 +497,45 @@ def _removed_observer_only_components(list_of_lists: typing.List[typing.List[Pri
     return out_list_of_lists
 
 
-def get_secondary_ranking_sum_of_norm(list_of_lists: typing.List[typing.List[PrimaryRankingComponent]]) -> typing.Iterable[SecondaryRankingComponent]:
+def get_secondary_ranking_scaled_sum(list_of_lists: typing.List[typing.List[PrimaryRankingComponent]]) -> typing.Iterable[SecondaryRankingComponent]:
+
+    # NB - this kind of assumes all the primary ranking components are zero for low, positive for high.
+    # Negatives or absolutes? Deal with that when it comes up...
+
+    elem_effort = collections.Counter()
+    names = []
+
+    include_in_opt_lists = _removed_observer_only_components(list_of_lists)
+
+    # Step 1 - normalise all the primary ranking components to one as a maximum
+    for one_list in include_in_opt_lists:
+        names.append(one_list[0].comp_name)
+        vals = [prim_rank.value for prim_rank in one_list]
+
+        min_val = min(vals)
+        max_val = max(vals)
+
+        if 0 > min_val:
+            raise ValueError(f"Negative value in PrimaryRankingComponent {one_list[0].comp_name}. So what are you going to do about it?")
+
+        # If there's a zero in there, get rid of it!
+        scale_factor = max_val if max_val > 0 else 1.0
+        scaled_primary = {prim_rank.elem_id: prim_rank.value / scale_factor for prim_rank in one_list}
+
+        # Update on a counter adds to the existing value...
+        elem_effort.update(scaled_primary)
+
+    sec_name = "ScaledSum[" + "+".join(names) + "]"
+    for elem_id, sec_rank_val in elem_effort.items():
+        yield SecondaryRankingComponent(
+            comp_name=sec_name,
+            elem_id=elem_id,
+            value=sec_rank_val / len(names),
+            include_in_opt=True,
+        )
+
+
+def OLD_get_secondary_ranking_sum_of_norm(list_of_lists: typing.List[typing.List[PrimaryRankingComponent]]) -> typing.Iterable[SecondaryRankingComponent]:
     """Just normalises the ranking components to the mean, and adds each one up."""
 
     elem_effort = collections.Counter()
