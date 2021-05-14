@@ -346,7 +346,8 @@ def _get_raw_data_relevant_to_constraint_filter(data: datastore.Datastore, one_f
 
 
 def _get_ranking_functions(
-        optim_params: optimisation_parameters.OptimParams,
+        run_one_args: RunOneArgs,
+        model_info: patch_manager.SubModelInfoBase,
         iter_n: int,
         design_n_min_1: design.StentDesign,
         data: datastore.Datastore,
@@ -354,6 +355,8 @@ def _get_ranking_functions(
     """Gets the abaqus results out of the sqlite DB and returns the optimsation element-wise effort results."""
 
     all_ranks = []
+
+    optim_params = run_one_args.optim_params
 
     # Gradient tracking
     if optim_params.region_gradient:
@@ -375,17 +378,28 @@ def _get_ranking_functions(
     for include_in_opt_comp, elem_component in optim_params.get_all_elem_components():
         for include_in_opt_filter, one_filter in optim_params.get_all_primary_ranking_fitness_filters():
             include_in_opt = include_in_opt_comp and include_in_opt_filter
-            this_comp_rows = score.get_primary_ranking_components(include_in_opt, one_filter, data.get_all_rows_at_frame(elem_component, one_frame))
-            raw_elem_rows.append( list(this_comp_rows) )
+
+            # Only extract the element results from this patch.
+            elem_results_this_submod = list(x for x in data.get_all_rows_at_frame(elem_component, one_frame) if model_info.patch_elem_id_in_this_model(x.elem_num))
+            this_comp_rows = score.get_primary_ranking_components(include_in_opt, one_filter, elem_results_this_submod)
+            raw_elem_rows.append(list(this_comp_rows))
 
     # Nodal position based functions
-    pos_rows = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame))
+    pos_rows_submod = list(x for x in data.get_all_rows_at_frame(db_defs.NodePos, one_frame) if model_info.patch_node_id_in_this_model(x.node_num))
+    pos_rows = [pos_row._replace(node_num=model_info.model_to_real_node(pos_row.node_num)) for pos_row in pos_rows_submod]
     for include_in_opt, one_func in optim_params.get_all_node_position_components():
         this_comp_rows = one_func(optim_params, include_in_opt, design_n_min_1, pos_rows)
         raw_elem_rows.append(list(this_comp_rows))
 
+    # Map from submodel element ids to the main model
+    for one_submodel_id_prim_result in raw_elem_rows:
+
+        # Sometimes there will be nothing here (for example, a Fatigue result when there is no oscillating step).
+        if one_submodel_id_prim_result:
+            with_main_model_ids = [elem_row._replace(elem_id=model_info.model_to_real_elem(elem_row.elem_id)) for elem_row in one_submodel_id_prim_result]
+            all_ranks.append(with_main_model_ids)
+
     # Compute the primary and overall ranking components
-    all_ranks.extend(raw_elem_rows)
 
     # Compute a secondary rank from all the first ones.
     sec_rank_unsmoothed = list(score.get_secondary_ranking_scaled_sum(all_ranks))
@@ -437,7 +451,7 @@ def _get_ranking_functions(
 
 T_PatchModelPair = typing.Tuple[patch_manager.SubModelInfo, patch_manager.SubModelInfo]
 def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Iterable[T_PatchModelPair]:
-    """Build the patch submodel info. They come in pairs so the "with" and "without" cases are solved on the same """
+    """Build the patch submodel info. They come in pairs so the "with" and "without" cases are solved in the same batch"""
 
     db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
     history_db = history.make_history_db(working_dir)
@@ -488,18 +502,36 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
 
                 boundary_node_nums, interior_fe_elems = element_bucket.get_fe_nodes_on_boundary_interface(graph, optim_params.patch_hops, graph_elem)
                 elem_nums = frozenset(fe_elem.num for fe_elem in interior_fe_elems)
-                for this_trial_active_state in (False, True):
 
-                    yield patch_manager.SubModelInfo(
+                # Potentially different nodes active in the model if there are nodes only attached to the trial element.
+                node_nums_this_trial_active = set()
+                node_nums_this_trial_inactive = set()
+                for fe_elem in interior_fe_elems:
+                    node_nums_this_trial_active.update(fe_elem.conn)
+                    if fe_elem != reference_elem_num:
+                        node_nums_this_trial_inactive.update(fe_elem.conn)
+
+                node_nums_lookup = {
+                    False: frozenset(node_nums_this_trial_inactive),
+                    True: frozenset(node_nums_this_trial_active),
+                }
+
+                sub_model_pair = [
+                    patch_manager.SubModelInfo(
                         boundary_node_nums=boundary_node_nums,
                         patch_manager=this_patch_manager,
                         stent_design=design_n_min_1,
                         elem_nums=elem_nums,
+                        node_nums=node_nums_lookup[this_trial_active_state],
                         reference_elem_num=reference_elem_num,
                         initial_active_state=initial_active_state,
                         this_trial_active_state=this_trial_active_state,
                         node_elem_offset=next(offset_counter),
                     )
+                    for this_trial_active_state in (False, True)
+                ]
+
+                yield sub_model_pair
 
 
 
@@ -517,22 +549,54 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     # TODO - batch these up better!
     for suffix, sub_model_info_list in (
             ("-sub5A", sub_model_infos[0:5]),
-            ("-sub5B", sub_model_infos[5:10]),
+            ("-sub5Z", sub_model_infos[-5:]),
             # ("-sub20", sub_model_infos[0:20]),
             # ("-sub200", sub_model_infos[0:200]),
             # ("-suball", sub_model_infos),
     ):
         # This will not occur if patch_hops is None.
-        if sub_model_infos:
+        if sub_model_info_list:
             sub_fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_prev, suffix)
-            construct_model.make_stent_model(optim_params, sub_model_infos[0].stent_design, sub_model_info_list, sub_fn_inp)
-            suffix_to_patch_list[suffix] = sub_model_info_list
+
+            # Flatten the with/without element pair.
+            flat_sub_model_infos = [sub_mod_inf for sub_model_info_pair in sub_model_info_list for sub_mod_inf in sub_model_info_pair]
+            construct_model.make_stent_model(optim_params, flat_sub_model_infos[0].stent_design, flat_sub_model_infos, sub_fn_inp)
+            suffix_to_patch_list[suffix] = flat_sub_model_infos
 
     return suffix_to_patch_list
 
 
+def _get_change_in_overall_objective_from_patches(
+        run_one_args: RunOneArgs,
+        model_info_to_patch_rank: typing.Dict[patch_manager.SubModelInfo, RankingResults],
+        ) -> typing.Dict[int, float]:
+    """This returns the "gradient" from the patches - basically, the change in objective function we can expect by activating the element."""
 
-def process_completed_simulation(run_one_args: RunOneArgs) -> typing.Tuple[design.StentDesign, RankingResults]:
+    def make_working_data():
+        for model_info, ranking_results in model_info_to_patch_rank.items():
+            ref_elem_num = model_info.reference_elem_num
+
+            # Go through the same "final objective function" (like a p-Norm or whatever) as the global model.
+            this_patch_vals = list(ranking_results.final_ranking_component_unsmoothed.values())
+            obj_func = run_one_args.optim_params.final_target_measure.compute_aggregate(this_patch_vals)
+            yield ref_elem_num, model_info.this_trial_active_state, obj_func
+
+    working_data = sorted(make_working_data())
+
+    def get_elem_num(row):
+        return row[0]
+
+    elem_patch_deltas = dict()
+    for elem_num, patch_rows in itertools.groupby(working_data, get_elem_num):
+        activation_data = {active_state: obj_func for _, active_state, obj_func in patch_rows}
+        gradient_from_patch = activation_data[True] - activation_data[False]
+        elem_patch_deltas[elem_num] = gradient_from_patch
+
+    return elem_patch_deltas
+
+
+def process_completed_simulation(run_one_args: RunOneArgs
+        ) -> typing.Tuple[design.StentDesign, typing.Dict[patch_manager.SubModelInfoBase, RankingResults]]:
     """Processes the results of a completed simulation and returns its design and results to produce the next iteration."""
 
     iter_prev = run_one_args.iter_this
@@ -542,16 +606,28 @@ def process_completed_simulation(run_one_args: RunOneArgs) -> typing.Tuple[desig
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
 
-    db_fn_prev = history.make_fn_in_dir(run_one_args.working_dir, ".db", iter_prev)
-
-    # Get any patch results and include them in the mix.
-    patch_ranking_results = []
-    for run_one_args_patch in run_one_args.child_patch_run_one_args:
-        _, patch_rank = process_completed_simulation(run_one_args_patch)
-        patch_ranking_results.append(patch_rank)
+    db_fn_prev = history.make_fn_in_dir(run_one_args.working_dir, ".db", iter_prev, run_one_args.patch_suffix)
 
     # Go between num (1234) and idx (5, 6, 7)...
     elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
+
+    # Get any patch results and include them in the mix.
+    model_info_to_patch_rank = {}
+    for run_one_args_patch in run_one_args.child_patch_run_one_args:
+        # The patch with and without a given element are going to be in the same sub-model.
+        _, this_model_info_to_patch_rank = process_completed_simulation(run_one_args_patch)
+        model_info_to_patch_rank.update(this_model_info_to_patch_rank)
+
+    elem_patch_deltas = _get_change_in_overall_objective_from_patches(run_one_args, model_info_to_patch_rank)
+    # Add in the patch results to the DB.
+    with datastore.Datastore(db_fn_prev) as data:
+        one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
+
+        in_db_form = [
+            db_defs.ElementGlobalPatchSensitivity(frame_rowid=None, elem_num=elem_num, gradient_from_patch=gradient_from_patch)
+            for elem_num, gradient_from_patch in elem_patch_deltas.items()]
+
+        data.add_results_on_existing_frame(one_frame, in_db_form)
 
     with history.History(history_db) as hist:
         snapshot_n_min_1 = hist.get_snapshot(iter_prev)
@@ -561,15 +637,23 @@ def process_completed_simulation(run_one_args: RunOneArgs) -> typing.Tuple[desig
             label=snapshot_n_min_1.label,
         )
 
+    # TODO:
+    #   - pass this to _get_ranking_functions
+    #   - make some new sensitivity component like EnergyElastic - call it "GlobalObjectivePatchChange" or whatever...
+
     # Get the data from the previously run simulation.
     with datastore.Datastore(db_fn_prev) as data:
-        ranking_result = _get_ranking_functions(optim_params, iter_prev, design_n_min_1, data)
-        global_status_raw = list(data.get_final_history_result())
+        ranking_results = {}
+        for model_info in run_one_args.model_infos:
+            ranking_result = _get_ranking_functions(run_one_args, model_info, iter_prev, design_n_min_1, data)
+            global_status_raw = list(data.get_final_history_result())
 
-    if run_one_args.is_full_model:
-        _log_completed_in_history_db(history_db, ranking_result, global_status_raw, optim_params, design_n_min_1, iter_prev)
+            ranking_results[model_info] = ranking_result
 
-    return design_n_min_1, ranking_result
+            if run_one_args.is_full_model:
+                _log_completed_in_history_db(history_db, ranking_result, global_status_raw, optim_params, design_n_min_1, iter_prev)
+
+    return design_n_min_1, ranking_results
 
 
 def _log_completed_in_history_db(history_db, ranking_result, global_status_raw, optim_params, design_n_min_1, iter_prev):
@@ -793,7 +877,7 @@ def run_test_process_completed_simulation():
     from stent_opt.struct_opt.design import basic_stent_params as stent_params
     from stent_opt.make_stent import run_model, working_dir_extract, FULL_INFO_MODEL_LIST, process_pool_run_and_process
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-438")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-444")
 
     testing_run_one_args_skeleton = RunOneArgs(
         working_dir=working_dir,
@@ -822,7 +906,7 @@ if __name__ == '__main__':
     # make_plot_tests()
 
 
-
+if False:
 
 
     for sub_inp in extra_inp_pool:

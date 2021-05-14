@@ -20,7 +20,14 @@ class VolumeTargetOpts(typing.NamedTuple):
         return history.nt_from_db_strings(cls, data)
 
 
-T_elem_result = typing.Union[db_defs.ElementStress, db_defs.ElementPEEQ, db_defs.ElementEnergyElastic, db_defs.ElementEnergyPlastic, db_defs.ElementFatigueResult]
+T_elem_result = typing.Union[
+    db_defs.ElementStress,
+    db_defs.ElementPEEQ,
+    db_defs.ElementEnergyElastic,
+    db_defs.ElementEnergyPlastic,
+    db_defs.ElementFatigueResult,
+    db_defs.ElementGlobalPatchSensitivity,
+]
 
 
 class RegionGradient(typing.NamedTuple):
@@ -275,10 +282,10 @@ active = OptimParams(
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
-    abaqus_output_time_interval=0.02,  # Was 0.1
+    abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
     time_expansion=0.1,  # Was 2.0
-    time_released=0.1,
+    time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,

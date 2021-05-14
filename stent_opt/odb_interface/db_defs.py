@@ -93,6 +93,7 @@ ElementPEEQ = _make_nt_and_table_create("ElementPEEQ", ResultEntity.elem_num, ("
 ElementEnergyElastic = _make_nt_and_table_create("ElementEnergyElastic", ResultEntity.elem_num, ("ESEDEN", ))
 ElementEnergyPlastic = _make_nt_and_table_create("ElementEnergyPlastic", ResultEntity.elem_num, ("EPDDEN",))
 ElementFatigueResult = _make_nt_and_table_create("ElementFatigueResult", ResultEntity.elem_num, ("SAmp", "SMean", "LGoodman",))
+ElementGlobalPatchSensitivity = _make_nt_and_table_create("ElementEnergyPlastic", ResultEntity.elem_num, ("gradient_from_patch",))
 
 expected_history_results = ["ALLSE", "ALLPD", "ALLKE", "ALLWK"]
 

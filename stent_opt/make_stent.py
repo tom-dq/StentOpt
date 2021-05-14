@@ -257,7 +257,11 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
     while True:
         # Extract ONE from the previous generation
-        one_design, one_ranking = generation.process_completed_simulation(run_one_args_completed)
+        one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
+        if len(model_info_to_rank) != 1:
+            raise ValueError("What?")
+
+        one_ranking = next(iter(model_info_to_rank.values()))
 
         # for iter_this, (new_gen_func, new_gen_descip) in enumerate(new_design_trials, start=previous_max_i+1):
         iter_this = iter_prev + 1

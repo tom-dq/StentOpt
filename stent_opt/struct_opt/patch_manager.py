@@ -83,7 +83,7 @@ class PatchManager:
 
 T_nodenum_dof_amp = typing.Tuple[int, typing.Dict[int, amplitude.Amplitude]]
 
-@dataclasses.dataclass()
+@dataclasses.dataclass(unsafe_hash=True)
 class SubModelInfoBase:
     boundary_node_nums: typing.FrozenSet[int]
     patch_manager: PatchManager
@@ -91,6 +91,10 @@ class SubModelInfoBase:
 
     @abc.abstractmethod
     def elem_in_submodel(self, elem_num: int) -> bool:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def node_in_submodel(self, node_num: int) -> bool:
         raise NotImplementedError()
 
     @property
@@ -117,16 +121,33 @@ class SubModelInfoBase:
     def real_to_model_elem(self, elem_num: int) -> int:
         raise NotImplementedError()
 
+    @abc.abstractmethod
+    def model_to_real_node(self, node_num_submodel: int) -> int:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def model_to_real_elem(self, elem_num_submodel: int) -> int:
+        raise NotImplementedError()
+
+    def patch_elem_id_in_this_model(self, elem_num_submodel: int):
+        real_elem_id = self.model_to_real_elem(elem_num_submodel)
+        return self.elem_in_submodel(real_elem_id)
+
+    def patch_node_id_in_this_model(self, node_num_submodel: int):
+        real_node_id = self.model_to_real_node(node_num_submodel)
+        return self.node_in_submodel(real_node_id)
 
 
-
-@dataclasses.dataclass()
+@dataclasses.dataclass(unsafe_hash=True)
 class FullModelInfo(SubModelInfoBase):
     boundary_node_nums: typing.FrozenSet[int] = frozenset()
     patch_manager: PatchManager = None
     node_elem_offset: int = 0
 
     def elem_in_submodel(self, elem_num: int) -> bool:
+        return True
+
+    def node_in_submodel(self, node_num: int) -> bool:
         return True
 
     @property
@@ -139,14 +160,21 @@ class FullModelInfo(SubModelInfoBase):
     def real_to_model_elem(self, elem_num: int) -> int:
         return elem_num
 
+    def model_to_real_node(self, node_num_submodel: int) -> int:
+        return node_num_submodel
 
-@dataclasses.dataclass()
+    def model_to_real_elem(self, elem_num_submodel: int) -> int:
+        return elem_num_submodel
+
+
+@dataclasses.dataclass(unsafe_hash=True)
 class SubModelInfo(SubModelInfoBase):
     boundary_node_nums: typing.FrozenSet[int]
     patch_manager: PatchManager
     stent_design: typing.Any
 
     elem_nums: typing.FrozenSet[int]
+    node_nums: typing.FrozenSet[int]
     reference_elem_num: int
     initial_active_state: bool
     this_trial_active_state: bool
@@ -157,6 +185,9 @@ class SubModelInfo(SubModelInfoBase):
             return self.this_trial_active_state
 
         return elem_num in self.elem_nums
+
+    def node_in_submodel(self, node_num: int) -> bool:
+        return node_num in self.node_nums
 
     @property
     def is_sub_model(self) -> bool:
@@ -171,4 +202,11 @@ class SubModelInfo(SubModelInfoBase):
 
     def real_to_model_elem(self, elem_num: int) -> int:
         return elem_num + self.node_elem_offset
+
+    def model_to_real_node(self, node_num_submodel: int) -> int:
+        return node_num_submodel - self.node_elem_offset
+
+    def model_to_real_elem(self, elem_num_submodel: int) -> int:
+        return elem_num_submodel - self.node_elem_offset
+
 

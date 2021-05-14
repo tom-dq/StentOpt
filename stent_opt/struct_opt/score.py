@@ -193,13 +193,19 @@ def get_primary_ranking_element_distortion(optim_params: optimisation_parameters
 
     for elem_idx in old_design.active_elements:
         elem_num = elem_indices_to_num[elem_idx]
-        elem_connection = design.get_single_element_connection(old_design.stent_params, elem_idx)
-        yield PrimaryRankingComponent(
-            comp_name="InternalAngle",
-            elem_id=elem_num,
-            value=_max_delta_angle_of_element(old_design.stent_params, node_to_pos, elem_connection),
-            include_in_opt=include_in_opt,
-        )
+
+        # For submodels there mostly won't be this result...
+        try:
+            elem_connection = design.get_single_element_connection(old_design.stent_params, elem_idx)
+            yield PrimaryRankingComponent(
+                comp_name="InternalAngle",
+                elem_id=elem_num,
+                value=_max_delta_angle_of_element(old_design.stent_params, node_to_pos, elem_connection),
+                include_in_opt=include_in_opt,
+            )
+
+        except KeyError:
+            pass
 
 
 def _transform_patch_over_boundary(stent_design: "design.StentDesign", node_dict_xyz):
@@ -390,7 +396,8 @@ def get_primary_ranking_macro_deformation(optim_params: optimisation_parameters.
 
     for elem_idx, node_num_set in elem_to_nodes_in_range.items():
 
-        node_indices = [node_key_to_index[node_key] for node_key in node_num_set]
+        # if node_key in node_key_to_index is needed if this is a sub-model...
+        node_indices = [node_key_to_index[node_key] for node_key in node_num_set if node_key in node_key_to_index]
         np_orig_sub = np_orig.take(node_indices, axis=0)
         np_def_sub = np_deformed.take(node_indices, axis=0)
 
