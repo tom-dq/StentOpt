@@ -1,6 +1,7 @@
 import collections
 import functools
 import itertools
+import math
 import pathlib
 import statistics
 import typing
@@ -194,7 +195,9 @@ def display_design_flat(design_space: design.PolarIndex, data: T_index_to_val):
 
 class CandidatesFor(typing.NamedTuple):
     removal: typing.FrozenSet[design.PolarIndex]
-    introduction: typing.FrozenSet[design.PolarIndex]
+    existing_next_round: typing.FrozenSet[design.PolarIndex]  # Allowable design space for the next round (current elems and new ones)
+    new_introduction: typing.FrozenSet[design.PolarIndex]  # Elements we could add but which weren't there last round.
+
 
 
 @functools.lru_cache()
@@ -229,7 +232,8 @@ def get_candidate_elements(
         some_kind_of_limits_here = threshold > 0
         if some_kind_of_limits_here:
             fully_encased_node_connection = 2 if design_n_min_1.stent_params.stent_element_dimensions == 2 else 4
-            boundary_nodes = design.generate_stent_boundary_nodes(design_n_min_1.stent_params)
+            #  boundary_nodes = design.generate_stent_boundary_nodes(design_n_min_1.stent_params)
+            boundary_nodes = set()
             pretend_nodes_werent_there = {iNodeIdx for iNodeIdx, n_attached_elems in nodes_on_last.items() if iNodeIdx in boundary_nodes and n_attached_elems == fully_encased_node_connection}
             for iNodeIdx in pretend_nodes_werent_there:
                 if iNodeIdx in nodes_on_last:
@@ -249,9 +253,27 @@ def get_candidate_elements(
 
     indicies_holes = fully_populated_indices_including_inadmissable - design_n_min_1.active_elements
 
+    # Have to hackily add in the elements on the boundaries to the "removable" set...
+    boundary_nodes_idxs = list(design.generate_stent_boundary_nodes(design_n_min_1.stent_params))
+    boundary_nodes_nums = {design.node_from_index(design_n_min_1.stent_params.divs, node_idx.R, node_idx.Th, node_idx.Z) for node_idx in boundary_nodes_idxs}
+    boundary_elements = set()
+    for elemIdx in fully_populated_indices:
+        this_elem_nodes = design.get_single_element_connection(design_n_min_1.stent_params, elemIdx)
+        if any(n in boundary_nodes_nums for n in this_elem_nodes):
+            boundary_elements.add(elemIdx)
+
+    removal_partial = get_adj_elements(indicies_holes, optim_params.nodes_shared_with_old_design_to_contract)
+    removal = removal_partial | frozenset(boundary_elements)
+
+    existing_next_round = get_adj_elements(design_n_min_1.active_elements, optim_params.nodes_shared_with_old_design_to_expand)
+
+    new_introduction = existing_next_round - design_n_min_1.active_elements
+
+    # TODO - top corner of fully populated design is not in the candidates for removal - I think it should be?
     return CandidatesFor(
-        removal=get_adj_elements(indicies_holes, optim_params.nodes_shared_with_old_design_to_contract),
-        introduction=get_adj_elements(design_n_min_1.active_elements, optim_params.nodes_shared_with_old_design_to_expand),
+        removal=removal,
+        existing_next_round=existing_next_round,
+        new_introduction=new_introduction,
     )
 
 
@@ -270,7 +292,7 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
         max_new_num = 0
 
     top_new_potential_elems_all = get_top_n_elements(sensitivity_result, Tail.top, max_new_num)
-    top_new_potential_elems = {idx for idx in top_new_potential_elems_all if idx in candidates_for.introduction}
+    top_new_potential_elems = {idx for idx in top_new_potential_elems_all if idx in candidates_for.existing_next_round}
     actual_new_elems = top_new_potential_elems - design_n_min_1.active_elements
     num_new = len(actual_new_elems)
 
@@ -496,7 +518,7 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
 
         for initial_active_state, elem_idxs in (
                 (True, candidates_for.removal),
-                (False, candidates_for.introduction),
+                (False, candidates_for.new_introduction),
         ):
             for polar_index in elem_idxs:
                 reference_elem_num = elem_indices_to_num[polar_index]
@@ -532,7 +554,9 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
                     )
                     for this_trial_active_state in (False, True)
                 ]
-
+                # print(f"reference_elem_num={reference_elem_num}")
+                # print(f"   Off: {sub_model_pair[0]}")
+                # print(f"   On:  {sub_model_pair[1]}")
                 yield sub_model_pair
 
 
@@ -549,9 +573,10 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     sub_model_infos = list(prepare_patch_models(working_dir, iter_prev))
 
     # Batch them up into even-ish chunks
-    chunk_size_ideal = len(sub_model_infos) // computer.this_computer.n_abaqus_parallel_solves
-    chunk_size = max(20, chunk_size_ideal)  # Don't need to make it too crazy tiny...
-    print(f"chunk_size_ideal = {chunk_size_ideal}")
+    chunk_size_ideal = len(sub_model_infos) / computer.this_computer.n_abaqus_parallel_solves
+    chunk_size_round = math.ceil(chunk_size_ideal)
+    chunk_size = max(100, chunk_size_round)  # Don't need to make it too crazy tiny...
+    print(f"  Chunk Size [Ideal / Round / Used]: {chunk_size_ideal} / {chunk_size_round} / {chunk_size}")
 
     # https://stackoverflow.com/a/312464
     def get_prefix_and_smi():

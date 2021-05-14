@@ -61,7 +61,7 @@ def compel_new_generation(
     candidates_for = generation.get_candidate_elements(optim_params, design_prev)
 
     candidates = {
-        chains.Action.add: candidates_for.introduction,
+        chains.Action.add: candidates_for.existing_next_round,
         chains.Action.remove: candidates_for.removal,
     }
 

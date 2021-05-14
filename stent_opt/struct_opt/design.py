@@ -1140,7 +1140,7 @@ dylan_r10n1_params = StentParams(
     divs=PolarIndex(
         R=1,
         Th=5,  # 31
-        Z=12,  # 120
+        Z=15,  # 120
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1178,8 +1178,6 @@ dylan_r10n1_params = StentParams(
 
 
 basic_stent_params = dylan_r10n1_params.copy_with_updates(balloon=None, cylinder=None)
-
-print(basic_stent_params)
 
 
 if __name__ == "__main__":

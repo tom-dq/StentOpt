@@ -180,6 +180,9 @@ class SubModelInfo(SubModelInfoBase):
     this_trial_active_state: bool
     node_elem_offset: int
 
+    def __str__(self) -> str:
+        return f"SubModelInfo(reference_elem_num={self.reference_elem_num}, node_elem_offset={self.node_elem_offset}, elem_nums={sorted(self.elem_nums)}"
+
     def elem_in_submodel(self, elem_num: int) -> bool:
         if elem_num == self.reference_elem_num:
             return self.this_trial_active_state
