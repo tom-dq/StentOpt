@@ -83,7 +83,7 @@ def get_gradient_input_data(
                 one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
 
                 raw_rows = list(data.get_all_rows_at_frame(optim_params.region_gradient.component, one_frame))
-                raw_ranking_components = list(score.get_primary_ranking_components(True, optim_params.single_primary_ranking_fitness_filter, raw_rows))
+                raw_ranking_components = list(score.get_primary_ranking_components(True, optim_params.single_primary_ranking_fitness_filter, optim_params, raw_rows))
                 element_ranking_components = {one_comp.elem_id: one_comp for one_comp in raw_ranking_components}
                 yield score.GradientInputData(
                     iteration_num=iter_num,
@@ -406,7 +406,7 @@ def _get_ranking_functions(
 
             # Only extract the element results from this patch.
             elem_results_this_submod = list(x for x in data.get_all_rows_at_frame(elem_component, one_frame) if model_info.patch_elem_id_in_this_model(x.elem_num))
-            this_comp_rows = score.get_primary_ranking_components(include_in_opt, one_filter, elem_results_this_submod)
+            this_comp_rows = score.get_primary_ranking_components(include_in_opt, one_filter, optim_params, elem_results_this_submod)
             raw_elem_rows.append(list(this_comp_rows))
 
     # Nodal position based functions
@@ -643,7 +643,7 @@ def process_completed_simulation(run_one_args: RunOneArgs
     with datastore.Datastore(db_fn_prev) as data:
         one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
         abaqus_created_primary_rows = data.get_all_rows_at_frame_any_element_type(one_frame)
-        composite_primary_rows = score.compute_composite_ranking_component(abaqus_created_primary_rows)
+        composite_primary_rows = score.compute_composite_ranking_component(optim_params, abaqus_created_primary_rows)
         data.add_results_on_existing_frame(one_frame, composite_primary_rows)
 
     # Go between num (1234) and idx (5, 6, 7)...
@@ -836,7 +836,7 @@ def make_plot_tests(working_dir: pathlib.Path, iter_n: int):
 
         # Element-based effort functions
         for db_data in [stress_rows]: # [peeq_rows]: #, stress_rows]:
-            all_ranks.append(list(score.get_primary_ranking_components(True, optim_params.single_primary_ranking_fitness_filter, db_data)))
+            all_ranks.append(list(score.get_primary_ranking_components(True, optim_params.single_primary_ranking_fitness_filter, optim_params, db_data)))
 
 
     sec_rank = list(score.get_secondary_ranking_sum_of_norm(all_ranks))

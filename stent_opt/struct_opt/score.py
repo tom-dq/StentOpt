@@ -93,7 +93,7 @@ class LineOfBestFit(typing.NamedTuple):
     c: float
 
 
-def composite_stress_peeq_energy(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """(0.1+vM) * (0.01+PEEQ) * (MaxOverallElasticEnergy - ElasticEnergy + 0.01)"""
 
     for elem_num, type_to_val in elem_num_to_type_to_rows.items():
@@ -110,9 +110,24 @@ def composite_stress_peeq_energy(row_type_to_range, elem_num_to_type_to_rows) ->
             comp_val=one_val,
         )
 
-composite_active = composite_stress_peeq_energy
+def primary_composite_stress_peeq_energy_neg(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+    """-1 * (0.1+vM) * (0.01+PEEQ) * (MaxOverallElasticEnergy - ElasticEnergy + 0.01)"""
 
-def compute_composite_ranking_component(nt_rows_all_from_frame) -> typing.Iterable[db_defs.ElementCustomComposite]:
+    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
+        vM = type_to_val[db_defs.ElementStress]
+        PEEQ = type_to_val[db_defs.ElementPEEQ]
+        ElasticEnergy = type_to_val[db_defs.ElementEnergyElastic]
+
+        elast_energy_min, elast_enery_max = row_type_to_range[db_defs.ElementEnergyElastic]
+
+        one_val = -1 * (0.1 + vM) * (0.01 + PEEQ) * (elast_enery_max - ElasticEnergy + 0.01)
+        yield db_defs.ElementCustomComposite(
+            frame_rowid=None,
+            elem_num=elem_num,
+            comp_val=one_val,
+        )
+
+def compute_composite_ranking_component(optim_params: optimisation_parameters.OptimParams, nt_rows_all_from_frame) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """This computes a composite function based on existing results in the Datastore. Called after Abaqus has populated it."""
 
     # Get the min and max of all the primary quantities
@@ -132,10 +147,10 @@ def compute_composite_ranking_component(nt_rows_all_from_frame) -> typing.Iterab
     for row_type, all_vals in row_type_to_value.items():
         row_type_to_range[row_type] = min(all_vals), max(all_vals)
 
-    yield from composite_active(row_type_to_range, elem_num_to_type_to_rows)
+    yield from optim_params.primary_composite_calculator(row_type_to_range, elem_num_to_type_to_rows)
 
 
-def _get_primary_ranking_components_raw(include_in_opt, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+def _get_primary_ranking_components_raw(include_in_opt, optim_params: optimisation_parameters.OptimParams, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
     """All the nt_rows should be the same type"""
 
     nt_rows = list(nt_rows)
@@ -192,7 +207,7 @@ def _get_primary_ranking_components_raw(include_in_opt, nt_rows) -> typing.Itera
     elif isinstance(nt_row, db_defs.ElementCustomComposite):
         for row in nt_rows:
             yield PrimaryRankingComponent(
-                comp_name=composite_active.__doc__,
+                comp_name=optim_params.primary_composite_calculator.__doc__,
                 elem_id=row.elem_num,
                 value=row.comp_val,
                 include_in_opt=include_in_opt,
@@ -211,10 +226,10 @@ def _get_primary_ranking_components_raw(include_in_opt, nt_rows) -> typing.Itera
         raise ValueError(nt_row)
 
 
-def _get_primary_ranking_deviation(include_in_opt: bool, central_value_producer, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+def _get_primary_ranking_deviation(include_in_opt: bool, optim_params: optimisation_parameters.OptimParams, central_value_producer, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
     """Gets a ranking component which makes elements close to the mean the best."""
 
-    raw_primary_res = list(_get_primary_ranking_components_raw(include_in_opt, nt_rows))
+    raw_primary_res = list(_get_primary_ranking_components_raw(include_in_opt, optim_params, nt_rows))
 
     raw_data = [prc.value for prc in raw_primary_res]
     central_value = central_value_producer(raw_data)
@@ -229,17 +244,17 @@ def _get_primary_ranking_deviation(include_in_opt: bool, central_value_producer,
     return final
 
 
-def get_primary_ranking_components(include_in_opt: bool, one_filter: common.PrimaryRankingComponentFitnessFilter, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
+def get_primary_ranking_components(include_in_opt: bool, one_filter: common.PrimaryRankingComponentFitnessFilter, optim_params: optimisation_parameters.OptimParams, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
 
     nt_rows = list(nt_rows)
     if not nt_rows:
         return
 
     if one_filter.is_deviation_from_central_value:
-        nt_producer = _get_primary_ranking_deviation(include_in_opt, one_filter.get_central_value_function(), nt_rows)
+        nt_producer = _get_primary_ranking_deviation(include_in_opt, optim_params, one_filter.get_central_value_function(), nt_rows)
 
     else:
-        nt_producer = _get_primary_ranking_components_raw(include_in_opt, nt_rows)
+        nt_producer = _get_primary_ranking_components_raw(include_in_opt, optim_params, nt_rows)
 
     # Add on the suffix for the filter.
     with_filter_suffix = (prc._replace(comp_name=f"{prc.comp_name} {one_filter.name}") for prc in nt_producer)

@@ -58,6 +58,9 @@ T_vol_func = typing.Callable[[VolumeTargetOpts, int], float]
 T_nodal_pos_func = typing.Callable[["OptimParams", bool, "design.StentDesign", typing.Iterable[db_defs.NodePos]], typing.Iterable[score.PrimaryRankingComponent]]   # Accepts a design and some node positions, and generates ranking components.
 T_filter_component = typing.Callable[[bool, typing.Iterable[score.PrimaryRankingComponent]], typing.Iterable[score.FilterRankingComponent]]
 
+# TODO - figure out this signature...
+T_composite_primary_calculator = typing.Callable[[typing.Any,], typing.Iterable[score.PrimaryRankingComponent]]
+
 class OptimParams(typing.NamedTuple):
     """Parameters which control the optimisation."""
     max_change_in_vol_ratio: float
@@ -68,6 +71,7 @@ class OptimParams(typing.NamedTuple):
     primary_ranking_fitness_filters: typing.List[common.PrimaryRankingComponentFitnessFilter]
     element_components: typing.List[T_elem_result]
     nodal_position_components: typing.List[T_nodal_pos_func]
+    primary_composite_calculator: T_composite_primary_calculator
     final_target_measure: common.GlobalStatusType
     gaussian_sigma: float
     local_deformation_stencil_length: float
@@ -244,7 +248,7 @@ def _get_for_db_funcs():
     ]
 
     all_names = dir(score)
-    good_names = [n for n in all_names if n.startswith("get_primary_ranking") or n.startswith("constraint_filter_")]
+    good_names = [n for n in all_names if n.startswith("get_primary_ranking") or n.startswith("constraint_filter_") or n.startswith('primary_composite_')]
     for maybe_f_name in good_names:
         maybe_f = getattr(score, maybe_f_name)
         if not callable(maybe_f):
@@ -308,6 +312,7 @@ active = OptimParams(
         # db_defs.ElementFatigueResult,
         db_defs.ElementCustomComposite,
     ],
+    primary_composite_calculator=score.primary_composite_stress_peeq_energy_neg,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
@@ -317,7 +322,7 @@ active = OptimParams(
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
-    abaqus_output_time_interval=0.01,  # Was 0.1
+    abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
     time_expansion=2.0,  # Was 2.0
     time_released=None,
