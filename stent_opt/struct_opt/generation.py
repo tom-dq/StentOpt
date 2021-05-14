@@ -375,7 +375,8 @@ def _get_ranking_functions(
     raw_elem_rows = []
 
     # Element based funtions
-    for include_in_opt_comp, elem_component in optim_params.get_all_elem_components():
+    elem_components_data = list(optim_params.get_all_elem_components(patch_model_context=model_info.is_sub_model))
+    for include_in_opt_comp, elem_component in elem_components_data:
         for include_in_opt_filter, one_filter in optim_params.get_all_primary_ranking_fitness_filters():
             include_in_opt = include_in_opt_comp and include_in_opt_filter
 
@@ -387,7 +388,7 @@ def _get_ranking_functions(
     # Nodal position based functions
     pos_rows_submod = list(x for x in data.get_all_rows_at_frame(db_defs.NodePos, one_frame) if model_info.patch_node_id_in_this_model(x.node_num))
     pos_rows = [pos_row._replace(node_num=model_info.model_to_real_node(pos_row.node_num)) for pos_row in pos_rows_submod]
-    for include_in_opt, one_func in optim_params.get_all_node_position_components():
+    for include_in_opt, one_func in optim_params.get_all_node_position_components(patch_model_context=model_info.is_sub_model):
         this_comp_rows = one_func(optim_params, include_in_opt, design_n_min_1, pos_rows)
         raw_elem_rows.append(list(this_comp_rows))
 
@@ -546,13 +547,13 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
 
     sub_model_infos = list(prepare_patch_models(working_dir, iter_prev))
 
-    # TODO - batch these up better!
+    # TODO - batch these up and multi-process!
     for suffix, sub_model_info_list in (
-            ("-sub5A", sub_model_infos[0:5]),
-            ("-sub5Z", sub_model_infos[-5:]),
+            #("-sub5A", sub_model_infos[0:5]),
+            #("-sub5Z", sub_model_infos[-5:]),
             # ("-sub20", sub_model_infos[0:20]),
             # ("-sub200", sub_model_infos[0:200]),
-            # ("-suball", sub_model_infos),
+            ("-suball", sub_model_infos),
     ):
         # This will not occur if patch_hops is None.
         if sub_model_info_list:
@@ -589,7 +590,7 @@ def _get_change_in_overall_objective_from_patches(
     elem_patch_deltas = dict()
     for elem_num, patch_rows in itertools.groupby(working_data, get_elem_num):
         activation_data = {active_state: obj_func for _, active_state, obj_func in patch_rows}
-        gradient_from_patch = activation_data[True] - activation_data[False]
+        gradient_from_patch = activation_data[False] - activation_data[True]
         elem_patch_deltas[elem_num] = gradient_from_patch
 
     return elem_patch_deltas
@@ -636,10 +637,6 @@ def process_completed_simulation(run_one_args: RunOneArgs
             active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements)),
             label=snapshot_n_min_1.label,
         )
-
-    # TODO:
-    #   - pass this to _get_ranking_functions
-    #   - make some new sensitivity component like EnergyElastic - call it "GlobalObjectivePatchChange" or whatever...
 
     # Get the data from the previously run simulation.
     with datastore.Datastore(db_fn_prev) as data:
@@ -877,7 +874,7 @@ def run_test_process_completed_simulation():
     from stent_opt.struct_opt.design import basic_stent_params as stent_params
     from stent_opt.make_stent import run_model, working_dir_extract, FULL_INFO_MODEL_LIST, process_pool_run_and_process
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-444")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-454")
 
     testing_run_one_args_skeleton = RunOneArgs(
         working_dir=working_dir,

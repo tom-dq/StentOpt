@@ -33,6 +33,12 @@ class Datastore:
         self.connection.commit()
         self.connection.close()
 
+    def __str__(self):
+        return 'Datastore("{})"'.format(self.fn)
+
+    def __repr__(self):
+        return self.__str__()
+
     def add_frame_and_results(self, frame, many_results):
         """
         Insert a frame, and a bunch of rows. Works best if the many_results are sorted by type of result.
@@ -137,7 +143,7 @@ class Datastore:
 
 
 if __name__ == "__main__":
-    db_fn = r"c:\temp\aba\db-5.db"
+    db_fn = r"c:\temp\aba\db-6.db"
     data_store = Datastore(db_fn)
 
     frame = db_defs.Frame(

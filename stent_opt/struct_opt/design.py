@@ -1140,7 +1140,7 @@ dylan_r10n1_params = StentParams(
     divs=PolarIndex(
         R=1,
         Th=15,  # 31
-        Z=20,  # 120
+        Z=40,  # 120
     ),
     r_min=0.65,
     r_max=0.75,

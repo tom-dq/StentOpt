@@ -146,6 +146,15 @@ def _get_primary_ranking_components_raw(include_in_opt, nt_rows) -> typing.Itera
                 value=row.LGoodman,
                 include_in_opt=include_in_opt,
             )
+
+    elif isinstance(nt_row, db_defs.ElementGlobalPatchSensitivity):
+        for row in nt_rows:
+            yield PrimaryRankingComponent(
+                comp_name=row.__class__.__name__,
+                elem_id=row.elem_num,
+                value=row.gradient_from_patch,
+                include_in_opt=include_in_opt,
+            )
     else:
         raise ValueError(nt_row)
 
@@ -506,8 +515,12 @@ def _removed_observer_only_components(list_of_lists: typing.List[typing.List[Pri
 
 def get_secondary_ranking_scaled_sum(list_of_lists: typing.List[typing.List[PrimaryRankingComponent]]) -> typing.Iterable[SecondaryRankingComponent]:
 
+    """
+        one list                min     min_for_offsetting      scale_factor
+        [1, 2, 3]               1       0
+    """
     # NB - this kind of assumes all the primary ranking components are zero for low, positive for high.
-    # Negatives or absolutes? Deal with that when it comes up...
+    # If there are negatives, the scaling will shift them up a bit so the lowest is zero.
 
     elem_effort = collections.Counter()
     names = []
@@ -522,12 +535,21 @@ def get_secondary_ranking_scaled_sum(list_of_lists: typing.List[typing.List[Prim
         min_val = min(vals)
         max_val = max(vals)
 
-        if 0 > min_val:
-            raise ValueError(f"Negative value in PrimaryRankingComponent {one_list[0].comp_name}. So what are you going to do about it?")
+        # Don't shift below 0
+        min_for_offsetting = min(0.0, min_val)
+
+        if min_val < 0.0:
+            # Shift it all up a bit if the lowest value is negative. But leave the max value output by the method at 1.0
+            scale_factor = max_val - min_val
+            offset_value = abs(min_val)
+
+        else:
+            scale_factor = max_val
+            offset_value = 0.0
 
         # If there's a zero in there, get rid of it!
-        scale_factor = max_val if max_val > 0 else 1.0
-        scaled_primary = {prim_rank.elem_id: prim_rank.value / scale_factor for prim_rank in one_list}
+        scale_factor_safe = scale_factor if scale_factor > 0 else 1.0
+        scaled_primary = {prim_rank.elem_id: (prim_rank.value + offset_value) / scale_factor_safe for prim_rank in one_list}
 
         # Update on a counter adds to the existing value...
         elem_effort.update(scaled_primary)

@@ -106,19 +106,52 @@ class OptimParams(typing.NamedTuple):
     def simulation_has_second_step(self) -> bool:
         return bool(self.time_released) and self.post_expansion_behaviour.requires_second_step
 
-    def get_all_elem_components(self) -> typing.Iterable[typing.Tuple[bool, T_elem_result]]:
+    def should_override_with_only_ElementGlobalPatchSensitivity(self, patch_model_context: bool) -> bool:
+        """
+            Doing Patch Model?        Yes                                 No
+            Full Model Context:       [ElementGlobalPatchSensitivity]     element_components
+            Patch Model Context:      element_components                  N/A
+        """
+
+        patch_analysis_for_ec = self.do_patch_analysis and patch_model_context
+        non_patch_for_ec = not self.do_patch_analysis and not patch_model_context
+        patch_analysis_just_patch_sens = self.do_patch_analysis and not patch_model_context
+
+        if patch_analysis_for_ec or non_patch_for_ec:
+            return False
+
+        elif patch_analysis_just_patch_sens:
+            return True
+
+        else:
+            raise ValueError()
+
+    def get_all_elem_components(self, patch_model_context: bool) -> typing.Iterable[typing.Tuple[bool, T_elem_result]]:
         """Step through the results, selecting the ones which are contribution to the optimisation"""
+
+        if self.should_override_with_only_ElementGlobalPatchSensitivity(patch_model_context):
+            include_in_this = [db_defs.ElementGlobalPatchSensitivity]
+
+        else:
+            include_in_this = self.element_components
+
         for elem_component in T_elem_result.__args__:
-            include_in_opt = elem_component in self.element_components
+            include_in_opt = elem_component in include_in_this
             yield include_in_opt, elem_component
 
-    def get_all_node_position_components(self) -> typing.Iterable[typing.Tuple[bool, T_nodal_pos_func]]:
-        all_defined_funcs = [
-            score.get_primary_ranking_element_distortion,
-            score.get_primary_ranking_macro_deformation,
-        ]
 
-        for node_component in all_defined_funcs:
+    def get_all_node_position_components(self, patch_model_context: bool) -> typing.Iterable[typing.Tuple[bool, T_nodal_pos_func]]:
+
+        if self.should_override_with_only_ElementGlobalPatchSensitivity(patch_model_context):
+            include_in_this = set()  # Nothing from here!
+
+        else:
+            include_in_this = [
+                score.get_primary_ranking_element_distortion,
+                score.get_primary_ranking_macro_deformation,
+            ]
+
+        for node_component in include_in_this:
             include_in_opt = node_component in self.nodal_position_components
             yield include_in_opt, node_component
 
