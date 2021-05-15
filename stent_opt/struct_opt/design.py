@@ -110,7 +110,7 @@ class StentParams(BaseModelForDB):
     balloon: typing.Optional[Balloon]
     cylinder: typing.Optional[Cylinder]
     expansion_ratio: typing.Optional[float]
-    inadmissible_regions: typing.Tuple[InadmissibleRegion]
+    inadmissible_regions: typing.Tuple[InadmissibleRegion, ...]
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
@@ -865,8 +865,8 @@ def make_initial_two_lines(stent_params: StentParams) -> StentDesign:
     width = 0.25
     nominal_radius = stent_params.radial_midplane_initial
 
-    z_left = 0.4 * stent_params.length
-    z_right = 0.6 * stent_params.length
+    z_left = 0.2 * stent_params.length
+    z_right = 0.8 * stent_params.length
     polar_points = [
         base.RThZ(r=nominal_radius, theta_deg=0.0 * stent_params.angle, z=z_left),
         base.RThZ(r=nominal_radius, theta_deg=0.5 * stent_params.angle, z=z_right),
@@ -1111,10 +1111,10 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
     return _make_design_from_line_segments(stent_params, line_z_th_points_and_widths, nominal_radius)
 
 
-make_initial_design = make_initial_all_in
+# make_initial_design = make_initial_all_in
 # make_initial_design = make_initial_all_in_with_hole
 # make_initial_design = make_initial_design_radius_test
-# make_initial_design = make_initial_two_lines
+make_initial_design = make_initial_two_lines
 # make_initial_design = make_initial_design_s_curve
 
 
@@ -1139,8 +1139,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=12,  # 20
-        Z=40,  # 80
+        Th=30,  # 20
+        Z=80,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1165,7 +1165,7 @@ dylan_r10n1_params = StentParams(
             Z=2,
         ),
     ),
-    expansion_ratio=1.4,  # 2.0
+    expansion_ratio=1.5,  # 2.0
     inadmissible_regions=[
         InadmissibleRegion(
             theta_min=20,
@@ -1177,7 +1177,7 @@ dylan_r10n1_params = StentParams(
 )
 
 
-basic_stent_params = dylan_r10n1_params.copy_with_updates(balloon=None, cylinder=None)
+basic_stent_params = dylan_r10n1_params.copy_with_updates(balloon=None, cylinder=None, inadmissible_regions=tuple())
 
 
 if __name__ == "__main__":

@@ -198,7 +198,7 @@ def primary_composite_stress_peeq_energy_factor_test_v3(row_type_to_range, elem_
         )
 
 def primary_composite_stress_peeq_energy_factor_test_v4(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
-    """ vM / vMMax + +PEEQ/PEEQMax - ElasticEnergy/ElasticEnergyMax"""
+    """ vM / vMMax + PEEQ/PEEQMax - ElasticEnergy/ElasticEnergyMax"""
 
     # Nominal "high" value
     high_PEEQ = 0.25
@@ -213,6 +213,28 @@ def primary_composite_stress_peeq_energy_factor_test_v4(row_type_to_range, elem_
         elast_energy_min, elast_enery_max = row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = vM / high_vM + PEEQ / high_PEEQ  - ElasticEnergy/ high_elastic_energy
+        yield db_defs.ElementCustomComposite(
+            frame_rowid=None,
+            elem_num=elem_num,
+            comp_val=one_val,
+        )
+
+def primary_composite_stress_peeq_energy_factor_test_v4_neg(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+    """ -1 * (vM / vMMax + PEEQ/PEEQMax - ElasticEnergy/ElasticEnergyMax)"""
+
+    # Nominal "high" value
+    high_PEEQ = 0.25
+    high_vM = 200
+    high_elastic_energy = 0.12
+
+    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
+        vM = type_to_val[db_defs.ElementStress]
+        PEEQ = type_to_val[db_defs.ElementPEEQ]
+        ElasticEnergy = type_to_val[db_defs.ElementEnergyElastic]
+
+        elast_energy_min, elast_enery_max = row_type_to_range[db_defs.ElementEnergyElastic]
+
+        one_val =-1 *(vM / high_vM + PEEQ / high_PEEQ  - ElasticEnergy/ high_elastic_energy)
         yield db_defs.ElementCustomComposite(
             frame_rowid=None,
             elem_num=elem_num,
@@ -573,13 +595,11 @@ def get_primary_ranking_macro_deformation(optim_params: optimisation_parameters.
         #orig = prepare_node_patch(node_to_pos_original, node_num_set)
         #deformed = prepare_node_patch(node_to_pos_deformed, node_num_set)
 
-        try:
-            this_val = deformation_grad.nodal_deformation(optim_params.local_deformation_stencil_length, np_orig_sub, np_def_sub)
-            for node_num in node_num_set:
-                node_num_to_contribs[node_num].append(this_val)
+        this_val = deformation_grad.nodal_deformation(optim_params.local_deformation_stencil_length, np_orig_sub, np_def_sub)
+        for node_num in node_num_set:
+            node_num_to_contribs[node_num].append(this_val)
 
-        except IndexError as e:
-            print(e)
+
 
 
     node_num_to_overall_ave = {node_num: statistics.mean(data) for node_num, data in node_num_to_contribs.items()}

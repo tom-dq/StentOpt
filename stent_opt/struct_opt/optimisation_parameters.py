@@ -156,6 +156,8 @@ class OptimParams(typing.NamedTuple):
                 score.get_primary_ranking_macro_deformation,
             ]
 
+            # TEMP - don't include anything!
+
         for node_component in include_in_this:
             include_in_opt = node_component in self.nodal_position_components
             yield include_in_opt, node_component
@@ -312,7 +314,7 @@ active = OptimParams(
         # db_defs.ElementFatigueResult,
         db_defs.ElementCustomComposite,
     ],
-    primary_composite_calculator=score.primary_composite_stress_peeq_energy_factor_test_v4,
+    primary_composite_calculator=score.primary_composite_stress_peeq_energy_factor_test_v4_neg,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
@@ -324,13 +326,13 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=1.0,  # Was 2.0
+    time_expansion=2.0,  # Was 2.0
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=2,
+    patch_hops=3,
     offset_submodels=True,
 )
 
