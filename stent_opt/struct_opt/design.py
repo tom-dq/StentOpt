@@ -265,6 +265,12 @@ class StentDesign(typing.NamedTuple):
         fully_populated = self.stent_params.divs.fully_populated_elem_count()
         return active_elements / fully_populated
 
+    def with_additional_elements(self, new_active: typing.Iterable[PolarIndex]) -> "StentDesign":
+        working_active = set(self.active_elements)
+        working_active.update(new_active)
+
+        return self._replace(active_elements=frozenset(working_active))
+
 
 def node_to_elem_design_space(divs: PolarIndex) -> PolarIndex:
     return PolarIndex(
@@ -1139,8 +1145,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=30,  # 20
-        Z=80,  # 80
+        Th=50,  # 20
+        Z=120,  # 80
     ),
     r_min=0.65,
     r_max=0.75,

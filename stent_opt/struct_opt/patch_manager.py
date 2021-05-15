@@ -6,6 +6,9 @@ import typing
 from stent_opt.odb_interface import db_defs
 from stent_opt.abaqus_model import amplitude
 
+if typing.TYPE_CHECKING:
+    from stent_opt.struct_opt import design
+
 X, Y = 1, 2
 
 
@@ -176,6 +179,7 @@ class SubModelInfo(SubModelInfoBase):
     elem_nums: typing.FrozenSet[int]
     node_nums: typing.FrozenSet[int]
     reference_elem_num: int
+    reference_elem_idx: "design.PolarIndex"
     initial_active_state: bool
     this_trial_active_state: bool
     node_elem_offset: int

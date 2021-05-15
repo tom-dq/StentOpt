@@ -108,6 +108,11 @@ class OptimParams(typing.NamedTuple):
             return 1
 
     @property
+    def nominal_number_of_patch_elements(self) -> int:
+        half_a_square = (2*self.patch_hops + 1)**2 // 2
+        return max(1, int(half_a_square))
+
+    @property
     def simulation_has_second_step(self) -> bool:
         return bool(self.time_released) and self.post_expansion_behaviour.requires_second_step
 
@@ -157,6 +162,7 @@ class OptimParams(typing.NamedTuple):
             ]
 
             # TEMP - don't include anything!
+            include_in_this = set()
 
         for node_component in include_in_this:
             include_in_opt = node_component in self.nodal_position_components
@@ -293,7 +299,7 @@ volume_ratio_increase = VolumeTargetOpts(
 
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
-    max_change_in_vol_ratio=0.025,  # Was 0.0025
+    max_change_in_vol_ratio=0.005,  # Was 0.0025
     volume_target_opts=volume_ratio_decrease,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
@@ -332,7 +338,7 @@ active = OptimParams(
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=3,
+    patch_hops=None,
     offset_submodels=True,
 )
 

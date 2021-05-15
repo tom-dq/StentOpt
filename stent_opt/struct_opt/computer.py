@@ -42,9 +42,10 @@ elif psutil.cpu_count(logical=False) == 8:
 
 elif psutil.cpu_count(logical=False) == 6:
     # Macbook - just for viewing results at the moment.
-    n_cpus = 4
+    n_cpus = 1
     # base_working_dir = r"/Users/tomwilson/Dropbox/PhD/StentOptDBs"
-    base_working_dir = r"C:\Users\Tom Wilson\Documents\Stent-Opt-Data\StentOpt"
+    # base_working_dir = r"C:\Users\Tom Wilson\Documents\Stent-Opt-Data\StentOpt"
+    base_working_dir = r"C:\Simulations\StentOpt"
     fig_size = (900, 500)  # (2000, 1350)
 
 else:
@@ -53,7 +54,7 @@ else:
 this_computer = Computer(
     n_cpus_abaqus_explicit=n_cpus,
     n_cpus_abaqus_implicit=1,
-    n_abaqus_parallel_solves=1,
+    n_abaqus_parallel_solves=4,
     base_working_dir=base_working_dir,
     working_dir=_get_next_free_dir(base_working_dir),
     # working_dir=r"E:\Simulations\StentOpt\AA-134",

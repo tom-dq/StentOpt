@@ -265,7 +265,8 @@ def get_candidate_elements(
             boundary_elements.add(elemIdx)
 
     removal_partial = get_adj_elements(indicies_holes, optim_params.nodes_shared_with_old_design_to_contract)
-    removal = removal_partial | frozenset(boundary_elements)
+    removal_and_bound = removal_partial | frozenset(boundary_elements)
+    removal = removal_and_bound & design_n_min_1.active_elements
 
     existing_next_round = get_adj_elements(design_n_min_1.active_elements, optim_params.nodes_shared_with_old_design_to_expand)
 
@@ -523,6 +524,8 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
                 (False, candidates_for.new_introduction),
         ):
             for polar_index in elem_idxs:
+                # Make a stent design with this element active (so we can support Off->On checks
+                design_n_min_1_with_elem = design_n_min_1.with_additional_elements( [polar_index])
                 reference_elem_num = elem_indices_to_num[polar_index]
                 graph_elem = graph_fe_elems[reference_elem_num]
 
@@ -546,10 +549,11 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
                     patch_manager.SubModelInfo(
                         boundary_node_nums=boundary_node_nums,
                         patch_manager=this_patch_manager,
-                        stent_design=design_n_min_1,
+                        stent_design=design_n_min_1_with_elem,
                         elem_nums=elem_nums,
                         node_nums=node_nums_lookup[this_trial_active_state],
                         reference_elem_num=reference_elem_num,
+                        reference_elem_idx=polar_index,
                         initial_active_state=initial_active_state,
                         this_trial_active_state=this_trial_active_state,
                         node_elem_offset=next(offset_counter),
@@ -577,7 +581,11 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     # Batch them up into even-ish chunks
     chunk_size_ideal = len(sub_model_infos) / computer.this_computer.n_abaqus_parallel_solves
     chunk_size_round = math.ceil(chunk_size_ideal)
-    chunk_size = max(100, chunk_size_round)  # Don't need to make it too crazy tiny...
+
+    # Don't need to divide them up too much (no point having four models with one patch in each...
+    FLOOR_ELEMS_IN_MODEL = 1000
+    floor_chunk_size = math.ceil(FLOOR_ELEMS_IN_MODEL / optim_params.nominal_number_of_patch_elements)
+    chunk_size = max(floor_chunk_size, chunk_size_round)  # Don't need to make it too crazy tiny...
     print(f"  Chunk Size [Ideal / Round / Used]: {chunk_size_ideal} / {chunk_size_round} / {chunk_size}")
 
     # https://stackoverflow.com/a/312464
@@ -592,7 +600,10 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
 
             # Flatten the with/without element pair.
             flat_sub_model_infos = [sub_mod_inf for sub_model_info_pair in sub_model_info_list for sub_mod_inf in sub_model_info_pair]
-            construct_model.make_stent_model(optim_params, flat_sub_model_infos[0].stent_design, flat_sub_model_infos, sub_fn_inp)
+
+            # Make a dummy stent design with all the newly activated elements in it too.
+            stent_design_with_extras = flat_sub_model_infos[0].stent_design.with_additional_elements(fsmi.reference_elem_idx for fsmi in flat_sub_model_infos)
+            construct_model.make_stent_model(optim_params, stent_design_with_extras, flat_sub_model_infos, sub_fn_inp)
             suffix_to_patch_list[suffix] = flat_sub_model_infos
 
     return suffix_to_patch_list
@@ -912,7 +923,7 @@ def run_test_process_completed_simulation():
     from stent_opt.struct_opt.design import basic_stent_params as stent_params
     from stent_opt.make_stent import run_model, working_dir_extract, FULL_INFO_MODEL_LIST, process_pool_run_and_process
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-7")
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-1")
     # working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-36")
 
     testing_run_one_args_skeleton = RunOneArgs(

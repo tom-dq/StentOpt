@@ -26,6 +26,10 @@ try:
 except KeyError:
     pass
 
+
+if multiprocessing.parent_process() is None:
+    mp_lock = multiprocessing.Lock()
+
 # TODO 2021-02-03
 # - Graphs of volume ratios and target volume ratio
 # - Rasterise and build (offline) the images of each step.
@@ -209,7 +213,7 @@ def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generat
     fn_db_current = history.make_fn_in_dir(run_one_args.working_dir, ".db", run_one_args.iter_this, run_one_args.patch_suffix)
 
     if run_one_args.do_run_extraction_TESTING:
-        # with lock:
+        # with mp_lock:
             perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract)
 
     # Sensitivity analysis with the "finite difference method"
@@ -224,12 +228,13 @@ def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generat
 
         # Recursive but only one layer deep! And fan out at this point to multi-core...
         if this_computer.n_abaqus_parallel_solves > 1:
-            with multiprocessing.Pool(processes=this_computer.n_abaqus_parallel_solves) as pool:
+            with multiprocessing.Pool(processes=this_computer.n_abaqus_parallel_solves, initializer=init, initargs=(mp_lock,)) as pool:
                 for out_run_one_args in pool.imap_unordered(process_pool_run_and_process, all_run_one_args_in):
                     print(f"   " + out_run_one_args.executed_feedback_text)
                     child_patch_run_one_args.append(out_run_one_args)
 
         else:
+            init(mp_lock)
             for run_args_patch in all_run_one_args_in:
                 out_run_one_args = process_pool_run_and_process(run_args_patch)
                 print(f"   " + out_run_one_args.executed_feedback_text)
@@ -244,14 +249,13 @@ def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generat
     )
 
 
-def init(l):
+def init(mp_lock):
     global lock
-    lock = l
+    lock = mp_lock
 
 
 
 def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.OptimParams):
-    mp_lock = multiprocessing.Lock()
     working_dir = pathlib.Path(optim_params.working_dir)
     history_db_fn = history.make_history_db(working_dir)
 
