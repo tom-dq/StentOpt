@@ -109,6 +109,9 @@ class OptimParams(typing.NamedTuple):
 
     @property
     def nominal_number_of_patch_elements(self) -> int:
+        if self.patch_hops is None:
+            return 1
+
         half_a_square = (2*self.patch_hops + 1)**2 // 2
         return max(1, int(half_a_square))
 
