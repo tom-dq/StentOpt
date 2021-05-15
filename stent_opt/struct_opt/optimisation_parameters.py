@@ -300,8 +300,8 @@ active = OptimParams(
         n_past_increments=5,
     ),
     filter_components=[
-        score.constraint_filter_not_yielded_out,
-        score.constraint_filter_within_fatigue_life,
+        # score.constraint_filter_not_yielded_out,
+        # score.constraint_filter_within_fatigue_life,
     ],
     primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.high_value],
     element_components=[
@@ -309,8 +309,8 @@ active = OptimParams(
         # db_defs.ElementStress,
         # db_defs.ElementEnergyElastic,
         # db_defs.ElementEnergyPlastic,
-        # db_defs.ElementFatigueResult,
-        db_defs.ElementCustomComposite,
+        db_defs.ElementFatigueResult,
+        # db_defs.ElementCustomComposite,
     ],
     primary_composite_calculator=score.primary_composite_stress_peeq_energy_neg,
     nodal_position_components=[
@@ -325,7 +325,7 @@ active = OptimParams(
     abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
     time_expansion=2.0,  # Was 2.0
-    time_released=None,
+    time_released=2.0,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,

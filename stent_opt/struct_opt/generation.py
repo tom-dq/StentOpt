@@ -456,9 +456,10 @@ def _get_ranking_functions(
 
     # Constraint violation filters
     constraint_violations = []
-    aba_db_rows = list(_get_raw_data_relevant_to_constraint_filter(data, one_frame))
+    aba_db_rows_submod_ids = list(x for x in _get_raw_data_relevant_to_constraint_filter(data, one_frame) if model_info.patch_elem_id_in_this_model(x.elem_num))
+    aba_db_rows_full_mod_ids = [elem_row._replace(elem_num=model_info.model_to_real_elem(elem_row.elem_num)) for elem_row in aba_db_rows_submod_ids]
     for include_in_opt_comp, one_filter_func in optim_params.get_all_filter_components():
-        this_filter_rows = list(one_filter_func(include_in_opt_comp, aba_db_rows))
+        this_filter_rows = list(one_filter_func(include_in_opt_comp, aba_db_rows_full_mod_ids))
         constraint_violations.extend(this_filter_rows)
         if this_filter_rows:
             all_ranks.append(this_filter_rows)
@@ -911,8 +912,8 @@ def run_test_process_completed_simulation():
     from stent_opt.struct_opt.design import basic_stent_params as stent_params
     from stent_opt.make_stent import run_model, working_dir_extract, FULL_INFO_MODEL_LIST, process_pool_run_and_process
 
-    # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-454")
-    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-36")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-7")
+    # working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-36")
 
     testing_run_one_args_skeleton = RunOneArgs(
         working_dir=working_dir,
