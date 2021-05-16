@@ -288,13 +288,8 @@ def _clamp_update(old, new, max_delta):
     else:
         return new
 
-volume_ratio_decrease = VolumeTargetOpts(
-    initial_ratio=0.12,
-    final_ratio=0.025,
-    num_iters=100,
-)
 
-volume_ratio_increase = VolumeTargetOpts(
+volume_ratio = VolumeTargetOpts(
     initial_ratio=0.2,
     final_ratio=0.2,
     num_iters=50,
@@ -303,7 +298,7 @@ volume_ratio_increase = VolumeTargetOpts(
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
     max_change_in_vol_ratio=0.005,  # Was 0.0025
-    volume_target_opts=volume_ratio_decrease,
+    volume_target_opts=volume_ratio,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
         component=db_defs.ElementEnergyElastic,  # TODO - make the code respect all these settings rather than whatever's littered around the place.
@@ -317,13 +312,13 @@ active = OptimParams(
     primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.high_value],
     element_components=[
         # db_defs.ElementPEEQ,
-        db_defs.ElementStress,
+        # db_defs.ElementStress,
         # db_defs.ElementEnergyElastic,
         # db_defs.ElementEnergyPlastic,
         # db_defs.ElementFatigueResult,
-        # db_defs.ElementCustomComposite,
+        db_defs.ElementCustomComposite,
     ],
-    primary_composite_calculator=score.primary_composite_stress_peeq_energy_factor_test_v4,
+    primary_composite_calculator=score.primary_composite_stress_and_peeq,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
@@ -335,13 +330,13 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=0.5,  # Was 2.0
+    time_expansion=0.2,  # Was 2.0
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=2,
+    patch_hops=None,
     offset_submodels=True,
 )
 

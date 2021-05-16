@@ -241,6 +241,25 @@ def primary_composite_stress_peeq_energy_factor_test_v4_neg(row_type_to_range, e
             comp_val=one_val,
         )
 
+def primary_composite_stress_and_peeq(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+    """ vM / vMMax + PEEQ/PEEQMax """
+
+    # Nominal "high" value
+    high_PEEQ = 0.02
+    high_vM = 200
+
+    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
+        vM = type_to_val[db_defs.ElementStress]
+        PEEQ = type_to_val[db_defs.ElementPEEQ]
+
+        one_val = vM / high_vM + PEEQ / high_PEEQ
+        yield db_defs.ElementCustomComposite(
+            frame_rowid=None,
+            elem_num=elem_num,
+            comp_val=one_val,
+        )
+
+
 
 def compute_composite_ranking_component(optim_params: optimisation_parameters.OptimParams, nt_rows_all_from_frame) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """This computes a composite function based on existing results in the Datastore. Called after Abaqus has populated it."""
