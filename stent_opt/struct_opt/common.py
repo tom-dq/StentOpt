@@ -63,10 +63,9 @@ class GlobalStatusType(enum.Enum):
     aggregate_mean = enum.auto()
     aggregate_median = enum.auto()
     aggregate_max = enum.auto()
-    aggregate_p_norm_2 = enum.auto()
     aggregate_p_norm_4 = enum.auto()
-    aggregate_p_norm_6 = enum.auto()
     aggregate_p_norm_8 = enum.auto()
+    aggregate_p_norm_12 = enum.auto()
 
     @classmethod
     def get_elemental_aggregate_values(cls):

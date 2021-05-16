@@ -236,8 +236,8 @@ def get_top_n_elements_maintaining_edge_connectivity(
         for elem_idx in elem_working_set:
             elems_at_each_slice[elem_idx.Th] += 1
 
-        if len(elems_at_each_slice) != stent_params.divs:
-            return False
+        return len(elems_at_each_slice)+1 == stent_params.divs.Th
+
 
     def element_pool_is_OK(elem_working_set: typing.Set[design.PolarIndex]):
         if not element_pool_has_boundaries_attached(elem_working_set):
@@ -247,7 +247,6 @@ def get_top_n_elements_maintaining_edge_connectivity(
             return False
 
         return True
-
 
     if not element_pool_is_OK(initial_active_elems):
         raise ValueError("Disconnection from the get go?")
@@ -988,10 +987,10 @@ def plot_history_gradient():
 
 
 def evolve_decider_test():
-    iter_n_min_1 = 4
+    iter_n_min_1 = 0
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-24\history.db")
+    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-46\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -1026,7 +1025,7 @@ def run_test_process_completed_simulation():
     from stent_opt.struct_opt.design import basic_stent_params as stent_params
     from stent_opt.make_stent import run_model, working_dir_extract, FULL_INFO_MODEL_LIST, process_pool_run_and_process
 
-    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-1")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
     # working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-36")
 
     testing_run_one_args_skeleton = RunOneArgs(

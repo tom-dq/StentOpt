@@ -1,9 +1,12 @@
 import collections
 import enum
+import functools
 import itertools
 import math
 import typing
 import hashlib
+
+from scipy.optimize import root_scalar
 
 from stent_opt.abaqus_model import base, element
 
@@ -702,7 +705,17 @@ def _make_design_from_line_segments(stent_params: StentParams, line_z_th_points_
 
         norm = px * px + py * py
 
-        u = ((x3 - x1) * px + (y3 - y1) * py) / float(norm)
+        num = ((x3 - x1) * px + (y3 - y1) * py)
+        den = float(norm)
+        try:
+            u = num / den
+
+        except ZeroDivisionError as e:
+            if num == 0:
+                u = 0.0
+
+            else:
+                raise e
 
         if u > 1:
             u = 1
@@ -890,6 +903,81 @@ def make_initial_two_lines(stent_params: StentParams) -> StentDesign:
 
     line_z_th_points_and_widths = [(p, width) for p in xyz_point]
     return _make_design_from_line_segments(stent_params, line_z_th_points_and_widths, nominal_radius)
+
+
+def make_initial_zig_zag(n_steps: int, l: float, target_vol_ratio: float, stent_params: StentParams) -> StentDesign:
+
+    # height is set such that the length is constant...
+    if n_steps:
+        h = (l - stent_params.theta_arc_initial) / n_steps
+
+        if h <= 0:
+            raise Warning(f"Could not satisfy length request. got h={h}")
+            h = 0.1
+
+        if h >= stent_params.length:
+            raise Warning(f"Could not satisfy length request. got h={h}, which is longer that the design space.")
+            h = 0.95 * stent_params.length
+
+    else:
+        h=0
+
+    def make_zig_zag_width(width: float) -> StentDesign:
+
+        theta_span = stent_params.angle / (n_steps+1)
+        nominal_radius = stent_params.radial_midplane_initial
+
+        def get_z_val_for(i_span:int) -> float:
+            z_mid = 0.5 * stent_params.length
+            if i_span == 0:
+                return z_mid
+
+            elif i_span == n_steps + 1:
+                return z_mid
+
+            else:
+                delta = h / 2 if i_span % 2 == 1 else -h/2
+                return z_mid + delta
+
+        polar_points = [
+            base.RThZ(r=nominal_radius, theta_deg=0.0, z=get_z_val_for(0)),
+            base.RThZ(r=nominal_radius, theta_deg=theta_span*0.5, z=get_z_val_for(0)),
+        ]
+
+        for i_span in range(1, n_steps+1):
+            th_start = theta_span * (i_span-0.5)
+            th_end = theta_span * (i_span+0.5)
+            polar_points.extend([
+                base.RThZ(r=nominal_radius, theta_deg=th_start, z=get_z_val_for(i_span)),
+                base.RThZ(r=nominal_radius, theta_deg=th_end, z=get_z_val_for(i_span)),
+            ])
+
+        # End flat bit.
+        polar_points.extend([
+            base.RThZ(r=nominal_radius, theta_deg=stent_params.angle - theta_span*0.5, z=get_z_val_for(n_steps+1)),
+            base.RThZ(r=nominal_radius, theta_deg=stent_params.angle, z=get_z_val_for(n_steps+1)),
+        ])
+
+        if stent_params.stent_element_dimensions == 2:
+            xyz_point = [p.to_planar_unrolled() for p in polar_points]
+
+        else:
+            raise ValueError(stent_params.stent_element_dimensions)
+
+        line_z_th_points_and_widths = [(p, width) for p in xyz_point]
+        return _make_design_from_line_segments(stent_params, line_z_th_points_and_widths, nominal_radius)
+
+    def zig_zag_vol_frac(width: float) -> float:
+        stent_design = make_zig_zag_width(width)
+        return stent_design.volume_ratio() - target_vol_ratio
+
+    min_res = root_scalar(zig_zag_vol_frac, bracket=(0.0, 10.0), maxiter=15)
+    print(f"{n_steps=}, {h=}, {l=}, width={min_res.root}, {min_res.flag}")
+
+    return make_zig_zag_width(min_res.root)
+
+
+
 
 
 def _radius_test_param_curve(stent_params: StentParams, r_minor: float, r_major: float, D: float) -> typing.Callable[[float], base.XYZ]:
@@ -1120,9 +1208,10 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
 # make_initial_design = make_initial_all_in
 # make_initial_design = make_initial_all_in_with_hole
 # make_initial_design = make_initial_design_radius_test
-make_initial_design = make_initial_two_lines
+# make_initial_design = make_initial_two_lines
 # make_initial_design = make_initial_design_s_curve
 
+make_initial_design = functools.partial(make_initial_zig_zag, 1, 5.5, 0.2)
 
 
 def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snapshot") -> StentDesign:
@@ -1145,12 +1234,12 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=40,  # 20
-        Z=100,  # 80
+        Th=60,  # 20
+        Z=200,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
-    length=3.5, # Was 11.0
+    length=5.0, # Was 11.0
     stent_element_type=element.ElemType.CPS4R,
     balloon=Balloon(
         inner_radius_ratio=0.85,

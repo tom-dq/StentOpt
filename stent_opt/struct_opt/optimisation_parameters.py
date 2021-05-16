@@ -295,8 +295,8 @@ volume_ratio_decrease = VolumeTargetOpts(
 )
 
 volume_ratio_increase = VolumeTargetOpts(
-    initial_ratio=0.004,
-    final_ratio=0.01,
+    initial_ratio=0.2,
+    final_ratio=0.2,
     num_iters=50,
 )
 
@@ -317,25 +317,25 @@ active = OptimParams(
     primary_ranking_fitness_filters=[common.PrimaryRankingComponentFitnessFilter.high_value],
     element_components=[
         # db_defs.ElementPEEQ,
-        # db_defs.ElementStress,
+        db_defs.ElementStress,
         # db_defs.ElementEnergyElastic,
         # db_defs.ElementEnergyPlastic,
         # db_defs.ElementFatigueResult,
-        db_defs.ElementCustomComposite,
+        # db_defs.ElementCustomComposite,
     ],
-    primary_composite_calculator=score.primary_composite_stress_peeq_energy_factor_test_v4_neg,
+    primary_composite_calculator=score.primary_composite_stress_peeq_energy_factor_test_v4,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
     ],
-    final_target_measure=history.GlobalStatusType.aggregate_p_norm_4,
+    final_target_measure=history.GlobalStatusType.aggregate_p_norm_8,
     gaussian_sigma=0.3,  # Was 0.15 forever
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
     abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=1.0,  # Was 2.0
+    time_expansion=0.5,  # Was 2.0
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,

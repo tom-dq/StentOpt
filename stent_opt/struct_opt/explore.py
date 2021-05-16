@@ -50,7 +50,7 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 
 # WORKING_DIR_TEMP = _get_most_recent_working_dir()
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-26")
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-37")
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-91")
 # WORKING_DIR_TEMP = pathlib.Path(r"/Users/tomwilson/Dropbox/PhD/StentOptDBs/AA-298")
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-295")
 # WORKING_DIR_TEMP = pathlib.Path(r"/Users/tomwilson/Documents/phd-data/stent-opt/StentOpt/AA-233")
@@ -415,6 +415,13 @@ def _create_graph_line_collection() -> GraphLineCollection:
 
     for pp in plot_points:
         graph_points[pp.label].append(pp)
+
+    # If there's only one point in there, add another one so it comes up on the graph.
+    for points in graph_points.values():
+        if len(points) == 1:
+            pp_single = points[0]
+            pp0 = pp_single._replace(iteration_num=pp_single.iteration_num-1)
+            points.insert(0, pp0)
 
     graph_lines = [GraphLine(points) for points in graph_points.values()]
 
