@@ -296,9 +296,16 @@ volume_ratio = VolumeTargetOpts(
     num_iters=50,
 )
 
+volume_ratio_v2 = VolumeTargetOpts(
+    initial_ratio=0.304,
+    final_ratio=0.25,
+    num_iters=50,
+)
+
+
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
-    max_change_in_vol_ratio=0.02,  # Was 0.0025
+    max_change_in_vol_ratio=0.0025,  # Was 0.0025
     volume_target_opts=volume_ratio,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
@@ -319,7 +326,7 @@ active = OptimParams(
         # db_defs.ElementFatigueResult,
         db_defs.ElementCustomComposite,
     ],
-    primary_composite_calculator=score.primary_composite_stress_and_peeq_and_load,
+    primary_composite_calculator=score.primary_composite_stress_and_peeq_and_load_inv_log,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
@@ -337,7 +344,7 @@ active = OptimParams(
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=2,
+    patch_hops=None,
     offset_submodels=True,
 )
 

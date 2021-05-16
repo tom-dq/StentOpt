@@ -106,11 +106,14 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
 
                 def get_boundary_node_set(node_idx: design.PolarIndex):
                     # TODO - make "is_in_bottom_chunk" generalisable and more robust.
+                    bottom_bound_cutoff = stent_params.length * (0.5 - 0.5*stent_params.end_connection_length_ratio)
+                    top_bound_cutoff = stent_params.length * (0.5 + 0.5*stent_params.end_connection_length_ratio)
+                    is_in_middle = bottom_bound_cutoff <= node_idx.Z* stent_params.single_element_z_span <= top_bound_cutoff
                     vert_distant = (node_idx.Z - min_idx_z) * stent_params.single_element_z_span
                     is_in_bottom_chunk = True  # Bypass for now
 
-                    if node_idx.Th == 0 and is_in_bottom_chunk: yield design.GlobalNodeSetNames.PlanarStentTheta0
-                    if node_idx.Th == stent_params.divs.Th-1 and is_in_bottom_chunk: yield design.GlobalNodeSetNames.PlanarStentThetaMax
+                    if node_idx.Th == 0 and is_in_middle: yield design.GlobalNodeSetNames.PlanarStentTheta0
+                    if node_idx.Th == stent_params.divs.Th-1 and is_in_middle: yield design.GlobalNodeSetNames.PlanarStentThetaMax
                     if node_idx.Z == min_idx_z: yield design.GlobalNodeSetNames.PlanarStentZMin
 
                 boundary_set_name_to_nodes = collections.defaultdict(set)

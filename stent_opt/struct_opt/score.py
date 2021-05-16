@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import collections
 import itertools
+import math
 import statistics
 import typing
 
@@ -273,6 +274,48 @@ def primary_composite_stress_and_peeq_and_load(row_type_to_range, elem_num_to_ty
         NForce = type_to_val[db_defs.ElementNodeForces]
 
         one_val = vM / high_vM + PEEQ / high_PEEQ - NForce/high_NodeForce
+        yield db_defs.ElementCustomComposite(
+            frame_rowid=None,
+            elem_num=elem_num,
+            comp_val=one_val,
+        )
+
+def primary_composite_stress_and_peeq_and_load_inv(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+    """ vM / vMMax + PEEQ/PEEQMax + NForceMax/(NForce+low_NodeForce) """
+
+    # Nominal "high" value
+    high_PEEQ = 0.02
+    high_vM = 200
+    high_NodeForce = 1.0
+    low_NodeForce = 0.001
+
+    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
+        vM = type_to_val[db_defs.ElementStress]
+        PEEQ = type_to_val[db_defs.ElementPEEQ]
+        NForce = type_to_val[db_defs.ElementNodeForces]
+
+        one_val = vM / high_vM + PEEQ / high_PEEQ + high_NodeForce / (NForce+low_NodeForce)
+        yield db_defs.ElementCustomComposite(
+            frame_rowid=None,
+            elem_num=elem_num,
+            comp_val=one_val,
+        )
+
+def primary_composite_stress_and_peeq_and_load_inv_log(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+    """ vM / vMMax + PEEQ/PEEQMax + max( 0, log( NForceMax/(NForce+low_NodeForce) ) """
+
+    # Nominal "high" value
+    high_PEEQ = 0.02
+    high_vM = 200
+    high_NodeForce = 1.0
+    low_NodeForce = 0.001
+
+    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
+        vM = type_to_val[db_defs.ElementStress]
+        PEEQ = type_to_val[db_defs.ElementPEEQ]
+        NForce = type_to_val[db_defs.ElementNodeForces]
+
+        one_val = vM / high_vM + PEEQ / high_PEEQ + max(0.0, math.log(high_NodeForce / (NForce+low_NodeForce)))
         yield db_defs.ElementCustomComposite(
             frame_rowid=None,
             elem_num=elem_num,

@@ -233,10 +233,24 @@ def get_top_n_elements_maintaining_edge_connectivity(
     def element_pool_has_boundaries_attached(elem_working_set: typing.Set[design.PolarIndex]):
         """Returns False if this bunch of elements is not attached to the boundary (or in the interior)"""
         elems_at_each_slice = collections.Counter()
+        left_side = set()
+        right_side = set()
         for elem_idx in elem_working_set:
             elems_at_each_slice[elem_idx.Th] += 1
 
-        return len(elems_at_each_slice)+1 == stent_params.divs.Th
+            bottom_bound_cutoff = stent_params.length * (0.5 - 0.5 * stent_params.end_connection_length_ratio)
+            top_bound_cutoff = stent_params.length * (0.5 + 0.5 * stent_params.end_connection_length_ratio)
+            is_in_middle = bottom_bound_cutoff <= elem_idx.Z * stent_params.single_element_z_span <= top_bound_cutoff
+            if is_in_middle:
+                if elem_idx.Th == 0:
+                    left_side.add(elem_idx)
+
+                elif elem_idx.Th+2 == stent_params.divs.Th:
+                    right_side.add(elem_idx)
+
+        has_all_thetas = len(elems_at_each_slice)+1 == stent_params.divs.Th
+        return has_all_thetas and bool(left_side) and bool(right_side)
+
 
     def element_pool_is_OK(elem_working_set: typing.Set[design.PolarIndex]):
         if not element_pool_has_boundaries_attached(elem_working_set):
@@ -260,7 +274,7 @@ def get_top_n_elements_maintaining_edge_connectivity(
             return len(top_n & initial_active_elems)
 
     while num_changed_elements() < n_elems and sorted_data:
-        elemIdxCandidate = sorted_data.pop()[0]
+        elemIdxCandidate, obj_fun_val = sorted_data.pop()
 
         # Does this element change break some connectivity?
         trial_working_set = set(active_elems_working_set)
@@ -275,15 +289,17 @@ def get_top_n_elements_maintaining_edge_connectivity(
             # Was OK - add to the real mesh
             top_n.add(elemIdxCandidate)
             if tail.action_is_adding_element:
+                suffix_text = " (but was already in mesh)" if elemIdxCandidate in active_elems_working_set else ''
                 active_elems_working_set.add(elemIdxCandidate)
 
             else:
+                suffix_text = ' (but was not in the mesh???)' if elemIdxCandidate not in active_elems_working_set else ''
                 active_elems_working_set.discard(elemIdxCandidate)
 
-            print(f"  [Conn] {elemIdxCandidate} OK to {DEBUG_verb}")
+            print(f"  [Conn] {elemIdxCandidate} = {obj_fun_val} OK to {DEBUG_verb}{suffix_text}")
 
         else:
-            print(f"  [Conn] {elemIdxCandidate} not going to  {DEBUG_verb} {elemIdxCandidate} - would create disconnection.")
+            print(f"  [Conn] {elemIdxCandidate} = {obj_fun_val} not going to  {DEBUG_verb} {elemIdxCandidate} - would create disconnection.")
 
     return top_n
 
@@ -994,10 +1010,10 @@ def plot_history_gradient():
 
 
 def evolve_decider_test():
-    iter_n_min_1 = 2
+    iter_n_min_1 = 0
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-119\history.db")
+    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-123\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()

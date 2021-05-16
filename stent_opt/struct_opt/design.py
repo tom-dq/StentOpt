@@ -114,6 +114,7 @@ class StentParams(BaseModelForDB):
     cylinder: typing.Optional[Cylinder]
     expansion_ratio: typing.Optional[float]
     inadmissible_regions: typing.Tuple[InadmissibleRegion, ...]
+    end_connection_length_ratio: float = 0.3  # The middle 30% is the enforced displacement.
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
@@ -1211,7 +1212,7 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
 # make_initial_design = make_initial_two_lines
 # make_initial_design = make_initial_design_s_curve
 
-make_initial_design = functools.partial(make_initial_zig_zag, 2, 5.0, 0.35)
+make_initial_design = functools.partial(make_initial_zig_zag, 2, 5.0, 0.3)
 
 
 def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snapshot") -> StentDesign:
@@ -1269,6 +1270,7 @@ dylan_r10n1_params = StentParams(
             z_max=2.5,
         )
     ],
+    end_connection_length_ratio=0.3,
 )
 
 
