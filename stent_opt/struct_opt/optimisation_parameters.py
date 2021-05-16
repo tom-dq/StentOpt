@@ -344,7 +344,7 @@ active = OptimParams(
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=None,
+    patch_hops=2,
     offset_submodels=True,
 )
 
