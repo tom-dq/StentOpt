@@ -1211,7 +1211,7 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
 # make_initial_design = make_initial_two_lines
 # make_initial_design = make_initial_design_s_curve
 
-make_initial_design = functools.partial(make_initial_zig_zag, 1, 5.5, 0.2)
+make_initial_design = functools.partial(make_initial_zig_zag, 2, 5.5, 0.2)
 
 
 def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snapshot") -> StentDesign:
@@ -1234,8 +1234,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=60,  # 20
-        Z=200,  # 80
+        Th=40,  # 20
+        Z=120,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
