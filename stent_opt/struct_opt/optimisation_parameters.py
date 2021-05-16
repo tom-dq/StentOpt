@@ -302,7 +302,7 @@ volume_ratio_increase = VolumeTargetOpts(
 
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
-    max_change_in_vol_ratio=0.1,  # Was 0.0025
+    max_change_in_vol_ratio=0.005,  # Was 0.0025
     volume_target_opts=volume_ratio_decrease,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
@@ -335,7 +335,7 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=0.25,  # Was 2.0
+    time_expansion=1.0,  # Was 2.0
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,
