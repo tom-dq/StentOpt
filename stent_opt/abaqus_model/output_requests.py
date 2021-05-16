@@ -19,6 +19,7 @@ class ElementOutputs(enum.Enum):
     PEEQ = "Equivalent plastic strain"
     ESEDEN = "Total elastic strain energy density in the element."
     EPDDEN = "Total energy dissipated per unit volume in the element by rate-independent and rate-dependent plastic deformation."
+    NFORC = "Forces at the nodes of an element from both the hourglass and the regular deformation modes of that element (negative of the internal forces in the global coordinate system)."
 
 
 class EnergyOutputs(enum.Enum):

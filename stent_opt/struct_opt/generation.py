@@ -238,7 +238,6 @@ def get_top_n_elements_maintaining_edge_connectivity(
 
         return len(elems_at_each_slice)+1 == stent_params.divs.Th
 
-
     def element_pool_is_OK(elem_working_set: typing.Set[design.PolarIndex]):
         if not element_pool_has_boundaries_attached(elem_working_set):
             return False
@@ -252,7 +251,15 @@ def get_top_n_elements_maintaining_edge_connectivity(
         raise ValueError("Disconnection from the get go?")
 
     active_elems_working_set = set(initial_active_elems)
-    while len(top_n) < n_elems and sorted_data:
+
+    def num_changed_elements():
+        if tail.action_is_adding_element:
+            return len(top_n - initial_active_elems)
+
+        else:
+            return len(top_n & initial_active_elems)
+
+    while num_changed_elements() < n_elems and sorted_data:
         elemIdxCandidate = sorted_data.pop()[0]
 
         # Does this element change break some connectivity?
@@ -987,10 +994,10 @@ def plot_history_gradient():
 
 
 def evolve_decider_test():
-    iter_n_min_1 = 0
+    iter_n_min_1 = 2
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-46\history.db")
+    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-119\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()

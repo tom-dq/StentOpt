@@ -259,6 +259,28 @@ def primary_composite_stress_and_peeq(row_type_to_range, elem_num_to_type_to_row
             comp_val=one_val,
         )
 
+def primary_composite_stress_and_peeq_and_load(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+    """ vM / vMMax + PEEQ/PEEQMax - NForce/NForceMax """
+
+    # Nominal "high" value
+    high_PEEQ = 0.02
+    high_vM = 200
+    high_NodeForce = 1.0
+
+    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
+        vM = type_to_val[db_defs.ElementStress]
+        PEEQ = type_to_val[db_defs.ElementPEEQ]
+        NForce = type_to_val[db_defs.ElementNodeForces]
+
+        one_val = vM / high_vM + PEEQ / high_PEEQ - NForce/high_NodeForce
+        yield db_defs.ElementCustomComposite(
+            frame_rowid=None,
+            elem_num=elem_num,
+            comp_val=one_val,
+        )
+
+
+
 
 
 def compute_composite_ranking_component(optim_params: optimisation_parameters.OptimParams, nt_rows_all_from_frame) -> typing.Iterable[db_defs.ElementCustomComposite]:
@@ -355,6 +377,17 @@ def _get_primary_ranking_components_raw(include_in_opt, optim_params: optimisati
                 value=row.gradient_from_patch,
                 include_in_opt=include_in_opt,
             )
+
+    elif isinstance(nt_row, db_defs.ElementNodeForces):
+        for row in nt_rows:
+            yield PrimaryRankingComponent(
+                comp_name=row.__class__.__name__,
+                elem_id=row.elem_num,
+                value=row.overall_norm,
+                include_in_opt=include_in_opt,
+            )
+
+
 
     else:
         raise ValueError(nt_row)

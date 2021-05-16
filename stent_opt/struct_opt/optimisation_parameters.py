@@ -28,6 +28,7 @@ T_elem_result = typing.Union[
     db_defs.ElementFatigueResult,
     db_defs.ElementGlobalPatchSensitivity,
     db_defs.ElementCustomComposite,
+    db_defs.ElementNodeForces,
 ]
 
 
@@ -290,14 +291,14 @@ def _clamp_update(old, new, max_delta):
 
 
 volume_ratio = VolumeTargetOpts(
-    initial_ratio=0.2,
-    final_ratio=0.2,
+    initial_ratio=0.375,
+    final_ratio=0.375,
     num_iters=50,
 )
 
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
-    max_change_in_vol_ratio=0.005,  # Was 0.0025
+    max_change_in_vol_ratio=0.02,  # Was 0.0025
     volume_target_opts=volume_ratio,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
@@ -318,7 +319,7 @@ active = OptimParams(
         # db_defs.ElementFatigueResult,
         db_defs.ElementCustomComposite,
     ],
-    primary_composite_calculator=score.primary_composite_stress_and_peeq,
+    primary_composite_calculator=score.primary_composite_stress_and_peeq_and_load,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
@@ -328,7 +329,7 @@ active = OptimParams(
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
-    abaqus_output_time_interval=0.025,  # Was 0.1
+    abaqus_output_time_interval=0.02,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
     time_expansion=0.2,  # Was 2.0
     time_released=None,
@@ -336,7 +337,7 @@ active = OptimParams(
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=None,
+    patch_hops=2,
     offset_submodels=True,
 )
 

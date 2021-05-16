@@ -3,6 +3,8 @@
 # The double dash is for arguments passed to the script but ignored by Abaqus itself.
 
 # Rule of thumb - make everything a double!
+import itertools
+import math
 
 SAVE_IMAGES = False
 
@@ -28,7 +30,8 @@ TEMP_SIGMA_UTS = 540.0
 TEMP_SIGMA_ENDURANCE = 270.0
 
 from datastore import Datastore
-from db_defs import Frame, NodePos, ElementStress, ElementPEEQ, ElementEnergyElastic, ElementEnergyPlastic, ElementFatigueResult, HistoryResult, expected_history_results
+from db_defs import Frame, NodePos, ElementStress, ElementPEEQ, ElementEnergyElastic, ElementEnergyPlastic, \
+    ElementFatigueResult, ElementNodeForces, HistoryResult, expected_history_results
 
 # Get the command line option (should be last!).
 fn_odb = sys.argv[-3]
@@ -230,6 +233,44 @@ def get_strain_results_EPDDEN_one_frame(extraction_meta):
         )
 
 
+def get_element_node_force_one_frame(extraction_meta):
+    """Have to grab the results from a few places... annoying!"""
+    def get_one_direction_values(field_key):
+        relevant_nforce_field = (
+            extraction_meta
+                .frame
+                .fieldOutputs[field_key]
+                .getSubset(position=abaqusConstants.ELEMENT_NODAL)
+                .getSubset(region=extraction_meta.odb_instance)
+        )
+
+        for one_value in relevant_nforce_field.values:
+            yield one_value.elementLabel, one_value.nodeLabel, one_value.data
+
+    elem_to_nodes_in_order = collections.defaultdict(list)
+
+    for elem_id, node_id, _ in get_one_direction_values('NFORC1'):
+        elem_to_nodes_in_order[elem_id].append(node_id)
+
+    nforc1 = {(elem_id, node_id): value for elem_id, node_id, value in get_one_direction_values('NFORC1')}
+    nforc2 = {(elem_id, node_id): value for elem_id, node_id, value in get_one_direction_values('NFORC2')}
+
+    for elem_id, node_list in elem_to_nodes_in_order.items():
+        nf1 = [nforc1[(elem_id, node_id)] for node_id in node_list]
+        nf2 = [nforc2[(elem_id, node_id)] for node_id in node_list]
+        one_elem_data = []
+        for nfxy in itertools.izip_longest(nf1, nf2):
+            one_elem_data.extend(nfxy)
+
+        local_norm = math.sqrt(sum([x**2 for x in one_elem_data]))
+        one_elem_data.append(local_norm)
+
+        # Add the "frame" and "elem_num" bits.
+        one_elem_data.insert(0, None)
+        one_elem_data.insert(1, elem_id)
+        yield ElementNodeForces(*one_elem_data)
+
+
 class StressResultAggregator:
     working_min = None
     working_max = None
@@ -319,6 +360,8 @@ def get_node_position_one_frame(extraction_meta):
         )
 
 
+
+
 def get_results_one_frame(extraction_meta):
     res_funcs = [
         get_stresses_one_frame,
@@ -326,6 +369,7 @@ def get_results_one_frame(extraction_meta):
         get_strain_results_ESEDEN_one_frame,
         get_strain_results_EPDDEN_one_frame,
         get_node_position_one_frame,
+        get_element_node_force_one_frame,
     ]
     for f in res_funcs:
         for row in f(extraction_meta):

@@ -54,7 +54,7 @@ else:
 this_computer = Computer(
     n_cpus_abaqus_explicit=n_cpus,
     n_cpus_abaqus_implicit=1,
-    n_abaqus_parallel_solves=6,
+    n_abaqus_parallel_solves=10,
     base_working_dir=base_working_dir,
     working_dir=_get_next_free_dir(base_working_dir),
     # working_dir=r"E:\Simulations\StentOpt\AA-134",
