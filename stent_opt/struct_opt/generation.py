@@ -230,7 +230,26 @@ def get_top_n_elements_maintaining_edge_connectivity(
 
         return num_components == 1
 
-    if not element_pool_is_connected(initial_active_elems):
+    def element_pool_has_boundaries_attached(elem_working_set: typing.Set[design.PolarIndex]):
+        """Returns False if this bunch of elements is not attached to the boundary (or in the interior)"""
+        elems_at_each_slice = collections.Counter()
+        for elem_idx in elem_working_set:
+            elems_at_each_slice[elem_idx.Th] += 1
+
+        if len(elems_at_each_slice) != stent_params.divs:
+            return False
+
+    def element_pool_is_OK(elem_working_set: typing.Set[design.PolarIndex]):
+        if not element_pool_has_boundaries_attached(elem_working_set):
+            return False
+
+        if not element_pool_is_connected(elem_working_set):
+            return False
+
+        return True
+
+
+    if not element_pool_is_OK(initial_active_elems):
         raise ValueError("Disconnection from the get go?")
 
     active_elems_working_set = set(initial_active_elems)
@@ -246,7 +265,7 @@ def get_top_n_elements_maintaining_edge_connectivity(
             trial_working_set.discard(elemIdxCandidate)
 
         DEBUG_verb = "add" if tail.action_is_adding_element else "remove"
-        if element_pool_is_connected(trial_working_set):
+        if element_pool_is_OK(trial_working_set):
             # Was OK - add to the real mesh
             top_n.add(elemIdxCandidate)
             if tail.action_is_adding_element:
