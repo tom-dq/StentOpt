@@ -8,7 +8,7 @@ import typing
 import enum
 import operator
 
-
+import networkx
 import numpy
 import scipy.ndimage
 import matplotlib.pyplot as plt
@@ -26,6 +26,17 @@ from stent_opt.struct_opt import computer
 class Tail(enum.Enum):
     bottom = enum.auto()
     top = enum.auto()
+
+    @property
+    def action_is_adding_element(self) -> bool:
+        if self == Tail.top:
+            return True
+
+        elif self == Tail.bottom:
+            return False
+
+        else:
+            raise ValueError
 
 
 MAKE_PLOTS = False
@@ -167,9 +178,7 @@ def get_keys_of_tail(data: T_index_to_val, tail: Tail, percentile: float) -> typ
     return {key for key, val in data.items() if comp_op(val, cutoff)}
 
 
-def get_top_n_elements(data: T_index_to_val, tail: Tail, n_elems: int) -> typing.Set[design.PolarIndex]:
-    """Gets the top however many elements"""
-
+def _evolve_decider_sorted_data(data: T_index_to_val, tail: Tail, n_elems: int):
     def sort_key(index_val):
         return index_val[1]
 
@@ -178,7 +187,79 @@ def get_top_n_elements(data: T_index_to_val, tail: Tail, n_elems: int) -> typing
 
     rev = True if tail == Tail.top else False
     sorted_data = sorted(data.items(), key=sort_key, reverse=rev)
+
+    return sorted_data
+
+def get_top_n_elements(data: T_index_to_val, tail: Tail, n_elems: int) -> typing.Set[design.PolarIndex]:
+    """Gets the top however many elements"""
+
+    sorted_data = _evolve_decider_sorted_data(data, tail, n_elems)
     top_n = {idx for idx, val in sorted_data[0:n_elems]}
+
+    return top_n
+
+
+def get_top_n_elements_maintaining_edge_connectivity(
+        stent_params: design.StentParams,
+        initial_active_elems: typing.Set[design.PolarIndex],
+        data: T_index_to_val,
+        tail: Tail,
+        n_elems: int
+) -> typing.Set[design.PolarIndex]:
+
+    # Build a graph so we can keep track of connectivity as we go.
+    graph_element_pool = {
+        element_bucket.Element(num=elemIdx, conn=design.get_single_element_connection(stent_params, elemIdx))
+        for elemIdx in initial_active_elems}
+
+    sorted_data = _evolve_decider_sorted_data(data, tail, n_elems)
+
+    top_n = set()
+
+    # Reverse the list so we can pop off the end and treat it as a stack...
+    sorted_data.reverse()
+
+    def element_pool_is_connected(elem_working_set: typing.Set[design.PolarIndex]):
+        """Returns False if this bunch of elements would introduce a disconnection"""
+        graph_element_pool = {
+            element_bucket.Element(num=elemIdx, conn=design.get_single_element_connection(stent_params, elemIdx))
+            for elemIdx in elem_working_set}
+
+        graph = element_bucket.build_graph(element_bucket.GraphEdgeEntity.fe_elem_edge, graph_element_pool)
+        num_components = networkx.number_connected_components(graph)
+
+        return num_components == 1
+
+    if not element_pool_is_connected(initial_active_elems):
+        raise ValueError("Disconnection from the get go?")
+
+    active_elems_working_set = set(initial_active_elems)
+    while len(top_n) < n_elems and sorted_data:
+        elemIdxCandidate = sorted_data.pop()[0]
+
+        # Does this element change break some connectivity?
+        trial_working_set = set(active_elems_working_set)
+        if tail.action_is_adding_element:
+            trial_working_set.add(elemIdxCandidate)
+
+        else:
+            trial_working_set.discard(elemIdxCandidate)
+
+        DEBUG_verb = "add" if tail.action_is_adding_element else "remove"
+        if element_pool_is_connected(trial_working_set):
+            # Was OK - add to the real mesh
+            top_n.add(elemIdxCandidate)
+            if tail.action_is_adding_element:
+                active_elems_working_set.add(elemIdxCandidate)
+
+            else:
+                active_elems_working_set.discard(elemIdxCandidate)
+
+            print(f"  [Conn] {elemIdxCandidate} OK to {DEBUG_verb}")
+
+        else:
+            print(f"  [Conn] {elemIdxCandidate} not going to  {DEBUG_verb} {elemIdxCandidate} - would create disconnection.")
+
     return top_n
 
 
@@ -293,7 +374,8 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
     if max_new_num < 0:
         max_new_num = 0
 
-    top_new_potential_elems_all = get_top_n_elements(sensitivity_result, Tail.top, max_new_num)
+    # top_new_potential_elems_all = get_top_n_elements(sensitivity_result, Tail.top, max_new_num)
+    top_new_potential_elems_all = get_top_n_elements_maintaining_edge_connectivity(design_n_min_1.stent_params, design_n_min_1.active_elements, sensitivity_result, Tail.top, max_new_num)
     top_new_potential_elems = {idx for idx in top_new_potential_elems_all if idx in candidates_for.existing_next_round}
     actual_new_elems = top_new_potential_elems - design_n_min_1.active_elements
     num_new = len(actual_new_elems)
@@ -303,7 +385,9 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
 
     # Remove however many we added.
     existing_elems_only_ranked = {idx: val for idx,val in sensitivity_result.items() if idx in design_n_min_1.active_elements and idx in candidates_for.removal}
-    to_go = get_top_n_elements(existing_elems_only_ranked, Tail.bottom, num_to_go)
+    # to_go = get_top_n_elements(existing_elems_only_ranked, Tail.bottom, num_to_go)
+    elem_working_set = design_n_min_1.active_elements | top_new_potential_elems
+    to_go = get_top_n_elements_maintaining_edge_connectivity(design_n_min_1.stent_params, elem_working_set, existing_elems_only_ranked, Tail.bottom, num_to_go)
 
     new_active_elems = (design_n_min_1.active_elements | top_new_potential_elems) - to_go
     return new_active_elems
@@ -513,7 +597,7 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
     delta_offset = 10 ** (len(str(stent_params.divs.fully_populated_node_count())))
     offset_counter = itertools.count(delta_offset, delta_offset)
 
-    graph = element_bucket.build_graph(graph_fe_elems.values())
+    graph = element_bucket.build_graph(element_bucket.GraphEdgeEntity.node, graph_fe_elems.values())
 
     with patch_manager.PatchManager() as this_patch_manager:
         with datastore.Datastore(db_fn_prev) as data:
@@ -885,10 +969,10 @@ def plot_history_gradient():
 
 
 def evolve_decider_test():
-    iter_n_min_1 = 0
+    iter_n_min_1 = 4
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-368\history.db")
+    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-24\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -946,13 +1030,9 @@ def run_test_process_completed_simulation():
 
 
 if __name__ == '__main__':
+    evolve_decider_test()
 
-    run_test_process_completed_simulation()
-
-    # plot_history_gradient()
-
-    # evolve_decider_test()
-    # make_plot_tests()
+    # run_test_process_completed_simulation()
 
 
 if False:

@@ -1,5 +1,6 @@
 # Temporary (I think) to manually drive the iteration
 import collections
+import enum
 import itertools
 import typing
 
@@ -44,26 +45,62 @@ class Bucket:
         self._all_nodes = {n for elem in self._elems for n in elem.conn}
 
 
+class GraphEdgeEntity(enum.Enum):
+    node = enum.auto()
+    fe_elem_edge = enum.auto()
 
-def build_graph(elems: typing.Iterable[Element]) -> networkx.Graph:
 
-    """Confusingly, the "Nodes" in the graph are the elements in the FE mesh"""
+#                         [node,  fe_element_edge     ]
+T_GraphEdge = typing.Union[int, typing.Tuple[int, int]]
+def _generate_fe_elem_to_graph_edge(graph_edge_entity: GraphEdgeEntity, elems: typing.Iterable[Element]) -> typing.Iterable[
+    typing.Tuple[Element, typing.List[T_GraphEdge]]]:
+
+    if graph_edge_entity == GraphEdgeEntity.node:
+        def edge_producer(elem: Element):
+            for fe_node_num in elem.conn:
+                yield fe_node_num
+
+    elif graph_edge_entity == GraphEdgeEntity.fe_elem_edge:
+        def edge_producer(elem: Element):
+            node1 = elem.conn
+            node2 = elem.conn[1:] + elem.conn[0:1]
+            for n1, n2 in zip(node1, node2):
+                yield tuple(sorted([n1, n2]))
+
+    else:
+        raise ValueError
+
+    for elem in elems:
+        yield elem, list(edge_producer(elem))
+
+
+
+def build_graph(graph_edge_entity: GraphEdgeEntity, elems: typing.Iterable[Element]) -> networkx.Graph:
+
+    """Confusingly, the "Nodes" in the graph are the elements in the FE mesh. And "graph_edges" is an interface between
+    the finite elements. Could be a shared node or a shared edge."""
     G = networkx.Graph()
 
     elems = list(elems)
 
-    node_to_elems = collections.defaultdict(set)
-    for elem in elems:
-        for node in elem.conn:
-            node_to_elems[node].add(elem)
-
+    graph_edge_to_elems = collections.defaultdict(set)
+    for elem, graph_edges in _generate_fe_elem_to_graph_edge(graph_edge_entity, elems):
+        for graph_edge in graph_edges:
+            graph_edge_to_elems[graph_edge].add(elem)
 
     for fe_elem in elems:
         G.add_node(fe_elem)
 
-    for fe_node, fe_elems in node_to_elems.items():
+    for graph_edge, fe_elems in graph_edge_to_elems.items():
         for fe_elem1, fe_elem2 in itertools.permutations(fe_elems, 2):
-            G.add_edge(fe_elem1, fe_elem2, fe_node_num=fe_node)
+            if graph_edge_entity.node:
+                G.add_edge(fe_elem1, fe_elem2, fe_node_num=graph_edge)
+
+            elif graph_edge_entity.fe_elem_edge:
+                G.add_edge(fe_elem1, fe_elem2, fe_edge=graph_edge)
+
+            else:
+                raise ValueError(graph_edge_entity)
 
     return G
 
@@ -105,7 +142,7 @@ def test_boundary():
         Element(77, (666,6666,)),
     ]
 
-    g = build_graph(elems)
+    g = build_graph(GraphEdgeEntity.node, elems)
 
     one_hop, _ = get_fe_nodes_on_boundary_interface(g, 1, elems[0])
     assert one_hop == frozenset({222,})
@@ -120,7 +157,7 @@ def network_traverse_test():
         Element(5, (1001, 1002, 1003, 1004)),
     ]
 
-    G = build_graph(elems)
+    G = build_graph(GraphEdgeEntity.node, elems)
 
     for c in networkx.connected_components(G):
         print(c)
