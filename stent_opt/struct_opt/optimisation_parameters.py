@@ -326,7 +326,7 @@ active = OptimParams(
         # db_defs.ElementFatigueResult,
         db_defs.ElementCustomComposite,
     ],
-    primary_composite_calculator=score.primary_composite_energy_final_gradient,
+    primary_composite_calculator=score.primary_composite_energy_final_gradient_neg,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,

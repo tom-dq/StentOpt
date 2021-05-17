@@ -1221,6 +1221,37 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
     return _make_design_from_line_segments(stent_params, line_z_th_points_and_widths, nominal_radius)
 
 
+def make_initial_design_overlapping_circles(stent_params: StentParams) -> StentDesign:
+    circ_cent_radius = (
+        (base.RThZ(r=0.0, theta_deg=0.0, z=stent_params.length/2), math.sqrt(stent_params.angle**2 + (stent_params.length / 4)**2)),
+        (base.RThZ(r=0.0, theta_deg=stent_params.angle/2, z=stent_params.length/2), stent_params.theta_arc_initial/8),
+    )
+
+    def elem_in_circle(ccr, e: element.Element):
+        e_xyz = elem_cent_polar(e)
+        ccr_xyz = ccr[0].to_xyz()
+        dist = math.sqrt( (ccr_xyz.x-e_xyz.x)**2 +  (ccr_xyz.y-e_xyz.y)**2 )
+        print(e_xyz, ccr_xyz, dist, ccr[1])
+        return dist < ccr[1]
+
+
+    nodes_polar = get_node_num_to_pos(stent_params=stent_params)
+    def elem_cent_polar(e: element.Element) -> base.XYZ:
+        node_pos = [nodes_polar[iNode] for iNode in e.connection]
+        ave_node_pos = sum(node_pos) / len(node_pos)
+        return ave_node_pos
+
+    def check_elem(e: element.Element) -> bool:
+        num_circs = [1 for ccr in circ_cent_radius if elem_in_circle(ccr, e)]
+        return len(num_circs) % 1 == 1
+
+    included_elements = frozenset(idx for idx, iElem, e in generate_stent_part_elements(stent_params) if check_elem(e))
+    return StentDesign(
+        stent_params=stent_params,
+        active_elements=included_elements,
+        label="Circles",
+    )
+
 # make_initial_design = make_initial_all_in
 # make_initial_design = make_initial_all_in_with_hole
 # make_initial_design = make_initial_design_radius_test
@@ -1228,7 +1259,7 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
 # make_initial_design = make_initial_design_s_curve
 
 make_initial_design = functools.partial(make_initial_zig_zag, 2, 4.2, 0.2)
-
+# make_initial_design = make_initial_design_overlapping_circles
 
 def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snapshot") -> StentDesign:
     elem_num_to_idx = {iElem: idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs)}

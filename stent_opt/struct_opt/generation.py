@@ -863,12 +863,52 @@ def process_completed_simulation(run_one_args: RunOneArgs
             ranking_results[model_info] = ranking_result
 
             if run_one_args.is_full_model:
-                _log_completed_in_history_db(history_db, ranking_result, global_status_raw, optim_params, design_n_min_1, iter_prev)
+                applied_load_results = _get_sum_of_reaction_forces(data, iter_prev)
+                _log_completed_in_history_db(history_db, ranking_result, global_status_raw, applied_load_results, optim_params, design_n_min_1, iter_prev)
 
     return design_n_min_1, ranking_results
 
 
-def _log_completed_in_history_db(history_db, ranking_result, global_status_raw, optim_params, design_n_min_1, iter_prev):
+def _get_sum_of_reaction_forces(data: datastore.Datastore, iteration_num) -> typing.Iterable[history.GlobalStatus]:
+    rows: typing.List[db_defs.NodeReact] = list(data.get_all_rows(db_defs.NodeReact))
+
+    def sort_key(row: db_defs.NodeReact):
+        return row.frame_rowid
+
+    rows.sort(key=sort_key)
+
+    if not rows:
+        return
+
+    frame_rowids = sorted(set(row.frame_rowid for row in rows))
+
+    last_rowid = frame_rowids[-1]
+    second_last_rowid = frame_rowids[-2]
+
+    def get_total_x_components():
+        # Overall x reaction
+        for row in rows:
+            if row.frame_rowid == last_rowid:
+                yield row.X
+
+    def get_delta_components():
+        # X stiffness
+        contribs = collections.defaultdict(list)
+        good_rows = [row for row in rows if row.frame_rowid in {last_rowid, second_last_rowid}]
+        for row in good_rows:
+            contribs[row.node_num].append(row.X)
+
+        for node_num, last_two in contribs.items():
+            yield last_two[1] - last_two[0]
+
+    for global_name, global_val in (
+            ("Reaction X", sum(get_total_x_components())),
+            ("Final Frame Stiffness X", sum(get_delta_components())),
+    ):
+        yield history.GlobalStatus(iteration_num, history.GlobalStatusType.abaqus_history_result, global_name, global_val)
+
+
+def _log_completed_in_history_db(history_db, ranking_result, global_status_raw, applied_load_results, optim_params, design_n_min_1, iter_prev):
 
     pos_lookup = {row.node_num: base.XYZ(x=row.X, y=row.Y, z=row.Z) for row in ranking_result.pos_rows}
 
@@ -906,6 +946,9 @@ def _log_completed_in_history_db(history_db, ranking_result, global_status_raw, 
             y=pos.y,
             z=pos.z) for node_num, pos in pos_lookup.items())
         hist.add_node_positions(node_pos_for_hist)
+
+        # Reaction and stiffness
+        hist.add_many_global_status_checks(applied_load_results)
 
         # Record the volume ratios
         vol_ratios = [
