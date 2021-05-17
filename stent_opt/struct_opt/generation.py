@@ -255,6 +255,7 @@ def get_top_n_elements_maintaining_edge_connectivity(
         for elem_idx in elem_working_set:
             elems_at_each_slice[elem_idx.Th] += 1
 
+            # TODO - make this use the new stuff in stent_params
             bottom_bound_cutoff = stent_params.length * (0.5 - 0.5 * stent_params.end_connection_length_ratio)
             top_bound_cutoff = stent_params.length * (0.5 + 0.5 * stent_params.end_connection_length_ratio)
             is_in_middle = bottom_bound_cutoff <= elem_idx.Z * stent_params.single_element_z_span <= top_bound_cutoff

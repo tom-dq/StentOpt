@@ -115,6 +115,21 @@ class StentParams(BaseModelForDB):
     expansion_ratio: typing.Optional[float]
     inadmissible_regions: typing.Tuple[InadmissibleRegion, ...]
     end_connection_length_ratio: float = 0.3  # The middle 30% is the enforced displacement.
+    whole_left_side_restrained: bool
+
+    def level_is_restrained(self, is_theta_0: bool, z: float) -> bool:
+        if is_theta_0:
+            if self.whole_left_side_restrained:
+                return True
+
+        bottom_bound_cutoff = self.length * (0.5 - 0.5 * self.end_connection_length_ratio)
+        top_bound_cutoff = self.length * (0.5 + 0.5 * self.end_connection_length_ratio)
+        is_in_middle = bottom_bound_cutoff <= z <= top_bound_cutoff
+        return is_in_middle
+
+    def node_idx_z_is_restrained(self, is_theta_0: bool, z_idx: int) -> bool:
+        z = z_idx * self.single_element_z_span
+        return self.level_is_restrained(is_theta_0, z)
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
@@ -1271,6 +1286,7 @@ dylan_r10n1_params = StentParams(
         )
     ],
     end_connection_length_ratio=0.3,
+    whole_left_side_restrained=True,
 )
 
 
