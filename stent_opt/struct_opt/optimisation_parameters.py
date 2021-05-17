@@ -297,8 +297,8 @@ volume_ratio = VolumeTargetOpts(
 )
 
 volume_ratio_v2 = VolumeTargetOpts(
-    initial_ratio=0.304,
-    final_ratio=0.25,
+    initial_ratio=0.1,
+    final_ratio=0.3,
     num_iters=50,
 )
 
@@ -306,7 +306,7 @@ volume_ratio_v2 = VolumeTargetOpts(
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
     max_change_in_vol_ratio=0.0025,  # Was 0.0025
-    volume_target_opts=volume_ratio,
+    volume_target_opts=volume_ratio_v2,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
         component=db_defs.ElementEnergyElastic,  # TODO - make the code respect all these settings rather than whatever's littered around the place.
@@ -326,7 +326,7 @@ active = OptimParams(
         # db_defs.ElementFatigueResult,
         db_defs.ElementCustomComposite,
     ],
-    primary_composite_calculator=score.primary_composite_stress_and_peeq_and_load_inv_log,
+    primary_composite_calculator=score.primary_composite_stress_and_peeq,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
@@ -336,7 +336,7 @@ active = OptimParams(
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
-    abaqus_output_time_interval=0.02,  # Was 0.1
+    abaqus_output_time_interval=0.04,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
     time_expansion=0.2,  # Was 2.0
     time_released=None,

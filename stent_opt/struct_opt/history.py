@@ -353,6 +353,16 @@ class History:
 
             yield from (StatusCheck(*row).from_db() for row in rows)
 
+    def get_min_max_status_check(self, metric_name: str) -> typing.Tuple[float, float]:
+        with self.connection:
+            rows = self.connection.execute(f"SELECT Min(metric_val), Max(metric_val) FROM StatusCheck WHERE metric_name = ?", (metric_name,))
+            maybe_rows = list(rows)
+            if maybe_rows:
+                return maybe_rows[0]
+
+            else:
+                return 0.0, 5.0
+
     def get_global_status_checks(self, iter_greater_than_equal: int, iter_less_than_equal: int) -> typing.Iterable[GlobalStatus]:
         with self.connection:
             rows = self.connection.execute(f"SELECT * FROM GlobalStatus WHERE iteration_num >= ? AND ? >= iteration_num ORDER BY iteration_num, global_status_sub_type, global_status_type ", (iter_greater_than_equal, iter_less_than_equal))

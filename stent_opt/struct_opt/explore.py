@@ -49,8 +49,8 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 
 
 # WORKING_DIR_TEMP = _get_most_recent_working_dir()
-WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-45")
-#WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-122")
+WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-51")
+# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-125")
 # WORKING_DIR_TEMP = pathlib.Path(r"/Users/tomwilson/Dropbox/PhD/StentOptDBs/AA-298")
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-295")
 # WORKING_DIR_TEMP = pathlib.Path(r"/Users/tomwilson/Documents/phd-data/stent-opt/StentOpt/AA-233")
@@ -80,9 +80,12 @@ class ContourView(typing.NamedTuple):
     iteration_num: int
     metric_name: str
     deformed: bool
+    min_val: typing.Optional[float]
+    max_val: typing.Optional[float]
 
     def make_iteration_view(self) -> ContourIterationView:
         return ContourIterationView(metric_name=self.metric_name, deformed=self.deformed)
+
 
 
 class ContourIterationView(typing.NamedTuple):
@@ -185,6 +188,8 @@ def _build_contour_view_data(
             iteration_num=status_check.iteration_num,
             metric_name=status_check.metric_name,
             deformed=None,
+            min_val=None,
+            max_val=None,
         )
 
     if metric_name:
@@ -204,8 +209,10 @@ def _build_contour_view_data(
         inc_lte = single_iteration
 
     for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(inc_gt, inc_lte, good_metric_names), make_contour_view):
+        min_all_frames, max_all_frames = hist.get_min_max_status_check(contour_view.metric_name)
+        contour_view_with_limits = contour_view._replace(min_val=min_all_frames, max_val=max_all_frames)
         elem_vals = {status_check.elem_num: status_check.metric_val for status_check in sub_iter}
-        yield contour_view, elem_vals
+        yield contour_view_with_limits, elem_vals
 
 
 def make_quadmesh(
@@ -262,7 +269,7 @@ def make_quadmesh(
 
     # Populate with the real values.
 
-    qmesh_real = holoviews.QuadMesh((X, Y, Z), vdims='level', group=contour_view.metric_name)
+    qmesh_real = holoviews.QuadMesh((X, Y, Z), vdims='level', group=contour_view.metric_name).redim.range(level=(contour_view.min_val, contour_view.max_val))
     qmesh_real.options(cmap='viridis')
 
     qmesh_list = [qmesh_real]
