@@ -45,25 +45,9 @@ def kill_process_id(proc_id: int):
 
     process.kill()
 
-def run_model(optim_params, inp_fn, force_single_core: bool):
+
+def _run_external_command(path, args):
     old_working_dir = os.getcwd()
-
-
-    path, fn = os.path.split(inp_fn)
-    fn_solo = os.path.splitext(fn)[0]
-    #print(multiprocessing.current_process().name, fn_solo)
-    if force_single_core:
-        n_cpus = 1
-    else:
-        n_cpus = this_computer.n_cpus_abaqus_explicit if optim_params.is_explicit else this_computer.n_cpus_abaqus_implicit
-
-    args = ['abaqus.bat', f'cpus={n_cpus}', f'job={fn_solo}']
-
-    # This seems to need to come right after "job" in the argument list
-    if optim_params.use_double_precision:
-        args.append('double')
-
-    args.extend(["ask_delete=OFF", 'interactive'])
 
     os.chdir(path)
 
@@ -95,15 +79,32 @@ def run_model(optim_params, inp_fn, force_single_core: bool):
     os.chdir(old_working_dir)
 
 
+def run_model(optim_params, inp_fn, force_single_core: bool):
+
+    path, fn = os.path.split(inp_fn)
+    fn_solo = os.path.splitext(fn)[0]
+    #print(multiprocessing.current_process().name, fn_solo)
+    if force_single_core:
+        n_cpus = 1
+    else:
+        n_cpus = this_computer.n_cpus_abaqus_explicit if optim_params.is_explicit else this_computer.n_cpus_abaqus_implicit
+
+    args = ['abaqus.bat', f'cpus={n_cpus}', f'job={fn_solo}']
+
+    # This seems to need to come right after "job" in the argument list
+    if optim_params.use_double_precision:
+        args.append('double')
+
+    args.extend(["ask_delete=OFF", 'interactive'])
+
+    _run_external_command(path, args)
+
+
 def perform_extraction(odb_fn, out_db_fn, override_z_val, working_dir_extract):
-    old_working_dir = os.getcwd()
-    os.chdir(working_dir_extract)
+
     args = ["abaqus.bat", "cae", "noGui=odb_extract.py", "--", str(odb_fn), str(out_db_fn), str(override_z_val)]
 
-    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    ret_code = proc.wait()
-    if ret_code:
-        raise subprocess.SubprocessError(ret_code)
+    _run_external_command(working_dir_extract, args)
 
 
 

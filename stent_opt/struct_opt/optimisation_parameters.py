@@ -326,12 +326,12 @@ active = OptimParams(
         # db_defs.ElementFatigueResult,
         db_defs.ElementCustomComposite,
     ],
-    primary_composite_calculator=score.primary_composite_stress_and_peeq,
+    primary_composite_calculator=score.primary_composite_energy_final_gradient,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
     ],
-    final_target_measure=history.GlobalStatusType.aggregate_p_norm_8,
+    final_target_measure=history.GlobalStatusType.aggregate_sum,
     gaussian_sigma=0.3,  # Was 0.15 forever
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",

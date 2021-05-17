@@ -132,7 +132,8 @@ class Datastore:
 
     def get_all_rows_at_all_frames_any_element_type(self):
         for frame in self.get_all_frames():
-            yield from self.get_all_rows_at_frame_any_element_type(frame)
+            for row in self.get_all_rows_at_frame_any_element_type(frame):
+                yield row
 
     def get_all_rows(self, named_tuple_class):
         with self.connection:
