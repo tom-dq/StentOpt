@@ -1307,7 +1307,7 @@ dylan_r10n1_params = StentParams(
             Z=2,
         ),
     ),
-    expansion_ratio=1.2,  # 2.0
+    expansion_ratio=1.05,  # 2.0
     inadmissible_regions=[
         InadmissibleRegion(
             theta_min=26,
