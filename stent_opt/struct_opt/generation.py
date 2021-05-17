@@ -69,7 +69,9 @@ class RunOneArgs(typing.NamedTuple):
     def is_full_model(self) -> bool:
         return not bool(self.patch_suffix)
 
-
+    def get_real_model_patch_to_elem(self):
+        #TODO
+        pass
 
 
 def get_gradient_input_data(
@@ -401,10 +403,11 @@ def get_candidate_elements(
     )
 
 
-def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_min_1, sensitivity_result, iter_n) -> typing.Set[design.PolarIndex]:
+def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_min_1, sensitivity_result, run_one_args_completed: RunOneArgs) -> typing.Set[design.PolarIndex]:
     """Decides which elements are coming in and going out."""
 
-    target_count = optim_params.target_num_elems(design_n_min_1, iter_n)
+    iter_this = run_one_args_completed.iter_this + 1
+    target_count = optim_params.target_num_elems(design_n_min_1, iter_this)
     delta_n_elems = target_count - len(design_n_min_1.active_elements)
 
     candidates_for = get_candidate_elements(optim_params, design_n_min_1)
@@ -890,7 +893,9 @@ T_ProdNewGen = typing.Callable[
     design.StentDesign
 ]
 
-def produce_new_generation(working_dir: pathlib.Path, design_prev: design.StentDesign, ranking_result: RankingResults, iter_this: int, label: str) -> design.StentDesign:
+def produce_new_generation(working_dir: pathlib.Path, design_prev: design.StentDesign, ranking_result: RankingResults, run_one_args_completed: RunOneArgs, label: str) -> design.StentDesign:
+
+    iter_this = run_one_args_completed.iter_this + 1
 
     inp_fn = history.make_fn_in_dir(working_dir, ".inp", iter_this)
     history_db = history.make_history_db(working_dir)
@@ -902,7 +907,7 @@ def produce_new_generation(working_dir: pathlib.Path, design_prev: design.StentD
     delta_n_elems = int(optim_params.max_change_in_vol_ratio * design_prev.stent_params.divs.fully_populated_elem_count())
     sensitivity_ranking = ranking_result.get_ordered_ranking_with_filter(delta_n_elems)
 
-    new_active_elems = evolve_decider(optim_params, design_prev, sensitivity_ranking, iter_this)
+    new_active_elems = evolve_decider(optim_params, design_prev, sensitivity_ranking, run_one_args_completed)
 
     elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
 
@@ -1009,6 +1014,30 @@ def plot_history_gradient():
     plt.show()
 
 
+def _make_testing_run_one_args(working_dir, optim_params=None) -> RunOneArgs:
+
+    from stent_opt.make_stent import run_model, working_dir_extract, FULL_INFO_MODEL_LIST, process_pool_run_and_process
+
+    from stent_opt.struct_opt.design import basic_stent_params as stent_params
+
+    if not optim_params:
+        from stent_opt.struct_opt.optimisation_parameters import active as optim_params
+
+    return RunOneArgs(
+        working_dir=working_dir,
+        optim_params=optim_params,
+        iter_this=0,
+        nodal_z_override_in_odb=stent_params.nodal_z_override_in_odb,
+        working_dir_extract=working_dir_extract,
+        model_infos=FULL_INFO_MODEL_LIST,
+        patch_suffix='',
+        child_patch_run_one_args=tuple(),
+        executed_feedback_text='',
+        do_run_model_TESTING=False,
+        do_run_extraction_TESTING=False,
+    )
+
+
 def evolve_decider_test():
     iter_n_min_1 = 0
     iter_n = iter_n_min_1 + 1
@@ -1032,7 +1061,9 @@ def evolve_decider_test():
         smoothed_checks = [st for st in status_checks if st.stage == history.StatusCheckStage.smoothed]
         smoothed = {elem_num_to_indices[st.elem_num]: st.metric_val for st in smoothed_checks}
 
-    new_active_elems = evolve_decider(optim_params, design_n_min_1, smoothed, iter_n)
+        run_one_args = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-123"), optim_params)
+
+    new_active_elems = evolve_decider(optim_params, design_n_min_1, smoothed, run_one_args)
     n_new = len(new_active_elems - design_n_min_1.active_elements)
     n_gone = len(design_n_min_1.active_elements - new_active_elems)
 
@@ -1043,27 +1074,12 @@ def evolve_decider_test():
 
 def run_test_process_completed_simulation():
 
-
-    from stent_opt.struct_opt.optimisation_parameters import active
-    from stent_opt.struct_opt.design import basic_stent_params as stent_params
-    from stent_opt.make_stent import run_model, working_dir_extract, FULL_INFO_MODEL_LIST, process_pool_run_and_process
+    from stent_opt.make_stent import process_pool_run_and_process
 
     working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
     # working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-36")
+    testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir)
 
-    testing_run_one_args_skeleton = RunOneArgs(
-        working_dir=working_dir,
-        optim_params=active,
-        iter_this=0,
-        nodal_z_override_in_odb=stent_params.nodal_z_override_in_odb,
-        working_dir_extract=working_dir_extract,
-        model_infos=FULL_INFO_MODEL_LIST,
-        patch_suffix='',
-        child_patch_run_one_args=tuple(),
-        executed_feedback_text='',
-        do_run_model_TESTING=False,
-        do_run_extraction_TESTING=False,
-    )
 
     testing_run_one_args_completed = process_pool_run_and_process(testing_run_one_args_skeleton)
     one_design, one_ranking = process_completed_simulation(testing_run_one_args_completed)

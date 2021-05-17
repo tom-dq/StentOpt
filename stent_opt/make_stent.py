@@ -300,7 +300,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         # for iter_this, (new_gen_func, new_gen_descip) in enumerate(new_design_trials, start=previous_max_i+1):
         iter_this = iter_prev + 1
         new_gen_descip = "generation.produce_new_generation"
-        one_new_design = generation.produce_new_generation(working_dir, one_design, one_ranking, iter_this, new_gen_descip)
+        one_new_design = generation.produce_new_generation(working_dir, one_design, one_ranking, run_one_args_completed, new_gen_descip)
 
         new_elements = one_new_design.active_elements - one_design.active_elements
         removed_elements = one_design.active_elements - one_new_design.active_elements
