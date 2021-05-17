@@ -130,6 +130,10 @@ class Datastore:
             for row in self.get_all_rows_at_frame(named_tuple_class, frame):
                 yield row
 
+    def get_all_rows_at_all_frames_any_element_type(self):
+        for frame in self.get_all_frames():
+            yield from self.get_all_rows_at_frame_any_element_type(frame)
+
     def get_all_rows(self, named_tuple_class):
         with self.connection:
             select_string = "SELECT * FROM {0} ORDER BY frame_rowid".format(named_tuple_class.__name__)

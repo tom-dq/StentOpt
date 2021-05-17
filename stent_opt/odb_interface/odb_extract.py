@@ -30,7 +30,7 @@ TEMP_SIGMA_UTS = 540.0
 TEMP_SIGMA_ENDURANCE = 270.0
 
 from datastore import Datastore
-from db_defs import Frame, NodePos, ElementStress, ElementPEEQ, ElementEnergyElastic, ElementEnergyPlastic, \
+from db_defs import Frame, NodePos, NodeReact, ElementStress, ElementPEEQ, ElementEnergyElastic, ElementEnergyPlastic, \
     ElementFatigueResult, ElementNodeForces, HistoryResult, expected_history_results
 
 # Get the command line option (should be last!).
@@ -56,12 +56,23 @@ ExtractionMeta = collections.namedtuple("ExtractionMeta", (
     "elem_labels",
     "node_init_pos",
     "odb_instance",
+    "nodes_enforced_displacement",
 ))
 
 def print_in_term(x):
     # Old Python Syntax!
     print >> sys.__stdout__, x
 
+def _get_nodes_theta_max(this_odb):
+    def produce_node_numbers():
+        NAME_START = "STENT-SET_PLANARSTENTTHETAMAX"
+        for node_set_name, node_set in this_odb.rootAssembly.nodeSets.items():
+            if node_set_name.startswith(NAME_START):
+                for nodes in node_set.nodes:
+                    for one_node in nodes:
+                        yield one_node.label
+
+    return set(produce_node_numbers())
 
 def _get_nodes_on_elements(elements, ):
     all_nodes = set()
@@ -125,6 +136,8 @@ def walk_file_frames(extract_all_steps, this_odb, override_z_val):
     """
     fn_odb = this_odb.name
 
+    nodes_enforced_displacement = _get_nodes_theta_max(this_odb)
+
     for one_instance_name, instance in this_odb.rootAssembly.instances.items():
         this_part_elem_labels = frozenset(elem.label for elem in instance.elements)
         this_part_node_labels = _get_nodes_on_elements(instance.elements)
@@ -154,6 +167,7 @@ def walk_file_frames(extract_all_steps, this_odb, override_z_val):
                             elem_labels=this_part_elem_labels,
                             node_init_pos=this_part_node_initial_pos,
                             odb_instance=instance,
+                            nodes_enforced_displacement=nodes_enforced_displacement,
                         )
                     )
 
@@ -360,6 +374,26 @@ def get_node_position_one_frame(extraction_meta):
         )
 
 
+def get_node_reaction_one_frame(extraction_meta):
+    relevant_disp_field = (
+        extraction_meta
+            .frame
+            .fieldOutputs['RF']
+            .getSubset(region=extraction_meta.odb_instance)
+    )
+    zero = numpy.array([0.0, 0.0, 0.0])
+    for one_value in relevant_disp_field.values:
+        if one_value.nodeLabel in extraction_meta.nodes_enforced_displacement:
+            overall_pos = _add_with_zero_pad(_get_data_array_as_double(one_value), zero)
+            yield NodeReact(
+                frame_rowid=None,
+                node_num=one_value.nodeLabel,
+                X=overall_pos[0],
+                Y=overall_pos[1],
+                Z=overall_pos[2]
+            )
+
+
 
 
 def get_results_one_frame(extraction_meta):
@@ -369,6 +403,7 @@ def get_results_one_frame(extraction_meta):
         get_strain_results_ESEDEN_one_frame,
         get_strain_results_EPDDEN_one_frame,
         get_node_position_one_frame,
+        get_node_reaction_one_frame,
         get_element_node_force_one_frame,
     ]
     for f in res_funcs:

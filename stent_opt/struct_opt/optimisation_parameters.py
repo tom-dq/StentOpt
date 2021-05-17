@@ -291,8 +291,8 @@ def _clamp_update(old, new, max_delta):
 
 
 volume_ratio = VolumeTargetOpts(
-    initial_ratio=0.375,
-    final_ratio=0.375,
+    initial_ratio=0.2,
+    final_ratio=0.2,
     num_iters=50,
 )
 
@@ -338,7 +338,7 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.04,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=0.04,  # Was 2.0
+    time_expansion=0.2,  # Was 2.0
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,

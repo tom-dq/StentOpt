@@ -94,15 +94,58 @@ class LineOfBestFit(typing.NamedTuple):
     c: float
 
 
-def primary_composite_stress_peeq_energy(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+class CompositeResultHelper:
+    def __init__(self):
+        def default_dict_list_maker():
+            return collections.defaultdict(list)
+
+        self.row_type_to_value = collections.defaultdict(list)
+        self.elem_num_to_type_to_all_rows = collections.defaultdict(default_dict_list_maker)
+        self.row_type_to_range = {}
+
+    def ingest_rows(self, nt_rows_all_from_frame):
+        for row in nt_rows_all_from_frame:
+            row_type = type(row)
+            self.row_type_to_value[row_type].append(row.get_last_value())
+
+            # Let us look up, say, elem 12, vM Stress.
+            # elem_num_to_type_to_rows[row.elem_num][row_type] = row.get_last_value()
+            self.elem_num_to_type_to_all_rows[row.elem_num][row_type].append(row.get_last_value())
+
+        for row_type, all_vals in self.row_type_to_value.items():
+            self.row_type_to_range[row_type] = min(all_vals), max(all_vals)
+
+    def get_last_point(self, elem_num, db_row_type: typing.Type[optimisation_parameters.T_elem_result]) -> float:
+        all_points = self.get_all_points(elem_num, db_row_type)
+        return all_points[-1]
+
+    def get_all_points(self, elem_num, db_row_type: typing.Type[optimisation_parameters.T_elem_result]) -> typing.List[
+        float]:
+        # db_row_type is, say db_def.ElementStress
+
+        # Check here because these are default dicts...
+        if elem_num not in self.elem_num_to_type_to_all_rows:
+            raise KeyError(elem_num)
+
+        if db_row_type not in self.elem_num_to_type_to_all_rows[elem_num]:
+            raise KeyError(db_row_type)
+
+        return self.elem_num_to_type_to_all_rows[elem_num][db_row_type]
+
+    def get_all_element_nums(self) -> typing.FrozenSet[int]:
+        return frozenset(self.elem_num_to_type_to_all_rows)
+
+
+
+def primary_composite_stress_peeq_energy(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """(0.1+vM) * (0.01+PEEQ) * (MaxOverallElasticEnergy - ElasticEnergy + 0.01)"""
 
-    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
-        vM = type_to_val[db_defs.ElementStress]
-        PEEQ = type_to_val[db_defs.ElementPEEQ]
-        ElasticEnergy = type_to_val[db_defs.ElementEnergyElastic]
+    for elem_num in composite_result_helper.get_all_element_nums():
+        vM = composite_result_helper.get_last_point(elem_num, db_defs.ElementStress)
+        PEEQ = composite_result_helper.get_last_point(elem_num, db_defs.ElementPEEQ)
+        ElasticEnergy = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyElastic)
 
-        elast_energy_min, elast_enery_max = row_type_to_range[db_defs.ElementEnergyElastic]
+        elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = (0.1 + vM) * (0.01 + PEEQ) * (elast_enery_max - ElasticEnergy + 0.01)
         yield db_defs.ElementCustomComposite(
@@ -111,15 +154,15 @@ def primary_composite_stress_peeq_energy(row_type_to_range, elem_num_to_type_to_
             comp_val=one_val,
         )
 
-def primary_composite_stress_peeq_energy_neg(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """-1 * (0.1+vM) * (0.01+PEEQ) * (MaxOverallElasticEnergy - ElasticEnergy + 0.01)"""
 
-    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
-        vM = type_to_val[db_defs.ElementStress]
-        PEEQ = type_to_val[db_defs.ElementPEEQ]
-        ElasticEnergy = type_to_val[db_defs.ElementEnergyElastic]
+    for elem_num in composite_result_helper.get_all_element_nums():
+        vM = composite_result_helper.get_last_point(elem_num, db_defs.ElementStress)
+        PEEQ = composite_result_helper.get_last_point(elem_num, db_defs.ElementPEEQ)
+        ElasticEnergy = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyElastic)
 
-        elast_energy_min, elast_enery_max = row_type_to_range[db_defs.ElementEnergyElastic]
+        elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = -1 * (0.1 + vM) * (0.01 + PEEQ) * (elast_enery_max - ElasticEnergy + 0.01)
         yield db_defs.ElementCustomComposite(
@@ -129,7 +172,7 @@ def primary_composite_stress_peeq_energy_neg(row_type_to_range, elem_num_to_type
         )
 
 
-def primary_composite_stress_peeq_energy_factor_test(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy_factor_test(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """x=0.2 (x*vMMax +vM) * (x*PEEQMax+PEEQ) * (MaxOverallElasticEnergy - ElasticEnergy +  x*ElasticEnergyMax)"""
     x = 0.2
 
@@ -138,12 +181,12 @@ def primary_composite_stress_peeq_energy_factor_test(row_type_to_range, elem_num
     high_vM = 200
     high_elastic_energy = 0.12
 
-    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
-        vM = type_to_val[db_defs.ElementStress]
-        PEEQ = type_to_val[db_defs.ElementPEEQ]
-        ElasticEnergy = type_to_val[db_defs.ElementEnergyElastic]
+    for elem_num in composite_result_helper.get_all_element_nums():
+        vM = composite_result_helper.get_last_point(elem_num, db_defs.ElementStress)
+        PEEQ = composite_result_helper.get_last_point(elem_num, db_defs.ElementPEEQ)
+        ElasticEnergy = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyElastic)
 
-        elast_energy_min, elast_enery_max = row_type_to_range[db_defs.ElementEnergyElastic]
+        elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = (x*high_vM + vM) * (x*high_PEEQ + PEEQ) * (elast_enery_max - ElasticEnergy + x*high_elastic_energy)
         yield db_defs.ElementCustomComposite(
@@ -152,7 +195,7 @@ def primary_composite_stress_peeq_energy_factor_test(row_type_to_range, elem_num
             comp_val=one_val,
         )
 
-def primary_composite_stress_peeq_energy_factor_test_v2(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy_factor_test_v2(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """x=0.0001 ((x*vMMax +vM) + (x*PEEQMax+PEEQ)) * (MaxOverallElasticEnergy - ElasticEnergy +  x*ElasticEnergyMax)"""
     x = 0.0001
 
@@ -161,12 +204,12 @@ def primary_composite_stress_peeq_energy_factor_test_v2(row_type_to_range, elem_
     high_vM = 200
     high_elastic_energy = 0.12
 
-    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
-        vM = type_to_val[db_defs.ElementStress]
-        PEEQ = type_to_val[db_defs.ElementPEEQ]
-        ElasticEnergy = type_to_val[db_defs.ElementEnergyElastic]
+    for elem_num in composite_result_helper.get_all_element_nums():
+        vM = composite_result_helper.get_last_point(elem_num, db_defs.ElementStress)
+        PEEQ = composite_result_helper.get_last_point(elem_num, db_defs.ElementPEEQ)
+        ElasticEnergy = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyElastic)
 
-        elast_energy_min, elast_enery_max = row_type_to_range[db_defs.ElementEnergyElastic]
+        elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = ((x*high_vM + vM) * (x*high_PEEQ + PEEQ)) * (elast_enery_max - ElasticEnergy + x*high_elastic_energy)
         yield db_defs.ElementCustomComposite(
@@ -176,7 +219,7 @@ def primary_composite_stress_peeq_energy_factor_test_v2(row_type_to_range, elem_
         )
 
 
-def primary_composite_stress_peeq_energy_factor_test_v3(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy_factor_test_v3(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """ vM / vMMax + +PEEQ/PEEQMax + (MaxOverallElasticEnergy - ElasticEnergy)/ElasticEnergyMax"""
 
     # Nominal "high" value
@@ -184,12 +227,12 @@ def primary_composite_stress_peeq_energy_factor_test_v3(row_type_to_range, elem_
     high_vM = 200
     high_elastic_energy = 0.12
 
-    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
-        vM = type_to_val[db_defs.ElementStress]
-        PEEQ = type_to_val[db_defs.ElementPEEQ]
-        ElasticEnergy = type_to_val[db_defs.ElementEnergyElastic]
+    for elem_num in composite_result_helper.get_all_element_nums():
+        vM = composite_result_helper.get_last_point(elem_num, db_defs.ElementStress)
+        PEEQ = composite_result_helper.get_last_point(elem_num, db_defs.ElementPEEQ)
+        ElasticEnergy = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyElastic)
 
-        elast_energy_min, elast_enery_max = row_type_to_range[db_defs.ElementEnergyElastic]
+        elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = vM / high_vM + PEEQ / high_PEEQ  + (elast_enery_max - ElasticEnergy) / high_elastic_energy
         yield db_defs.ElementCustomComposite(
@@ -198,7 +241,7 @@ def primary_composite_stress_peeq_energy_factor_test_v3(row_type_to_range, elem_
             comp_val=one_val,
         )
 
-def primary_composite_stress_peeq_energy_factor_test_v4(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy_factor_test_v4(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """ vM / vMMax + PEEQ/PEEQMax - ElasticEnergy/ElasticEnergyMax"""
 
     # Nominal "high" value
@@ -206,12 +249,12 @@ def primary_composite_stress_peeq_energy_factor_test_v4(row_type_to_range, elem_
     high_vM = 200
     high_elastic_energy = 0.12
 
-    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
-        vM = type_to_val[db_defs.ElementStress]
-        PEEQ = type_to_val[db_defs.ElementPEEQ]
-        ElasticEnergy = type_to_val[db_defs.ElementEnergyElastic]
+    for elem_num in composite_result_helper.get_all_element_nums():
+        vM = composite_result_helper.get_last_point(elem_num, db_defs.ElementStress)
+        PEEQ = composite_result_helper.get_last_point(elem_num, db_defs.ElementPEEQ)
+        ElasticEnergy = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyElastic)
 
-        elast_energy_min, elast_enery_max = row_type_to_range[db_defs.ElementEnergyElastic]
+        elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = vM / high_vM + PEEQ / high_PEEQ  - ElasticEnergy/ high_elastic_energy
         yield db_defs.ElementCustomComposite(
@@ -220,7 +263,7 @@ def primary_composite_stress_peeq_energy_factor_test_v4(row_type_to_range, elem_
             comp_val=one_val,
         )
 
-def primary_composite_stress_peeq_energy_factor_test_v4_neg(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy_factor_test_v4_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """ -1 * (vM / vMMax + PEEQ/PEEQMax - ElasticEnergy/ElasticEnergyMax)"""
 
     # Nominal "high" value
@@ -228,12 +271,12 @@ def primary_composite_stress_peeq_energy_factor_test_v4_neg(row_type_to_range, e
     high_vM = 200
     high_elastic_energy = 0.12
 
-    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
-        vM = type_to_val[db_defs.ElementStress]
-        PEEQ = type_to_val[db_defs.ElementPEEQ]
-        ElasticEnergy = type_to_val[db_defs.ElementEnergyElastic]
+    for elem_num in composite_result_helper.get_all_element_nums():
+        vM = composite_result_helper.get_last_point(elem_num, db_defs.ElementStress)
+        PEEQ = composite_result_helper.get_last_point(elem_num, db_defs.ElementPEEQ)
+        ElasticEnergy = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyElastic)
 
-        elast_energy_min, elast_enery_max = row_type_to_range[db_defs.ElementEnergyElastic]
+        elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val =-1 *(vM / high_vM + PEEQ / high_PEEQ  - ElasticEnergy/ high_elastic_energy)
         yield db_defs.ElementCustomComposite(
@@ -242,16 +285,16 @@ def primary_composite_stress_peeq_energy_factor_test_v4_neg(row_type_to_range, e
             comp_val=one_val,
         )
 
-def primary_composite_stress_and_peeq(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_and_peeq(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """ vM / vMMax + PEEQ/PEEQMax """
 
     # Nominal "high" value
     high_PEEQ = 0.02
     high_vM = 200
 
-    for elem_num, type_to_val in elem_num_to_type_to_rows.items():
-        vM = type_to_val[db_defs.ElementStress]
-        PEEQ = type_to_val[db_defs.ElementPEEQ]
+    for elem_num in composite_result_helper.get_all_element_nums():
+        vM = composite_result_helper.get_last_point(elem_num, db_defs.ElementStress)
+        PEEQ = composite_result_helper.get_last_point(elem_num, db_defs.ElementPEEQ)
 
         one_val = vM / high_vM + PEEQ / high_PEEQ
         yield db_defs.ElementCustomComposite(
@@ -260,7 +303,7 @@ def primary_composite_stress_and_peeq(row_type_to_range, elem_num_to_type_to_row
             comp_val=one_val,
         )
 
-def primary_composite_stress_and_peeq_and_load(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_and_peeq_and_load(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """ vM / vMMax + PEEQ/PEEQMax - NForce/NForceMax """
 
     # Nominal "high" value
@@ -280,7 +323,7 @@ def primary_composite_stress_and_peeq_and_load(row_type_to_range, elem_num_to_ty
             comp_val=one_val,
         )
 
-def primary_composite_stress_and_peeq_and_load_inv(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_and_peeq_and_load_inv(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """ vM / vMMax + PEEQ/PEEQMax + NForceMax/(NForce+low_NodeForce) """
 
     # Nominal "high" value
@@ -301,7 +344,7 @@ def primary_composite_stress_and_peeq_and_load_inv(row_type_to_range, elem_num_t
             comp_val=one_val,
         )
 
-def primary_composite_stress_and_peeq_and_load_inv_log(row_type_to_range, elem_num_to_type_to_rows) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_and_peeq_and_load_inv_log(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """ vM / vMMax + PEEQ/PEEQMax + max( 0, log( NForceMax/(NForce+low_NodeForce) ) """
 
     # Nominal "high" value
@@ -324,29 +367,16 @@ def primary_composite_stress_and_peeq_and_load_inv_log(row_type_to_range, elem_n
 
 
 
-
-
 def compute_composite_ranking_component(optim_params: optimisation_parameters.OptimParams, nt_rows_all_from_frame) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """This computes a composite function based on existing results in the Datastore. Called after Abaqus has populated it."""
 
     # Get the min and max of all the primary quantities
     nt_rows_all_from_frame = list(nt_rows_all_from_frame)
 
-    row_type_to_value = collections.defaultdict(list)
-    elem_num_to_type_to_rows = collections.defaultdict(dict)
+    composite_result_helper = CompositeResultHelper()
+    composite_result_helper.ingest_rows(nt_rows_all_from_frame)
 
-    for row in nt_rows_all_from_frame:
-        row_type = type(row)
-        row_type_to_value[row_type].append(row.get_last_value())
-
-        # Let us look up, say, elem 12, vM Stress.
-        elem_num_to_type_to_rows[row.elem_num][row_type] = row.get_last_value()
-
-    row_type_to_range = {}
-    for row_type, all_vals in row_type_to_value.items():
-        row_type_to_range[row_type] = min(all_vals), max(all_vals)
-
-    yield from optim_params.primary_composite_calculator(row_type_to_range, elem_num_to_type_to_rows)
+    yield from optim_params.primary_composite_calculator(composite_result_helper)
 
 
 def _get_primary_ranking_components_raw(include_in_opt, optim_params: optimisation_parameters.OptimParams, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:

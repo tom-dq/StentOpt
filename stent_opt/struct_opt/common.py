@@ -66,6 +66,7 @@ class GlobalStatusType(enum.Enum):
     aggregate_p_norm_4 = enum.auto()
     aggregate_p_norm_8 = enum.auto()
     aggregate_p_norm_12 = enum.auto()
+    aggregate_sum = enum.auto()
 
     @classmethod
     def get_elemental_aggregate_values(cls):
@@ -94,6 +95,9 @@ class GlobalStatusType(enum.Enum):
 
         elif self == GlobalStatusType.aggregate_median:
             return statistics.median(elemental_vals)
+
+        elif self == GlobalStatusType.aggregate_sum:
+            return sum(elemental_vals)
 
         raise ValueError(f"Did not know what to return for {self}")
 

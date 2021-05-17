@@ -1274,7 +1274,7 @@ dylan_r10n1_params = StentParams(
 )
 
 
-basic_stent_params = dylan_r10n1_params.copy_with_updates(balloon=None, cylinder=None)
+basic_stent_params = dylan_r10n1_params.copy_with_updates(balloon=None, cylinder=None, inadmissible_regions=tuple())
 
 
 if __name__ == "__main__":

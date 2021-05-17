@@ -819,7 +819,7 @@ def process_completed_simulation(run_one_args: RunOneArgs
     # Add any composite results which need to be added.
     with datastore.Datastore(db_fn_prev) as data:
         one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
-        abaqus_created_primary_rows = data.get_all_rows_at_frame_any_element_type(one_frame)
+        abaqus_created_primary_rows = data.get_all_rows_at_all_frames_any_element_type()
         composite_primary_rows = score.compute_composite_ranking_component(optim_params, abaqus_created_primary_rows)
         data.add_results_on_existing_frame(one_frame, composite_primary_rows)
 
@@ -1118,8 +1118,8 @@ def run_test_process_completed_simulation():
 
     from stent_opt.make_stent import process_pool_run_and_process
 
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    # working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-36")
+    # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-36")
     testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir)
 
 
@@ -1129,9 +1129,9 @@ def run_test_process_completed_simulation():
 
 
 if __name__ == '__main__':
-    evolve_decider_test()
+    # evolve_decider_test()
 
-    # run_test_process_completed_simulation()
+    run_test_process_completed_simulation()
 
 
 if False:
