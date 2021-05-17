@@ -69,9 +69,22 @@ class RunOneArgs(typing.NamedTuple):
     def is_full_model(self) -> bool:
         return not bool(self.patch_suffix)
 
-    def get_real_model_patch_to_elem(self):
-        #TODO
-        pass
+    def get_real_model_patch_to_elem(self) -> typing.Dict[int, typing.Set[int]]:
+        """Get a dictionary of elem_id -> set(elem_ids), where elem_id is some element and the value in the dictionary
+        is the set of all the elements which are mutually in each other's patches. All the element ids are in the
+        full model form, not the sub-model +offset ones"""
+
+        elem_to_set = collections.defaultdict(set)
+
+        for patch_run_one_args in self.child_patch_run_one_args:
+            for sub_model_info in patch_run_one_args.model_infos:
+
+                for source_elem_num in sub_model_info.elem_nums: # this is always a patch_manager.SubModelInfo so elem_nums will be there.
+                    attached_elems = [elem_num for elem_num in sub_model_info.elem_nums if source_elem_num != elem_num]
+                    for target_elem_num in attached_elems:
+                        elem_to_set[source_elem_num].add(target_elem_num)
+
+        return elem_to_set
 
 
 def get_gradient_input_data(
@@ -206,8 +219,10 @@ def get_top_n_elements_maintaining_edge_connectivity(
         initial_active_elems: typing.Set[design.PolarIndex],
         data: T_index_to_val,
         tail: Tail,
-        n_elems: int
-) -> typing.Set[design.PolarIndex]:
+        n_elems: int,
+        elems_to_patch_buddies_idx: typing.Dict[design.PolarIndex, typing.Set[design.PolarIndex]],
+        dirty_elems: typing.Set[design.PolarIndex]
+) -> typing.Tuple[typing.Set[design.PolarIndex], typing.Set[design.PolarIndex]]:
 
     # Build a graph so we can keep track of connectivity as we go.
     graph_element_pool = {
@@ -275,8 +290,14 @@ def get_top_n_elements_maintaining_edge_connectivity(
         else:
             return len(top_n & initial_active_elems)
 
-    while num_changed_elements() < n_elems and sorted_data:
+    halfway = len(sorted_data) // 2
+    while num_changed_elements() < n_elems and len(sorted_data) > halfway:
         elemIdxCandidate, obj_fun_val = sorted_data.pop()
+
+        elem_idx_is_clean = elemIdxCandidate not in dirty_elems
+        if not elem_idx_is_clean:
+            print(f"  [Conn] {elemIdxCandidate} = {obj_fun_val} skipping... invalidated by a prior patch buddy being changed.")
+            continue
 
         # Does this element change break some connectivity?
         trial_working_set = set(active_elems_working_set)
@@ -298,12 +319,18 @@ def get_top_n_elements_maintaining_edge_connectivity(
                 suffix_text = ' (but was not in the mesh???)' if elemIdxCandidate not in active_elems_working_set else ''
                 active_elems_working_set.discard(elemIdxCandidate)
 
+            # Set any patches this element was in to dirty. On submodels we won't get anything here...
+            dirty_elem_idxs = elems_to_patch_buddies_idx.get(elemIdxCandidate, tuple())
+            dirty_elems.add(elemIdxCandidate)
+            for other_elem_idx in dirty_elem_idxs:
+                dirty_elems.add(other_elem_idx)
+
             print(f"  [Conn] {elemIdxCandidate} = {obj_fun_val} OK to {DEBUG_verb}{suffix_text}")
 
         else:
             print(f"  [Conn] {elemIdxCandidate} = {obj_fun_val} not going to  {DEBUG_verb} {elemIdxCandidate} - would create disconnection.")
 
-    return top_n
+    return top_n, dirty_elems
 
 
 def display_design_flat(design_space: design.PolarIndex, data: T_index_to_val):
@@ -418,8 +445,18 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
     if max_new_num < 0:
         max_new_num = 0
 
+    # Keep track of the element indices which haven't been touched by another addition or removal.
+    clean_elems_to_patch_buddies_num = run_one_args_completed.get_real_model_patch_to_elem()
+    elem_num_to_idx = {elem_id: elem_idx for elem_idx, elem_id, _ in design.generate_plate_elements_all(design_n_min_1.stent_params.divs, design_n_min_1.stent_params.stent_element_type)}
+
+    clean_elems_to_patch_buddies_idx = dict()
+    for clean_elem_num, other_clean_elem_nums in clean_elems_to_patch_buddies_num.items():
+        clean_idxs = [elem_num_to_idx[other_elem_num] for other_elem_num in other_clean_elem_nums]
+        clean_elems_to_patch_buddies_idx[elem_num_to_idx[clean_elem_num]] = clean_idxs
+
     # top_new_potential_elems_all = get_top_n_elements(sensitivity_result, Tail.top, max_new_num)
-    top_new_potential_elems_all = get_top_n_elements_maintaining_edge_connectivity(design_n_min_1.stent_params, design_n_min_1.active_elements, sensitivity_result, Tail.top, max_new_num)
+    dirty_elems = set()
+    top_new_potential_elems_all, dirty_elems = get_top_n_elements_maintaining_edge_connectivity(design_n_min_1.stent_params, design_n_min_1.active_elements, sensitivity_result, Tail.top, max_new_num, clean_elems_to_patch_buddies_idx, dirty_elems)
     top_new_potential_elems = {idx for idx in top_new_potential_elems_all if idx in candidates_for.existing_next_round}
     actual_new_elems = top_new_potential_elems - design_n_min_1.active_elements
     num_new = len(actual_new_elems)
@@ -431,7 +468,7 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
     existing_elems_only_ranked = {idx: val for idx,val in sensitivity_result.items() if idx in design_n_min_1.active_elements and idx in candidates_for.removal}
     # to_go = get_top_n_elements(existing_elems_only_ranked, Tail.bottom, num_to_go)
     elem_working_set = design_n_min_1.active_elements | top_new_potential_elems
-    to_go = get_top_n_elements_maintaining_edge_connectivity(design_n_min_1.stent_params, elem_working_set, existing_elems_only_ranked, Tail.bottom, num_to_go)
+    to_go, _ = get_top_n_elements_maintaining_edge_connectivity(design_n_min_1.stent_params, elem_working_set, existing_elems_only_ranked, Tail.bottom, num_to_go, clean_elems_to_patch_buddies_idx, dirty_elems)
 
     new_active_elems = (design_n_min_1.active_elements | top_new_potential_elems) - to_go
     return new_active_elems
@@ -1039,15 +1076,20 @@ def _make_testing_run_one_args(working_dir, optim_params=None) -> RunOneArgs:
 
 
 def evolve_decider_test():
+    from stent_opt.make_stent import process_pool_run_and_process
+
     iter_n_min_1 = 0
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-123\history.db")
+    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-35\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
 
+    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-35"), optim_params)
+    run_one_args_completed = process_pool_run_and_process(run_one_args_input)
+    with history.History(history_db) as hist:
         elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
 
         snapshot_n_min_1 = hist.get_snapshot(iter_n_min_1)
@@ -1061,9 +1103,9 @@ def evolve_decider_test():
         smoothed_checks = [st for st in status_checks if st.stage == history.StatusCheckStage.smoothed]
         smoothed = {elem_num_to_indices[st.elem_num]: st.metric_val for st in smoothed_checks}
 
-        run_one_args = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-123"), optim_params)
 
-    new_active_elems = evolve_decider(optim_params, design_n_min_1, smoothed, run_one_args)
+
+    new_active_elems = evolve_decider(optim_params, design_n_min_1, smoothed, run_one_args_completed)
     n_new = len(new_active_elems - design_n_min_1.active_elements)
     n_gone = len(design_n_min_1.active_elements - new_active_elems)
 
