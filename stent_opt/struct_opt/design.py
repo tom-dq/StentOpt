@@ -1223,15 +1223,15 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
 
 def make_initial_design_overlapping_circles(stent_params: StentParams) -> StentDesign:
     circ_cent_radius = (
-        (base.RThZ(r=0.0, theta_deg=0.0, z=stent_params.length/2), math.sqrt(stent_params.angle**2 + (stent_params.length / 4)**2)),
-        (base.RThZ(r=0.0, theta_deg=stent_params.angle/2, z=stent_params.length/2), stent_params.theta_arc_initial/8),
+        (base.XYZ(x=0, y=stent_params.length/2, z=0), 1.1),
+        (base.XYZ(x=stent_params.theta_arc_initial * 0.5, y=stent_params.length/2, z=0), 0.1),
     )
 
     def elem_in_circle(ccr, e: element.Element):
         e_xyz = elem_cent_polar(e)
         ccr_xyz = ccr[0].to_xyz()
         dist = math.sqrt( (ccr_xyz.x-e_xyz.x)**2 +  (ccr_xyz.y-e_xyz.y)**2 )
-        print(e_xyz, ccr_xyz, dist, ccr[1])
+        # print(dist < ccr[1], e_xyz, ccr_xyz, dist, ccr[1])
         return dist < ccr[1]
 
 
@@ -1243,7 +1243,7 @@ def make_initial_design_overlapping_circles(stent_params: StentParams) -> StentD
 
     def check_elem(e: element.Element) -> bool:
         num_circs = [1 for ccr in circ_cent_radius if elem_in_circle(ccr, e)]
-        return len(num_circs) % 1 == 1
+        return len(num_circs) % 2 == 1
 
     included_elements = frozenset(idx for idx, iElem, e in generate_stent_part_elements(stent_params) if check_elem(e))
     return StentDesign(
@@ -1258,8 +1258,8 @@ def make_initial_design_overlapping_circles(stent_params: StentParams) -> StentD
 # make_initial_design = make_initial_two_lines
 # make_initial_design = make_initial_design_s_curve
 
-make_initial_design = functools.partial(make_initial_zig_zag, 2, 4.2, 0.2)
-# make_initial_design = make_initial_design_overlapping_circles
+# make_initial_design = functools.partial(make_initial_zig_zag, 2, 4.2, 0.2)
+make_initial_design = make_initial_design_overlapping_circles
 
 def make_design_from_snapshot(stent_params: StentParams, snapshot: "history.Snapshot") -> StentDesign:
     elem_num_to_idx = {iElem: idx for idx, iElem, e in generate_brick_elements_all(divs=stent_params.divs)}
