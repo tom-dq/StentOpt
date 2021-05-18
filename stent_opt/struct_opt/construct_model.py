@@ -357,6 +357,7 @@ def _create_steps(optim_params: optimisation_parameters.OptimParams, model: main
     step_expand = optim_params.analysis_step_type(
         name=f"ExpandHold",
         step_time=optim_params.time_expansion,
+        nlgeom=not optim_params.linear_only,
     )
     model.add_step(step_expand)
 
@@ -373,6 +374,7 @@ def _create_steps(optim_params: optimisation_parameters.OptimParams, model: main
         step_two = optim_params.analysis_step_type(
             name=step2_name,
             step_time=optim_params.time_released,
+            nlgeom=not optim_params.linear_only,
         )
         model.add_step(step_two)
 
@@ -485,6 +487,7 @@ def _apply_loads_enforced_disp_rigid_cyl(optim_params: optimisation_parameters.O
         step_time=optim_params.time_expansion,
         bulk_visc_b1=step.FALLBACK_VISC_B1,
         bulk_visc_b2=step.FALLBACK_VISC_B2,
+        nlgeom=not optim_params.linear_only,
     )
 
     model.add_step(one_step)
@@ -529,6 +532,7 @@ def _apply_loads_pressure(optim_params: optimisation_parameters.OptimParams, ste
         step_time=optim_params.time_expansion,
         bulk_visc_b1=step.FALLBACK_VISC_B1,
         bulk_visc_b2=step.FALLBACK_VISC_B2,
+        nlgeom=not optim_params.linear_only,
     )
 
     model.add_step(one_step)
