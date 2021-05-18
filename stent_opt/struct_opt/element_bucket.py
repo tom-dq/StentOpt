@@ -148,6 +148,25 @@ def test_boundary():
     assert one_hop == frozenset({222,})
 
 
+def test_bridge_gap():
+    elems = [
+        Element(11, (111, 1111,)),
+        Element(22, (111, 222,)),
+        Element(33, (222, 333,)),
+        Element(44, (333, 444,)),
+        Element(55, (444, 555,)),
+        Element(66, (555, 666,)),
+        Element(77, (666, 6666,)),
+    ]
+
+    g = build_graph(GraphEdgeEntity.node, elems)
+
+    elem_trial = Element(88, (1111, 6666,))
+
+    boundary_nodes, inside_all_fe_elems = get_fe_nodes_on_boundary_interface(g, 1, elem_trial)
+    print(boundary_nodes)
+    print(inside_all_fe_elems)
+
 def network_traverse_test():
     elems = [
         Element(1, (1, 2, 3, 4)),
@@ -221,4 +240,4 @@ def test_buckets():
     print("All OK")
 
 if __name__ == "__main__":
-    test_boundary()
+    test_bridge_gap()

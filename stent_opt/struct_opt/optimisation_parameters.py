@@ -326,7 +326,7 @@ active = OptimParams(
         # db_defs.ElementFatigueResult,
         db_defs.ElementCustomComposite,
     ],
-    primary_composite_calculator=score.primary_composite_energy_final_gradient_neg,
+    primary_composite_calculator=score.primary_composite_energy_neg,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
@@ -338,7 +338,7 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=1.0,  # Was 2.0
+    time_expansion=0.2,  # Was 2.0
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
     analysis_step_type=step.StepDynamicExplicit,

@@ -397,6 +397,19 @@ def primary_composite_energy_final_gradient_neg(composite_result_helper: Composi
             comp_val=total_second_last-total_last,
         )
 
+def primary_composite_energy_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+    """ - EnergyTotal """
+
+    for elem_num in composite_result_helper.get_all_element_nums():
+        ElementEnergyElastic = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyElastic)
+        ElementEnergyPlastic = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyPlastic)
+
+        yield db_defs.ElementCustomComposite(
+            frame_rowid=None,
+            elem_num=elem_num,
+            comp_val=-(ElementEnergyElastic+ElementEnergyPlastic),
+        )
+
 
 def compute_composite_ranking_component(optim_params: optimisation_parameters.OptimParams, nt_rows_all_from_frame) -> typing.Iterable[db_defs.ElementCustomComposite]:
     """This computes a composite function based on existing results in the Datastore. Called after Abaqus has populated it."""

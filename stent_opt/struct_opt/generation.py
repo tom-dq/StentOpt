@@ -1163,7 +1163,7 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-36")
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-3")
     testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir)
 
 
