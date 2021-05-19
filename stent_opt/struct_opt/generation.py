@@ -815,8 +815,6 @@ def _get_change_in_overall_objective_from_patches(
 
             # Go through the same "final objective function" (like a p-Norm or whatever) as the global model.
             this_patch_vals = list(ranking_results.final_ranking_component_unsmoothed.values())
-            print(model_info)
-            print(this_patch_vals)
             obj_func = run_one_args.optim_params.final_target_measure.compute_aggregate(this_patch_vals)
             yield ref_elem_num, model_info.this_trial_active_state, obj_func
 

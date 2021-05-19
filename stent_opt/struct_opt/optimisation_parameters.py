@@ -109,7 +109,7 @@ class OptimParams(typing.NamedTuple):
     @property
     def elem_span_for_patch_buffered(self) -> int:
         if self.patch_hops:
-            return 3 * self.patch_hops
+            return 4 * self.patch_hops
 
         else:
             return 1
@@ -340,7 +340,7 @@ active = OptimParams(
         # db_defs.ElementFatigueResult,
         db_defs.ElementCustomComposite,
     ],
-    primary_composite_calculator=score.primary_composite_energy,
+    primary_composite_calculator=score.primary_composite_energy_neg,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
@@ -358,10 +358,10 @@ active = OptimParams(
     analysis_step_type=step.StepStatic,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=2,
+    patch_hops=1,
     nonlinear_geometry=False,
     nonlinear_material=False,
-    patched_elements=common.PatchedElements.all,
+    patched_elements=common.PatchedElements.boundary,
 )
 
 active = active._replace(region_gradient=None)
