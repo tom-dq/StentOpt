@@ -53,8 +53,6 @@ class BaseModelForDB(pydantic.BaseModel):
         return self.validate(working_dict)
 
 
-
-
 class GlobalStatusType(enum.Enum):
     abaqus_history_result = enum.auto()
     current_volume_ratio = enum.auto()
@@ -113,3 +111,8 @@ class GlobalStatusType(enum.Enum):
 
         else:
             return False, None
+
+
+class PatchedElements(enum.Enum):
+    boundary = enum.auto()
+    all = enum.auto()

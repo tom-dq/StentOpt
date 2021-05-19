@@ -48,7 +48,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
             density=7.85e-09,
             elast_mod=196000.0,
             elast_possion=0.3,
-            plastic=stress_strain_table,
+            plastic=stress_strain_table if optim_params.nonlinear_material else None,
         )
 
         common_section = section.SolidSection(
@@ -74,11 +74,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
         # Make the nodes.
 
         for sub_mod_idx, sub_model_info in enumerate(sub_model_infos):
-            if optim_params.offset_submodels:
-                off_row, off_col = divmod(sub_mod_idx, n_offset_rows)
-
-            else:
-                off_row, off_col = 0, 0
+            off_row, off_col = divmod(sub_mod_idx, n_offset_rows)
 
             this_offset = base.XYZ(off_col * offset_single.x, off_row*offset_single.y, 0.0)
             for iNode, one_node_polar in node_pos.items():
@@ -357,7 +353,7 @@ def _create_steps(optim_params: optimisation_parameters.OptimParams, model: main
     step_expand = optim_params.analysis_step_type(
         name=f"ExpandHold",
         step_time=optim_params.time_expansion,
-        nlgeom=not optim_params.linear_only,
+        nlgeom=optim_params.nonlinear_geometry,
     )
     model.add_step(step_expand)
 
@@ -374,7 +370,7 @@ def _create_steps(optim_params: optimisation_parameters.OptimParams, model: main
         step_two = optim_params.analysis_step_type(
             name=step2_name,
             step_time=optim_params.time_released,
-            nlgeom=not optim_params.linear_only,
+            nlgeom=optim_params.nonlinear_geometry,
         )
         model.add_step(step_two)
 
@@ -487,7 +483,7 @@ def _apply_loads_enforced_disp_rigid_cyl(optim_params: optimisation_parameters.O
         step_time=optim_params.time_expansion,
         bulk_visc_b1=step.FALLBACK_VISC_B1,
         bulk_visc_b2=step.FALLBACK_VISC_B2,
-        nlgeom=not optim_params.linear_only,
+        nlgeom=optim_params.nonlinear_geometry,
     )
 
     model.add_step(one_step)
@@ -532,7 +528,7 @@ def _apply_loads_pressure(optim_params: optimisation_parameters.OptimParams, ste
         step_time=optim_params.time_expansion,
         bulk_visc_b1=step.FALLBACK_VISC_B1,
         bulk_visc_b2=step.FALLBACK_VISC_B2,
-        nlgeom=not optim_params.linear_only,
+        nlgeom=optim_params.nonlinear_geometry,
     )
 
     model.add_step(one_step)

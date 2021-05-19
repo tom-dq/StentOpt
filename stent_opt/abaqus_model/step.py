@@ -18,6 +18,23 @@ class StepBase:
 
 
 @dataclasses.dataclass(frozen=True)
+class StepStatic(StepBase):
+    name: str
+    step_time: float
+    nlgeom: bool = False
+    step_init: float = 0.1
+    step_minimum: float = 1e-7
+    max_incs: int = 100_000
+
+    def produce_inp_lines(self) -> typing.Iterable[str]:
+        nlgeom_text = "YES" if self.nlgeom else "NO"
+        yield f"*Step, name={self.name}, nlgeom={nlgeom_text}, inc={self.max_incs}"
+        yield "*Static"
+        step_data = [self.step_init, self.step_time, self.step_minimum]
+        yield ", ".join(base.abaqus_float(x) for x in step_data)
+
+
+@dataclasses.dataclass(frozen=True)
 class StepDynamicImplicit(StepBase):
     name: str
     step_time: float
@@ -58,6 +75,9 @@ def is_explicit(step: typing.Union[StepBase, typing.Type[StepBase]]) -> bool:
 
     elif isinstance(step, StepDynamicExplicit) or step == StepDynamicExplicit:
         return True
+
+    elif isinstance(step, StepStatic) or step == StepStatic:
+        return False
 
     else:
         raise ValueError(step)
