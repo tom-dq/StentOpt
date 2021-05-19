@@ -358,7 +358,7 @@ active = OptimParams(
         # score.get_primary_ranking_macro_deformation,
     ],
     final_target_measure_one=history.GlobalStatusType.aggregate_sum,
-    final_target_measure_two=history.GlobalStatusType.aggregate_p_norm_8,
+    final_target_measure_two=None, # history.GlobalStatusType.aggregate_p_norm_8,
     gaussian_sigma=0.3,  # Was 0.15 forever
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
@@ -371,10 +371,10 @@ active = OptimParams(
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=2,
+    patch_hops=1,
     nonlinear_geometry=True,
     nonlinear_material=True,
-    patched_elements=common.PatchedElements.all,
+    patched_elements=common.PatchedElements.boundary,
 )
 
 active = active._replace(region_gradient=None)
