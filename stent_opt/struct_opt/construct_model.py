@@ -73,6 +73,13 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
         n_offset_rows = int(1.3 * len(sub_model_infos)**0.5)
 
         # Make the nodes.
+        def get_bottom_left(node_nums):
+            min_x = min(node_pos[iNode].x for iNode in node_nums)
+            min_y = min(node_pos[iNode].y for iNode in node_nums)
+            min_z = min(node_pos[iNode].z for iNode in node_nums)
+
+            return base.XYZ(min_x, min_y, min_z)
+
 
         node_num_patch_to_global_and_polar_index = dict()
         submodel_boundary_nodes = set()
@@ -80,7 +87,13 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
         for sub_mod_idx, sub_model_info in enumerate(sub_model_infos):
             off_row, off_col = divmod(sub_mod_idx, n_offset_rows)
 
-            this_offset = base.XYZ(off_col * offset_single.x, off_row*offset_single.y, 0.0)
+            if full_model:
+                bottom_left = base.XYZ(0.0, 0.0, 0.0)
+
+            else:
+                bottom_left = get_bottom_left(sub_model_info.node_nums)
+
+            this_offset = base.XYZ(off_col * offset_single.x, off_row*offset_single.y, 0.0) - bottom_left
             for iNode, one_node_polar in node_pos.items():
                 stent_part.add_node_validated(iNode,this_offset + one_node_polar.to_xyz(), node_elem_offset=sub_model_info.node_elem_offset)
                 node_num_patch_to_global_and_polar_index[sub_model_info.real_to_model_node(iNode)] = iNode, node_num_to_polar_index[iNode]

@@ -754,9 +754,9 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
                     )
                     for this_trial_active_state in (False, True)
                 ]
-                print(f"reference_elem_num={reference_elem_num}")
-                print(f"   Off: {sub_model_pair[0]}")
-                print(f"   On:  {sub_model_pair[1]}")
+                # print(f"reference_elem_num={reference_elem_num}")
+                # print(f"   Off: {sub_model_pair[0]}")
+                # print(f"   On:  {sub_model_pair[1]}")
                 yield sub_model_pair
 
 
@@ -781,7 +781,6 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     floor_chunk_size = math.ceil(FLOOR_ELEMS_IN_MODEL / optim_params.nominal_number_of_patch_elements)
     chunk_size = max(floor_chunk_size, chunk_size_round)  # Don't need to make it too crazy tiny...
     print(f"  Chunk Size [Ideal / Round / Used]: {chunk_size_ideal} / {chunk_size_round} / {chunk_size}")
-    chunk_size = 1  # TEMP!!!
     # https://stackoverflow.com/a/312464
     def get_prefix_and_smi():
         for sm_idx, i in enumerate(range(0, len(sub_model_infos), chunk_size), start=1):
