@@ -19,7 +19,7 @@ class AbaqusModel:
 
     _main_sep_line: str = "** -----------------------------"
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, abaqus_history_time_interval: float):
         self.name = name
         self.instances = dict()
         self.steps = list()
@@ -27,7 +27,7 @@ class AbaqusModel:
         self.interactions = set()
         self.boundary_conditions = set()
         self.abaqus_output_time_interval = 0.1
-        self.abaqus_history_time_interval = 0.002
+        self.abaqus_history_time_interval = abaqus_history_time_interval
         self.abaqus_target_increment = 1e-5
 
     def add_instance(self, one_instance: instance.Instance):

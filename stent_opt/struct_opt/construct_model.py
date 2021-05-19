@@ -13,7 +13,7 @@ from stent_opt.struct_opt import patch_manager
 
 def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign, full_model: bool, sub_model_infos: typing.List[patch_manager.SubModelInfoBase]):
 
-    model = main.AbaqusModel("StentModel")
+    model = main.AbaqusModel("StentModel", abaqus_history_time_interval=optim_params.get_abaqus_history_time_interval())
 
     element_dimensions = stent_design.stent_params.stent_element_dimensions
     node_num_idx_pos = design.generate_nodes(stent_design.stent_params)

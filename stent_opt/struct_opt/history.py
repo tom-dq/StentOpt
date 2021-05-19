@@ -9,7 +9,7 @@ import typing
 import statistics
 import matplotlib.pyplot as plt
 
-from stent_opt.struct_opt.common import RegionReducer, PrimaryRankingComponentFitnessFilter, GlobalStatusType
+from stent_opt.struct_opt.common import RegionReducer, PrimaryRankingComponentFitnessFilter, GlobalStatusType, PatchedElements
 from stent_opt.abaqus_model import element
 from stent_opt.struct_opt import design
 from stent_opt.odb_interface import db_defs
@@ -26,6 +26,7 @@ _enum_types = [
     PrimaryRankingComponentFitnessFilter,
     optimisation_parameters.PostExpansionBehaviour,
     GlobalStatusType,
+    PatchedElements,
 ]
 
 _nt_class_types = [

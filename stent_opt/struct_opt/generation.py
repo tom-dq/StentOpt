@@ -21,6 +21,7 @@ from stent_opt.struct_opt import patch_manager
 from stent_opt.struct_opt import element_bucket
 from stent_opt.struct_opt import construct_model
 from stent_opt.struct_opt import computer
+from stent_opt.struct_opt import common
 
 
 class Tail(enum.Enum):
@@ -348,10 +349,10 @@ def display_design_flat(design_space: design.PolarIndex, data: T_index_to_val):
 
 
 class CandidatesFor(typing.NamedTuple):
-    removal: typing.FrozenSet[design.PolarIndex]
+    removal_from_boundary: typing.FrozenSet[design.PolarIndex]
     existing_next_round: typing.FrozenSet[design.PolarIndex]  # Allowable design space for the next round (current elems and new ones)
     new_introduction: typing.FrozenSet[design.PolarIndex]  # Elements we could add but which weren't there last round.
-
+    removal_from_everywhere: typing.FrozenSet[design.PolarIndex]  # If we don't limit ourselves to the boundary, these elements can go as well.
 
 
 @functools.lru_cache()
@@ -418,16 +419,17 @@ def get_candidate_elements(
 
     removal_partial = get_adj_elements(indicies_holes, optim_params.nodes_shared_with_old_design_to_contract)
     removal_and_bound = removal_partial | frozenset(boundary_elements)
-    removal = removal_and_bound & design_n_min_1.active_elements
+    removal_from_boundary = removal_and_bound & design_n_min_1.active_elements
 
     existing_next_round = get_adj_elements(design_n_min_1.active_elements, optim_params.nodes_shared_with_old_design_to_expand)
 
     new_introduction = existing_next_round - design_n_min_1.active_elements
 
     return CandidatesFor(
-        removal=removal,
+        removal_from_boundary=removal_from_boundary,
         existing_next_round=existing_next_round,
         new_introduction=new_introduction,
+        removal_from_everywhere=design_n_min_1.active_elements,
     )
 
 
@@ -466,7 +468,7 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
     num_to_go = max(num_with_new_additions - target_count, 0)
 
     # Remove however many we added.
-    existing_elems_only_ranked = {idx: val for idx,val in sensitivity_result.items() if idx in design_n_min_1.active_elements and idx in candidates_for.removal}
+    existing_elems_only_ranked = {idx: val for idx,val in sensitivity_result.items() if idx in design_n_min_1.active_elements and idx in candidates_for.removal_from_boundary}
     # to_go = get_top_n_elements(existing_elems_only_ranked, Tail.bottom, num_to_go)
     elem_working_set = design_n_min_1.active_elements | top_new_potential_elems
     to_go, _ = get_top_n_elements_maintaining_edge_connectivity(design_n_min_1.stent_params, elem_working_set, existing_elems_only_ranked, Tail.bottom, num_to_go, clean_elems_to_patch_buddies_idx, dirty_elems)
@@ -643,7 +645,7 @@ def _get_ranking_functions(
 
 
 T_PatchModelPair = typing.Tuple[patch_manager.SubModelInfo, patch_manager.SubModelInfo]
-def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Iterable[T_PatchModelPair]:
+def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_parameters.OptimParams, iter_prev: int) -> typing.Iterable[T_PatchModelPair]:
     """Build the patch submodel info. They come in pairs so the "with" and "without" cases are solved in the same batch"""
 
     db_fn_prev = history.make_fn_in_dir(working_dir, ".db", iter_prev)
@@ -669,6 +671,22 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
 
     candidates_for = get_candidate_elements(optim_params, design_n_min_1)
 
+    # Elements to consider for the patch tests
+    if optim_params.patched_elements == common.PatchedElements.boundary:
+        init_state_and_elems = (
+            (True, candidates_for.removal_from_boundary),
+            (False, candidates_for.new_introduction),
+        )
+
+    elif optim_params.patched_elements == common.PatchedElements.all:
+        init_state_and_elems = (
+            (True, candidates_for.removal_from_everywhere),
+            (False, candidates_for.new_introduction),
+        )
+
+    else:
+        raise ValueError(optim_params.patched_elements)
+
     # Build the networkx graph so we can get the connectivity easily
     graph_fe_elems = {
         elem_num: element_bucket.Element(elem_num, design.get_single_element_connection(stent_params, polar_index))
@@ -685,10 +703,7 @@ def prepare_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.It
         with datastore.Datastore(db_fn_prev) as data:
             this_patch_manager.ingest_node_pos(data.get_all_frames(), data.get_all_rows(db_defs.NodePos))
 
-        for initial_active_state, elem_idxs in (
-                (True, candidates_for.removal),
-                (False, candidates_for.new_introduction),
-        ):
+        for initial_active_state, elem_idxs in init_state_and_elems:
             for polar_index in elem_idxs:
                 # Make a stent design with this element active (so we can support Off->On checks
                 design_n_min_1_with_elem = design_n_min_1.with_additional_elements( [polar_index])
@@ -742,7 +757,7 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
 
     suffix_to_patch_list = dict()
 
-    sub_model_infos = list(prepare_patch_models(working_dir, iter_prev))
+    sub_model_infos = list(prepare_patch_models(working_dir, optim_params, iter_prev))
 
     # Batch them up into even-ish chunks
     chunk_size_ideal = len(sub_model_infos) / computer.this_computer.n_abaqus_parallel_solves

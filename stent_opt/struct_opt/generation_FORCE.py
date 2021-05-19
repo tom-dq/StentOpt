@@ -62,7 +62,7 @@ def compel_new_generation(
 
     candidates = {
         chains.Action.add: candidates_for.existing_next_round,
-        chains.Action.remove: candidates_for.removal,
+        chains.Action.remove: candidates_for.removal_from_boundary,
     }
 
     # Get the connectivity of these.

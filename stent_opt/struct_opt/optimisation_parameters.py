@@ -243,6 +243,14 @@ class OptimParams(typing.NamedTuple):
     def is_explicit(self) -> bool:
         return step.is_explicit(self.analysis_step_type)
 
+    def get_abaqus_history_time_interval(self) -> float:
+        if self.analysis_step_type == step.StepStatic:
+            # Don't record the full history it's too slow!
+            return self.time_expansion
+
+        else:
+            return self.abaqus_output_time_interval
+
 
 # Functions which set a target volume ratio. These are idealised.
 def vol_reduce_then_flat(vol_target_opts: VolumeTargetOpts, iter_num: int) -> float:
@@ -349,6 +357,7 @@ active = OptimParams(
     patch_hops=2,
     nonlinear_geometry=False,
     nonlinear_material=False,
+    patched_elements=common.PatchedElements.boundary,
 )
 
 active = active._replace(region_gradient=None)
