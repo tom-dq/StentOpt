@@ -37,7 +37,7 @@ if psutil.cpu_count(logical=False) == 2:
 
 elif psutil.cpu_count(logical=False) == 8:
     n_cpus = 1  # TEMP! Was 8
-    base_working_dir = r"E:\Simulations\StentOpt"
+    base_working_dir = r"C:\Simulations\StentOpt"
     # fig_size = (1600, 800)  #  (2000, 1350)
     fig_size = (1800, 900)  #  (2000, 1350)
 

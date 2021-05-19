@@ -190,8 +190,8 @@ class OptimParams(typing.NamedTuple):
 
     def get_all_filter_components(self) -> typing.Iterable[typing.Tuple[bool, T_filter_component]]:
         all_defined_funcs = [
-            score.constraint_filter_within_fatigue_life,
-            score.constraint_filter_not_yielded_out,
+            # score.constraint_filter_within_fatigue_life,
+            # score.constraint_filter_not_yielded_out,
         ]
 
         for filter_component in all_defined_funcs:
@@ -329,7 +329,7 @@ volume_ratio_v2 = VolumeTargetOpts(
 
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
-    max_change_in_vol_ratio=0.05,  # Was 0.0025
+    max_change_in_vol_ratio=0.02,  # Was 0.0025
     volume_target_opts=volume_ratio,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
@@ -358,22 +358,22 @@ active = OptimParams(
         # score.get_primary_ranking_macro_deformation,
     ],
     final_target_measure_one=history.GlobalStatusType.aggregate_sum,
-    final_target_measure_two=None, # history.GlobalStatusType.aggregate_p_norm_8,
+    final_target_measure_two=history.GlobalStatusType.aggregate_p_norm_8,
     gaussian_sigma=0.3,  # Was 0.15 forever
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
     abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=0.2,  # Was 2.0
+    time_expansion=0.5,  # Was 2.0
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
-    analysis_step_type=step.StepStatic,
+    analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=1,
-    nonlinear_geometry=False,
-    nonlinear_material=False,
+    patch_hops=2,
+    nonlinear_geometry=True,
+    nonlinear_material=True,
     patched_elements=common.PatchedElements.all,
 )
 

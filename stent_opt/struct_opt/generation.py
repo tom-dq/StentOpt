@@ -508,7 +508,7 @@ class RankingResults(typing.NamedTuple):
     final_ranking_component_unsmoothed: T_index_to_val
     final_ranking_component_smoothed: T_index_to_val
     filter_out_priority: T_index_to_val
-    final_ranking_component_to_unsmoothed: typing.Dict[common.GlobalStatusType, T_index_to_val]
+    final_ranking_component_to_unsmoothed: typing.Dict[common.GlobalStatusType, typing.Tuple[str, T_index_to_val]]
     pos_rows: typing.List[db_defs.NodePos]
 
     def get_ordered_ranking_with_filter(self, max_to_filter_out: int) -> T_index_to_two_val:
@@ -620,7 +620,7 @@ def _get_ranking_functions(
         if len(this_level_ranks) != 1:
             raise ValueError("???")
 
-        multi_level_agg[global_status_type] = {elem_num_to_indices[prc.elem_id]: prc.value for prc in this_level_ranks[0]}
+        multi_level_agg[global_status_type] = f_elem_result.__doc__, {elem_num_to_indices[prc.elem_id]: prc.value for prc in this_level_ranks[0]}
 
     # Compute a secondary rank from all the first ones.
     sec_rank_unsmoothed = list(score.get_secondary_ranking_scaled_sum(all_ranks))
@@ -816,8 +816,20 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     return suffix_to_patch_list
 
 
+def _get_combined_global_objective_function(ranking_results: RankingResults):
+    """e.g., Sum[Energy] + Norm8[Stress>350]..."""
+    obj_funcs = []
+    terms = []
+    for comp_agg_func, (func_doc, elem_idx_to_val) in ranking_results.final_ranking_component_to_unsmoothed.items():
+        obj_func = comp_agg_func.compute_aggregate(list(elem_idx_to_val.values()))
+        obj_funcs.append(obj_func)
+        term = f"{comp_agg_func.get_nice_name()}( {func_doc} )"
+        terms.append(term)
+
+    return ' + '.join(terms), sum(obj_funcs)
+
+
 def _get_change_in_overall_objective_from_patches(
-        run_one_args: RunOneArgs,
         model_info_to_patch_rank: typing.Dict[patch_manager.SubModelInfo, RankingResults],
         ) -> typing.Dict[int, float]:
     """This returns the "gradient" from the patches - basically, the change in objective function we can expect by activating the element."""
@@ -827,17 +839,8 @@ def _get_change_in_overall_objective_from_patches(
 
             ref_elem_num = model_info.reference_elem_num
 
-            # Go through the same "final objective function" (like a p-Norm or whatever) as the global model.
-            # this_patch_vals = list(ranking_results.final_ranking_component_unsmoothed.values())
-
-            obj_funcs = []
-            for comp_agg_func, elem_idx_to_val in ranking_results.final_ranking_component_to_unsmoothed.items():
-                obj_func = comp_agg_func.compute_aggregate(list(elem_idx_to_val.values()))
-                obj_funcs.append(obj_func)
-
-            # obj_func = run_one_args.optim_params.final_target_measure.compute_aggregate(this_patch_vals)
-
-            yield ref_elem_num, model_info.this_trial_active_state, sum(obj_funcs)
+            overall_term_name, obj_func_val = _get_combined_global_objective_function(ranking_results)
+            yield ref_elem_num, model_info.this_trial_active_state, obj_func_val
 
     working_data = sorted(make_working_data())
 
@@ -885,7 +888,7 @@ def process_completed_simulation(run_one_args: RunOneArgs
         _, this_model_info_to_patch_rank = process_completed_simulation(run_one_args_patch)
         model_info_to_patch_rank.update(this_model_info_to_patch_rank)
 
-    elem_patch_deltas = _get_change_in_overall_objective_from_patches(run_one_args, model_info_to_patch_rank)
+    elem_patch_deltas = _get_change_in_overall_objective_from_patches(model_info_to_patch_rank)
     # Add in the patch results to the DB.
     with datastore.Datastore(db_fn_prev) as data:
         one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
@@ -965,6 +968,17 @@ def _log_completed_in_history_db(history_db, ranking_result, global_status_raw, 
 
     # Log the history
     with history.History(history_db) as hist:
+        # Overall objective function.
+        overall_term_name, obj_func_val = _get_combined_global_objective_function(ranking_result)
+        global_status_check = history.GlobalStatus(
+            iteration_num=iter_prev,
+            global_status_type=history.GlobalStatusType.abaqus_history_result,
+            global_status_sub_type=overall_term_name,
+            global_status_value=obj_func_val,
+        )
+        hist.add_many_global_status_checks([global_status_check])
+
+
         status_checks = (history.StatusCheck(
             iteration_num=iter_prev,
             elem_num=rank_comp.elem_id,

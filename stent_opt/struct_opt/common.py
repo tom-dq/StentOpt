@@ -72,6 +72,18 @@ class GlobalStatusType(enum.Enum):
             if name.startswith("aggregate_"):
                 yield enum_obj
 
+    def get_nice_name(self) -> str:
+        agg_start = "aggregate_"
+        if not self.name.startswith(agg_start):
+            raise ValueError
+
+        is_p_norm, maybe_p_norm_val = self.get_p_norm_status()
+        if is_p_norm:
+            return f'Norm{maybe_p_norm_val}'
+
+        return self.name[len(agg_start):].title()
+
+
     def compute_aggregate(self, elemental_vals: typing.List[float]) -> float:
 
         is_p_norm, maybe_p_norm_val = self.get_p_norm_status()
