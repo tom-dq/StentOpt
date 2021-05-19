@@ -93,6 +93,7 @@ class OptimParams(typing.NamedTuple):
     nonlinear_geometry: bool
     nonlinear_material: bool
     patched_elements: common.PatchedElements
+    one_elem_per_patch: bool = True
 
     def get_multi_level_aggregator(self) -> typing.Dict[common.GlobalStatusType, T_elem_result]:
         working_dict = {self.final_target_measure_one: self.primary_composite_calculator_one}
@@ -315,8 +316,8 @@ def _clamp_update(old, new, max_delta):
 
 
 volume_ratio = VolumeTargetOpts(
-    initial_ratio=0.2,
-    final_ratio=0.2,
+    initial_ratio=0.4,
+    final_ratio=0.4,
     num_iters=50,
 )
 
@@ -358,23 +359,24 @@ active = OptimParams(
         # score.get_primary_ranking_macro_deformation,
     ],
     final_target_measure_one=history.GlobalStatusType.aggregate_sum,
-    final_target_measure_two=None, # history.GlobalStatusType.aggregate_p_norm_8,
+    final_target_measure_two=history.GlobalStatusType.aggregate_p_norm_8,
     gaussian_sigma=0.3,  # Was 0.15 forever
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
     abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=0.5,  # Was 2.0
+    time_expansion=0.2,  # Was 2.0
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
-    analysis_step_type=step.StepDynamicExplicit,
+    analysis_step_type=step.StepStatic,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=1,
-    nonlinear_geometry=True,
-    nonlinear_material=True,
-    patched_elements=common.PatchedElements.boundary,
+    patch_hops=3,
+    nonlinear_geometry=False,
+    nonlinear_material=False,
+    patched_elements=common.PatchedElements.all,
+    one_elem_per_patch=False,
 )
 
 active = active._replace(region_gradient=None)
