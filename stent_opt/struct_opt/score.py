@@ -95,7 +95,12 @@ class LineOfBestFit(typing.NamedTuple):
 
 
 class CompositeResultHelper:
-    def __init__(self):
+    ret_obj = None
+
+    def __init__(self, ret_obj):
+
+        self.ret_obj = ret_obj
+
         def default_dict_list_maker():
             return collections.defaultdict(list)
 
@@ -136,8 +141,9 @@ class CompositeResultHelper:
         return frozenset(self.elem_num_to_type_to_all_rows)
 
 
+T_Any_Composite_Res = typing.Union[db_defs.ElementCustomCompositeOne, db_defs.ElementCustomCompositeTwo]
 
-def primary_composite_stress_peeq_energy(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """(0.1+vM) * (0.01+PEEQ) * (MaxOverallElasticEnergy - ElasticEnergy + 0.01)"""
 
     for elem_num in composite_result_helper.get_all_element_nums():
@@ -148,13 +154,26 @@ def primary_composite_stress_peeq_energy(composite_result_helper: CompositeResul
         elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = (0.1 + vM) * (0.01 + PEEQ) * (elast_enery_max - ElasticEnergy + 0.01)
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=one_val,
         )
 
-def primary_composite_stress_peeq_energy_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_over_crit(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
+    """Max( vM-8000, 0.0)"""
+
+    for elem_num in composite_result_helper.get_all_element_nums():
+        vM = composite_result_helper.get_last_point(elem_num, db_defs.ElementStress)
+
+        one_val = max(vM-8000.0, 0.0)
+        yield composite_result_helper.ret_obj(
+            frame_rowid=None,
+            elem_num=elem_num,
+            comp_val=one_val,
+        )
+
+def primary_composite_stress_peeq_energy_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """-1 * (0.1+vM) * (0.01+PEEQ) * (MaxOverallElasticEnergy - ElasticEnergy + 0.01)"""
 
     for elem_num in composite_result_helper.get_all_element_nums():
@@ -165,14 +184,14 @@ def primary_composite_stress_peeq_energy_neg(composite_result_helper: CompositeR
         elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = -1 * (0.1 + vM) * (0.01 + PEEQ) * (elast_enery_max - ElasticEnergy + 0.01)
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=one_val,
         )
 
 
-def primary_composite_stress_peeq_energy_factor_test(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy_factor_test(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """x=0.2 (x*vMMax +vM) * (x*PEEQMax+PEEQ) * (MaxOverallElasticEnergy - ElasticEnergy +  x*ElasticEnergyMax)"""
     x = 0.2
 
@@ -189,13 +208,13 @@ def primary_composite_stress_peeq_energy_factor_test(composite_result_helper: Co
         elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = (x*high_vM + vM) * (x*high_PEEQ + PEEQ) * (elast_enery_max - ElasticEnergy + x*high_elastic_energy)
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=one_val,
         )
 
-def primary_composite_stress_peeq_energy_factor_test_v2(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy_factor_test_v2(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """x=0.0001 ((x*vMMax +vM) + (x*PEEQMax+PEEQ)) * (MaxOverallElasticEnergy - ElasticEnergy +  x*ElasticEnergyMax)"""
     x = 0.0001
 
@@ -212,14 +231,14 @@ def primary_composite_stress_peeq_energy_factor_test_v2(composite_result_helper:
         elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = ((x*high_vM + vM) * (x*high_PEEQ + PEEQ)) * (elast_enery_max - ElasticEnergy + x*high_elastic_energy)
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=one_val,
         )
 
 
-def primary_composite_stress_peeq_energy_factor_test_v3(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy_factor_test_v3(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ vM / vMMax + +PEEQ/PEEQMax + (MaxOverallElasticEnergy - ElasticEnergy)/ElasticEnergyMax"""
 
     # Nominal "high" value
@@ -235,13 +254,13 @@ def primary_composite_stress_peeq_energy_factor_test_v3(composite_result_helper:
         elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = vM / high_vM + PEEQ / high_PEEQ  + (elast_enery_max - ElasticEnergy) / high_elastic_energy
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=one_val,
         )
 
-def primary_composite_stress_peeq_energy_factor_test_v4(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy_factor_test_v4(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ vM / vMMax + PEEQ/PEEQMax - ElasticEnergy/ElasticEnergyMax"""
 
     # Nominal "high" value
@@ -257,13 +276,13 @@ def primary_composite_stress_peeq_energy_factor_test_v4(composite_result_helper:
         elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val = vM / high_vM + PEEQ / high_PEEQ  - ElasticEnergy/ high_elastic_energy
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=one_val,
         )
 
-def primary_composite_stress_peeq_energy_factor_test_v4_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_peeq_energy_factor_test_v4_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ -1 * (vM / vMMax + PEEQ/PEEQMax - ElasticEnergy/ElasticEnergyMax)"""
 
     # Nominal "high" value
@@ -279,13 +298,13 @@ def primary_composite_stress_peeq_energy_factor_test_v4_neg(composite_result_hel
         elast_energy_min, elast_enery_max = composite_result_helper.row_type_to_range[db_defs.ElementEnergyElastic]
 
         one_val =-1 *(vM / high_vM + PEEQ / high_PEEQ  - ElasticEnergy/ high_elastic_energy)
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=one_val,
         )
 
-def primary_composite_stress_and_peeq(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_and_peeq(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ vM / vMMax + PEEQ/PEEQMax """
 
     # Nominal "high" value
@@ -297,13 +316,13 @@ def primary_composite_stress_and_peeq(composite_result_helper: CompositeResultHe
         PEEQ = composite_result_helper.get_last_point(elem_num, db_defs.ElementPEEQ)
 
         one_val = vM / high_vM + PEEQ / high_PEEQ
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=one_val,
         )
 
-def primary_composite_stress_and_peeq_and_load(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_and_peeq_and_load(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ vM / vMMax + PEEQ/PEEQMax - NForce/NForceMax """
 
     # Nominal "high" value
@@ -317,13 +336,13 @@ def primary_composite_stress_and_peeq_and_load(composite_result_helper: Composit
         NForce = composite_result_helper.get_last_point(elem_num, db_defs.ElementNodeForces)
 
         one_val = vM / high_vM + PEEQ / high_PEEQ - NForce/high_NodeForce
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=one_val,
         )
 
-def primary_composite_stress_and_peeq_and_load_inv(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_and_peeq_and_load_inv(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ vM / vMMax + PEEQ/PEEQMax + NForceMax/(NForce+low_NodeForce) """
 
     # Nominal "high" value
@@ -338,13 +357,13 @@ def primary_composite_stress_and_peeq_and_load_inv(composite_result_helper: Comp
         NForce = composite_result_helper.get_last_point(elem_num, db_defs.ElementNodeForces)
 
         one_val = vM / high_vM + PEEQ / high_PEEQ + high_NodeForce / (NForce+low_NodeForce)
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=one_val,
         )
 
-def primary_composite_stress_and_peeq_and_load_inv_log(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_stress_and_peeq_and_load_inv_log(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ vM / vMMax + PEEQ/PEEQMax + max( 0, log( NForceMax/(NForce+low_NodeForce) ) """
 
     # Nominal "high" value
@@ -359,13 +378,13 @@ def primary_composite_stress_and_peeq_and_load_inv_log(composite_result_helper: 
         NForce = composite_result_helper.get_last_point(elem_num, db_defs.ElementNodeForces)
 
         one_val = vM / high_vM + PEEQ / high_PEEQ + max(0.0, math.log(high_NodeForce / (NForce+low_NodeForce)))
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=one_val,
         )
 
-def primary_composite_energy_final_gradient(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_energy_final_gradient(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ delta(EnergyTotal) over last two result frames """
 
     for elem_num in composite_result_helper.get_all_element_nums():
@@ -375,13 +394,13 @@ def primary_composite_energy_final_gradient(composite_result_helper: CompositeRe
         total_last = ElementEnergyElastic[-1] + ElementEnergyPlastic[-1]
         total_second_last = ElementEnergyElastic[-2] + ElementEnergyPlastic[-2]
 
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=total_last-total_second_last,
         )
 
-def primary_composite_energy_final_gradient_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_energy_final_gradient_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ -delta(EnergyTotal) over last two result frames """
 
     for elem_num in composite_result_helper.get_all_element_nums():
@@ -391,50 +410,63 @@ def primary_composite_energy_final_gradient_neg(composite_result_helper: Composi
         total_last = ElementEnergyElastic[-1] + ElementEnergyPlastic[-1]
         total_second_last = ElementEnergyElastic[-2] + ElementEnergyPlastic[-2]
 
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=total_second_last-total_last,
         )
 
 
-def primary_composite_energy(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_energy(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ EnergyTotal """
 
     for elem_num in composite_result_helper.get_all_element_nums():
         ElementEnergyElastic = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyElastic)
         ElementEnergyPlastic = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyPlastic)
 
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=ElementEnergyElastic+ElementEnergyPlastic,
         )
 
-def primary_composite_energy_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def primary_composite_energy_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ - EnergyTotal """
 
     for elem_num in composite_result_helper.get_all_element_nums():
         ElementEnergyElastic = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyElastic)
         ElementEnergyPlastic = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyPlastic)
 
-        yield db_defs.ElementCustomComposite(
+        yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
             comp_val=-(ElementEnergyElastic+ElementEnergyPlastic),
         )
 
 
-def compute_composite_ranking_component(optim_params: optimisation_parameters.OptimParams, nt_rows_all_from_frame) -> typing.Iterable[db_defs.ElementCustomComposite]:
+def compute_composite_ranking_component_one(optim_params: optimisation_parameters.OptimParams, nt_rows_all_from_frame) -> typing.Iterable[db_defs.ElementCustomCompositeOne]:
     """This computes a composite function based on existing results in the Datastore. Called after Abaqus has populated it."""
 
     # Get the min and max of all the primary quantities
     nt_rows_all_from_frame = list(nt_rows_all_from_frame)
 
-    composite_result_helper = CompositeResultHelper()
+    composite_result_helper = CompositeResultHelper(db_defs.ElementCustomCompositeOne)
     composite_result_helper.ingest_rows(nt_rows_all_from_frame)
 
-    yield from optim_params.primary_composite_calculator(composite_result_helper)
+    yield from optim_params.primary_composite_calculator_one(composite_result_helper)
+
+
+def compute_composite_ranking_component_two(optim_params: optimisation_parameters.OptimParams, nt_rows_all_from_frame) -> typing.Iterable[db_defs.ElementCustomCompositeTwo]:
+    """This computes a composite function based on existing results in the Datastore. Called after Abaqus has populated it."""
+
+    # Get the min and max of all the primary quantities
+    nt_rows_all_from_frame = list(nt_rows_all_from_frame)
+
+    composite_result_helper = CompositeResultHelper(db_defs.ElementCustomCompositeTwo)
+    composite_result_helper.ingest_rows(nt_rows_all_from_frame)
+
+    yield from optim_params.primary_composite_calculator_two(composite_result_helper)
+
 
 
 def _get_primary_ranking_components_raw(include_in_opt, optim_params: optimisation_parameters.OptimParams, nt_rows) -> typing.Iterable[PrimaryRankingComponent]:
@@ -491,10 +523,19 @@ def _get_primary_ranking_components_raw(include_in_opt, optim_params: optimisati
                 include_in_opt=include_in_opt,
             )
 
-    elif isinstance(nt_row, db_defs.ElementCustomComposite):
+    elif isinstance(nt_row, db_defs.ElementCustomCompositeOne):
         for row in nt_rows:
             yield PrimaryRankingComponent(
-                comp_name=optim_params.primary_composite_calculator.__doc__,
+                comp_name=optim_params.primary_composite_calculator_one.__doc__,
+                elem_id=row.elem_num,
+                value=row.comp_val,
+                include_in_opt=include_in_opt,
+            )
+
+    elif isinstance(nt_row, db_defs.ElementCustomCompositeTwo):
+        for row in nt_rows:
+            yield PrimaryRankingComponent(
+                comp_name=optim_params.primary_composite_calculator_two.__doc__,
                 elem_id=row.elem_num,
                 value=row.comp_val,
                 include_in_opt=include_in_opt,

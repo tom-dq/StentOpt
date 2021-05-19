@@ -508,6 +508,7 @@ class RankingResults(typing.NamedTuple):
     final_ranking_component_unsmoothed: T_index_to_val
     final_ranking_component_smoothed: T_index_to_val
     filter_out_priority: T_index_to_val
+    final_ranking_component_to_unsmoothed: typing.Dict[common.GlobalStatusType, T_index_to_val]
     pos_rows: typing.List[db_defs.NodePos]
 
     def get_ordered_ranking_with_filter(self, max_to_filter_out: int) -> T_index_to_two_val:
@@ -602,15 +603,29 @@ def _get_ranking_functions(
             with_main_model_ids = [elem_row._replace(elem_id=model_info.model_to_real_elem(elem_row.elem_id)) for elem_row in one_submodel_id_prim_result]
             all_ranks.append(with_main_model_ids)
 
+    # Smooth the final result
+    elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(design_n_min_1.stent_params.divs)}
+    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(design_n_min_1.stent_params.divs)}
+
     # Compute the primary and overall ranking components
+
+    # New thing - support sum for one thing and norm for something else
+    multi_level_agg = {}
+    for global_status_type, f_elem_result in optim_params.get_multi_level_aggregator().items():
+        def is_matching_func_output(one_rank):
+            return all(prc.comp_name.startswith(f_elem_result.__doc__) and isinstance(prc, score.PrimaryRankingComponent) for prc in one_rank)
+
+        this_level_ranks = [one_rank for one_rank in all_ranks if is_matching_func_output(one_rank)]
+
+        if len(this_level_ranks) != 1:
+            raise ValueError("???")
+
+        multi_level_agg[global_status_type] = {elem_num_to_indices[prc.elem_id]: prc.value for prc in this_level_ranks[0]}
 
     # Compute a secondary rank from all the first ones.
     sec_rank_unsmoothed = list(score.get_secondary_ranking_scaled_sum(all_ranks))
     all_ranks.append(sec_rank_unsmoothed)
 
-    # Smooth the final result
-    elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(design_n_min_1.stent_params.divs)}
-    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(design_n_min_1.stent_params.divs)}
 
     overall_rank = {one.elem_id: one.value for one in sec_rank_unsmoothed}
     unsmoothed = {elem_num_to_indices[iElem]: val for iElem, val in overall_rank.items()}
@@ -649,6 +664,7 @@ def _get_ranking_functions(
         final_ranking_component_unsmoothed=unsmoothed,
         final_ranking_component_smoothed=smoothed,
         filter_out_priority=filter_out_priority,
+        final_ranking_component_to_unsmoothed=multi_level_agg,
         pos_rows=pos_rows,
     )
 
@@ -812,9 +828,16 @@ def _get_change_in_overall_objective_from_patches(
             ref_elem_num = model_info.reference_elem_num
 
             # Go through the same "final objective function" (like a p-Norm or whatever) as the global model.
-            this_patch_vals = list(ranking_results.final_ranking_component_unsmoothed.values())
-            obj_func = run_one_args.optim_params.final_target_measure.compute_aggregate(this_patch_vals)
-            yield ref_elem_num, model_info.this_trial_active_state, obj_func
+            # this_patch_vals = list(ranking_results.final_ranking_component_unsmoothed.values())
+
+            obj_funcs = []
+            for comp_agg_func, elem_idx_to_val in ranking_results.final_ranking_component_to_unsmoothed.items():
+                obj_func = comp_agg_func.compute_aggregate(list(elem_idx_to_val.values()))
+                obj_funcs.append(obj_func)
+
+            # obj_func = run_one_args.optim_params.final_target_measure.compute_aggregate(this_patch_vals)
+
+            yield ref_elem_num, model_info.this_trial_active_state, sum(obj_funcs)
 
     working_data = sorted(make_working_data())
 
@@ -846,9 +869,11 @@ def process_completed_simulation(run_one_args: RunOneArgs
     # Add any composite results which need to be added.
     with datastore.Datastore(db_fn_prev) as data:
         one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
-        abaqus_created_primary_rows = data.get_all_rows_at_all_frames_any_element_type()
-        composite_primary_rows = score.compute_composite_ranking_component(optim_params, abaqus_created_primary_rows)
-        data.add_results_on_existing_frame(one_frame, composite_primary_rows)
+        abaqus_created_primary_rows = list(data.get_all_rows_at_all_frames_any_element_type())
+        composite_primary_rows_one = score.compute_composite_ranking_component_one(optim_params, abaqus_created_primary_rows)
+        composite_primary_rows_two = score.compute_composite_ranking_component_two(optim_params, abaqus_created_primary_rows)
+        data.add_results_on_existing_frame(one_frame, composite_primary_rows_one)
+        data.add_results_on_existing_frame(one_frame, composite_primary_rows_two)
 
     # Go between num (1234) and idx (5, 6, 7)...
     elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
@@ -1189,7 +1214,7 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-189")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-197")
     testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir)
 
 
@@ -1207,7 +1232,7 @@ def run_test_process_completed_simulation():
 if __name__ == '__main__':
     # evolve_decider_test()
 
-    evolve_decider_test()
+    run_test_process_completed_simulation()
 
 
 if False:

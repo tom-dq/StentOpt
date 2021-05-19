@@ -102,7 +102,8 @@ ElementEnergyPlastic = _make_nt_and_table_create("ElementEnergyPlastic", ResultE
 ElementFatigueResult = _make_nt_and_table_create("ElementFatigueResult", ResultEntity.elem_num, ("SAmp", "SMean", "LGoodman",))
 ElementNodeForces = _make_nt_and_table_create("ElementNodeForces", ResultEntity.elem_num, ("N1X", "N1Y", "N2X", "N2Y", "N3X", "N3Y", "N4X", "N4Y", "overall_norm"))
 ElementGlobalPatchSensitivity = _make_nt_and_table_create("ElementGlobalPatchSensitivity", ResultEntity.elem_num, ("gradient_from_patch",))
-ElementCustomComposite = _make_nt_and_table_create("ElementCustomComposite", ResultEntity.elem_num, ("comp_val",))
+ElementCustomCompositeOne = _make_nt_and_table_create("ElementCustomCompositeOne", ResultEntity.elem_num, ("comp_val",))
+ElementCustomCompositeTwo = _make_nt_and_table_create("ElementCustomCompositeTwo", ResultEntity.elem_num, ("comp_val",))
 
 expected_history_results = ["ALLSE", "ALLPD", "ALLKE", "ALLWK"]
 

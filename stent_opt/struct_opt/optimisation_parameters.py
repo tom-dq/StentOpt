@@ -27,7 +27,8 @@ T_elem_result = typing.Union[
     db_defs.ElementEnergyPlastic,
     db_defs.ElementFatigueResult,
     db_defs.ElementGlobalPatchSensitivity,
-    db_defs.ElementCustomComposite,
+    db_defs.ElementCustomCompositeOne,
+    db_defs.ElementCustomCompositeTwo,
     db_defs.ElementNodeForces,
 ]
 
@@ -72,8 +73,10 @@ class OptimParams(typing.NamedTuple):
     primary_ranking_fitness_filters: typing.List[common.PrimaryRankingComponentFitnessFilter]
     element_components: typing.List[T_elem_result]
     nodal_position_components: typing.List[T_nodal_pos_func]
-    primary_composite_calculator: T_composite_primary_calculator
-    final_target_measure: common.GlobalStatusType
+    primary_composite_calculator_one: T_composite_primary_calculator
+    primary_composite_calculator_two: T_composite_primary_calculator
+    final_target_measure_one: common.GlobalStatusType
+    final_target_measure_two: typing.Optional[common.GlobalStatusType]
     gaussian_sigma: float
     local_deformation_stencil_length: float
     working_dir: str
@@ -90,6 +93,13 @@ class OptimParams(typing.NamedTuple):
     nonlinear_geometry: bool
     nonlinear_material: bool
     patched_elements: common.PatchedElements
+
+    def get_multi_level_aggregator(self) -> typing.Dict[common.GlobalStatusType, T_elem_result]:
+        working_dict = {self.final_target_measure_one: self.primary_composite_calculator_one}
+        if self.final_target_measure_two:
+            working_dict[self.final_target_measure_two] = self.primary_composite_calculator_two
+
+        return working_dict
 
     @property
     def add_initial_node_pos(self) -> bool:
@@ -338,14 +348,17 @@ active = OptimParams(
         # db_defs.ElementEnergyElastic,
         # db_defs.ElementEnergyPlastic,
         # db_defs.ElementFatigueResult,
-        db_defs.ElementCustomComposite,
+        db_defs.ElementCustomCompositeOne,
+        db_defs.ElementCustomCompositeTwo,
     ],
-    primary_composite_calculator=score.primary_composite_energy_neg,
+    primary_composite_calculator_one=score.primary_composite_energy_neg,
+    primary_composite_calculator_two=score.primary_composite_stress_over_crit,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
     ],
-    final_target_measure=history.GlobalStatusType.aggregate_sum,
+    final_target_measure_one=history.GlobalStatusType.aggregate_sum,
+    final_target_measure_two=None, # history.GlobalStatusType.aggregate_p_norm_8,
     gaussian_sigma=0.3,  # Was 0.15 forever
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
