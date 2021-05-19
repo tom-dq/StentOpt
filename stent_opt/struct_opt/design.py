@@ -116,7 +116,8 @@ class StentParams(BaseModelForDB):
     inadmissible_regions: typing.Tuple[InadmissibleRegion, ...]
     end_connection_length_ratio: float = 0.3  # The middle 30% is the enforced displacement.
     whole_left_side_restrained: bool
-    sym_y: bool = False
+    sym_y: bool
+    fix_base: bool
 
     def level_is_restrained(self, is_theta_0: bool, z: float) -> bool:
         if is_theta_0:
@@ -152,7 +153,7 @@ class StentParams(BaseModelForDB):
 
         maybe_y_max_sym = self.get_y_index_sym_plane()
         if maybe_y_max_sym:
-            if elem_polar_index.Z > maybe_y_max_sym:
+            if elem_polar_index.Z+1 > maybe_y_max_sym:  # The Plus One is to go from node to elements
                 return False
 
 
@@ -1311,7 +1312,7 @@ dylan_r10n1_params = StentParams(
     ),
     r_min=0.65,
     r_max=0.75,
-    length=3.0, # Was 11.0
+    length=2.0, # Was 11.0
     stent_element_type=element.ElemType.CPS4R,
     balloon=Balloon(
         inner_radius_ratio=0.85,
@@ -1344,6 +1345,7 @@ dylan_r10n1_params = StentParams(
     end_connection_length_ratio=0.3,
     whole_left_side_restrained=True,
     sym_y=True,
+    fix_base=False,
 )
 
 

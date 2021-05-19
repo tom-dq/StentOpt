@@ -714,8 +714,6 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
         with datastore.Datastore(db_fn_prev) as data:
             this_patch_manager.ingest_node_pos(data.get_all_frames(), data.get_all_rows(db_defs.NodePos))
 
-        TEST = this_patch_manager.produce_amplitude_for(9, 2)
-
         for initial_active_state, elem_idxs in init_state_and_elems:
             for polar_index in elem_idxs:
                 # Make a stent design with this element active (so we can support Off->On checks
@@ -1123,7 +1121,7 @@ def plot_history_gradient():
     plt.show()
 
 
-def _make_testing_run_one_args(working_dir, optim_params=None) -> RunOneArgs:
+def _make_testing_run_one_args(working_dir, optim_params=None, iter_this=0) -> RunOneArgs:
 
     from stent_opt.make_stent import run_model, working_dir_extract, FULL_INFO_MODEL_LIST, process_pool_run_and_process
 
@@ -1135,7 +1133,7 @@ def _make_testing_run_one_args(working_dir, optim_params=None) -> RunOneArgs:
     return RunOneArgs(
         working_dir=working_dir,
         optim_params=optim_params,
-        iter_this=0,
+        iter_this=iter_this,
         nodal_z_override_in_odb=stent_params.nodal_z_override_in_odb,
         working_dir_extract=working_dir_extract,
         model_infos=FULL_INFO_MODEL_LIST,
@@ -1150,16 +1148,16 @@ def _make_testing_run_one_args(working_dir, optim_params=None) -> RunOneArgs:
 def evolve_decider_test():
     from stent_opt.make_stent import process_pool_run_and_process
 
-    iter_n_min_1 = 0
+    iter_n_min_1 = 14
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-35\history.db")
+    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-189\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
 
-    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-35"), optim_params)
+    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"E:\Simulations\StentOpt\AA-189"), optim_params, iter_n_min_1)
     run_one_args_completed = process_pool_run_and_process(run_one_args_input)
     with history.History(history_db) as hist:
         elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
@@ -1191,19 +1189,25 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-163")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-189")
     testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir)
 
 
     testing_run_one_args_completed = process_pool_run_and_process(testing_run_one_args_skeleton)
-    one_design, one_ranking = process_completed_simulation(testing_run_one_args_completed)
+    one_design, model_info_to_rank = process_completed_simulation(testing_run_one_args_completed)
 
+    if len(model_info_to_rank) != 1:
+        raise ValueError("What?")
+
+    one_ranking = next(iter(model_info_to_rank.values()))
+
+    one_new_design = produce_new_generation(working_dir, one_design, one_ranking, testing_run_one_args_completed, "TESTING")
 
 
 if __name__ == '__main__':
     # evolve_decider_test()
 
-    run_test_process_completed_simulation()
+    evolve_decider_test()
 
 
 if False:

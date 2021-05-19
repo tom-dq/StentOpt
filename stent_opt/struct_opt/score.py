@@ -869,8 +869,21 @@ def _max_delta_angle_of_element(stent_params: "design.StentParams", node_to_pos:
 def _removed_observer_only_components(list_of_lists: typing.List[typing.List[PrimaryRankingComponent]]) -> typing.List[typing.List[PrimaryRankingComponent]]:
     out_list_of_lists = []
 
+    # For debugging purposes, strip out duplicates which can get in there when I re-run processing code...
+    seen = set()
+
     for one_list in list_of_lists:
-        for_inclusion_set = {prc.include_in_opt for prc in one_list}
+
+        deduped = []
+        for one_item in one_list:
+            if one_item not in seen:
+                deduped.append(one_item)
+                seen.add(one_item)
+
+        if not deduped:
+            continue
+
+        for_inclusion_set = {prc.include_in_opt for prc in deduped}
         if len(for_inclusion_set) != 1:
             raise ValueError("How did we get here?", for_inclusion_set, one_list[0:])
 
@@ -895,32 +908,41 @@ def get_secondary_ranking_scaled_sum(list_of_lists: typing.List[typing.List[Prim
 
     include_in_opt_lists = _removed_observer_only_components(list_of_lists)
 
-    # Step 1 - normalise all the primary ranking components to one as a maximum
-    for one_list in include_in_opt_lists:
+    # If there's only one component in there, just return that.
+    if len(include_in_opt_lists) == 1:
+        one_list = include_in_opt_lists[0]
+        for prim_rank in one_list:
+            elem_effort[prim_rank.elem_id] = prim_rank.value
+
         names.append(one_list[0].comp_name)
-        vals = [prim_rank.value for prim_rank in one_list]
 
-        min_val = min(vals)
-        max_val = max(vals)
+    else:
+        # Step 1 - normalise all the primary ranking components to one as a maximum
+        for one_list in include_in_opt_lists:
+            names.append(one_list[0].comp_name)
+            vals = [prim_rank.value for prim_rank in one_list]
 
-        # Don't shift below 0
-        min_for_offsetting = min(0.0, min_val)
+            min_val = min(vals)
+            max_val = max(vals)
 
-        if min_val < 0.0:
-            # Shift it all up a bit if the lowest value is negative. But leave the max value output by the method at 1.0
-            scale_factor = max_val - min_val
-            offset_value = abs(min_val)
+            # Don't shift below 0
+            min_for_offsetting = min(0.0, min_val)
 
-        else:
-            scale_factor = max_val
-            offset_value = 0.0
+            if min_val < 0.0:
+                # Shift it all up a bit if the lowest value is negative. But leave the max value output by the method at 1.0
+                scale_factor = max_val - min_val
+                offset_value = abs(min_val)
 
-        # If there's a zero in there, get rid of it!
-        scale_factor_safe = scale_factor if scale_factor > 0 else 1.0
-        scaled_primary = {prim_rank.elem_id: (prim_rank.value + offset_value) / scale_factor_safe for prim_rank in one_list}
+            else:
+                scale_factor = max_val
+                offset_value = 0.0
 
-        # Update on a counter adds to the existing value...
-        elem_effort.update(scaled_primary)
+            # If there's a zero in there, get rid of it!
+            scale_factor_safe = scale_factor if scale_factor > 0 else 1.0
+            scaled_primary = {prim_rank.elem_id: (prim_rank.value + offset_value) / scale_factor_safe for prim_rank in one_list}
+
+            # Update on a counter adds to the existing value...
+            elem_effort.update(scaled_primary)
 
     sec_name = "ScaledSum[" + "+".join(names) + "]"
     for elem_id, sec_rank_val in elem_effort.items():

@@ -70,7 +70,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
         node_idx_single = design.PolarIndex(R=0, Th=1, Z=1)
         offset_single = optim_params.elem_span_for_patch_buffered * node_idx_to_pos[node_idx_single]
 
-        n_offset_rows = int(1.3 * len(sub_model_infos)**0.5)
+        n_offset_rows = int(1.8 * len(sub_model_infos)**0.5)
 
         # Make the nodes.
         def get_bottom_left(node_nums):
@@ -144,7 +144,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
                     if stent_params.node_idx_z_is_restrained(False, node_idx.Z):
                         yield design.GlobalNodeSetNames.PlanarStentThetaMax
 
-                if full_model:
+                if stent_design.stent_params.fix_base:
                     if node_idx.Z == min_idx_z: yield design.GlobalNodeSetNames.PlanarStentZMin
 
             boundary_set_name_to_nodes = collections.defaultdict(set)
@@ -496,7 +496,7 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
     if optim_params.simulation_has_second_step and hold_base2: model.add_load_specific_steps([model.steps[1]], hold_base2)
 
     if stent_params.sym_y:
-        sym_y_bc = _build_bound_disp_rot_if_nodes_found(stent_part, "SymY", [(GlobalNodeSetNames.PlanarStentZMin, 2, 0.0)], None)
+        sym_y_bc = _build_bound_disp_rot_if_nodes_found(stent_part, "SymY", [(GlobalNodeSetNames.PlanarStentYSymPlane, 2, 0.0)], None)
         if sym_y_bc: model.add_load_specific_steps(model.steps, sym_y_bc)
 
 

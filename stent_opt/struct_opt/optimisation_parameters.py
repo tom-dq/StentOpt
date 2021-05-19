@@ -319,7 +319,7 @@ volume_ratio_v2 = VolumeTargetOpts(
 
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
-    max_change_in_vol_ratio=0.01,  # Was 0.0025
+    max_change_in_vol_ratio=0.05,  # Was 0.0025
     volume_target_opts=volume_ratio,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
@@ -361,7 +361,7 @@ active = OptimParams(
     patch_hops=1,
     nonlinear_geometry=False,
     nonlinear_material=False,
-    patched_elements=common.PatchedElements.boundary,
+    patched_elements=common.PatchedElements.all,
 )
 
 active = active._replace(region_gradient=None)
