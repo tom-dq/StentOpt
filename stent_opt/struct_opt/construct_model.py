@@ -18,6 +18,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
     element_dimensions = stent_design.stent_params.stent_element_dimensions
     node_num_idx_pos = design.generate_nodes(stent_design.stent_params)
     node_pos = {iNode: xyz for iNode, _, xyz in node_num_idx_pos}
+    node_num_to_polar_index = {iNode: polar_index for iNode, polar_index, _ in node_num_idx_pos}
     model.abaqus_output_time_interval = optim_params.abaqus_output_time_interval
     model.abaqus_target_increment = optim_params.abaqus_target_increment
 
@@ -73,12 +74,19 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
 
         # Make the nodes.
 
+        node_num_patch_to_global_and_polar_index = dict()
+        submodel_boundary_nodes = set()
+
         for sub_mod_idx, sub_model_info in enumerate(sub_model_infos):
             off_row, off_col = divmod(sub_mod_idx, n_offset_rows)
 
             this_offset = base.XYZ(off_col * offset_single.x, off_row*offset_single.y, 0.0)
             for iNode, one_node_polar in node_pos.items():
                 stent_part.add_node_validated(iNode,this_offset + one_node_polar.to_xyz(), node_elem_offset=sub_model_info.node_elem_offset)
+                node_num_patch_to_global_and_polar_index[sub_model_info.real_to_model_node(iNode)] = iNode, node_num_to_polar_index[iNode]
+
+            for iBoundNode in sub_model_info.boundary_node_nums:
+                submodel_boundary_nodes.add( sub_model_info.real_to_model_node(iBoundNode) )
 
         # Make the elements.
         for sub_model_info in sub_model_infos:
@@ -96,30 +104,45 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
             used_node_nums = stent_part.get_used_node_nums()
             iNode_to_idx_active = {iNode: idx for iNode, idx, _ in node_num_idx_pos if iNode in used_node_nums}
 
+            # Apply sum stuff for sub-model as well...
+            maybe_y_sym_plane = stent_design.stent_params.get_y_index_sym_plane()
+
+            # Z may not span the whole thing...
             if full_model:
-                # Z may not span the whole thing...
                 min_idx_z = min(idx.Z for idx in iNode_to_idx_active.values())
 
-                def get_boundary_node_set(node_idx: design.PolarIndex):
-                    # TODO - make "is_in_bottom_chunk" generalisable and more robust.
-                    if node_idx.Th == 0:
-                        if stent_params.node_idx_z_is_restrained(True, node_idx.Z):
-                            yield design.GlobalNodeSetNames.PlanarStentTheta0
+            def get_boundary_node_set(iNodeModel: int, node_idx: design.PolarIndex):
 
-                    if node_idx.Th == stent_params.divs.Th-1:
-                        if stent_params.node_idx_z_is_restrained(False, node_idx.Z):
-                            yield design.GlobalNodeSetNames.PlanarStentThetaMax
+                # print("get_boundary_node_set", iNodeModel, node_idx)
+                # If this node is on the sub-model boundary interface, don't add it to any sets (it is fully definied
+                # by the displacement history)
+                if iNodeModel in submodel_boundary_nodes:
+                    return
 
+                # Sub model or full model
+                if node_idx.Z == maybe_y_sym_plane: yield design.GlobalNodeSetNames.PlanarStentYSymPlane
+
+                # TODO - make "is_in_bottom_chunk" generalisable and more robust.
+                if node_idx.Th == 0:
+                    if stent_params.node_idx_z_is_restrained(True, node_idx.Z):
+                        yield design.GlobalNodeSetNames.PlanarStentTheta0
+
+                if node_idx.Th == stent_params.divs.Th-1:
+                    if stent_params.node_idx_z_is_restrained(False, node_idx.Z):
+                        yield design.GlobalNodeSetNames.PlanarStentThetaMax
+
+                if full_model:
                     if node_idx.Z == min_idx_z: yield design.GlobalNodeSetNames.PlanarStentZMin
 
-                boundary_set_name_to_nodes = collections.defaultdict(set)
-                for iNode, idx in iNode_to_idx_active.items():
-                    for node_set in get_boundary_node_set(idx):
-                        boundary_set_name_to_nodes[node_set.name].add(iNode)
+            boundary_set_name_to_nodes = collections.defaultdict(set)
+            for iNodeModel, (iNodeFull, idx) in node_num_patch_to_global_and_polar_index.items():
+                if iNodeModel in used_node_nums:
+                    for node_set in get_boundary_node_set(iNodeModel, idx):
+                        boundary_set_name_to_nodes[node_set.name].add(iNodeModel)
 
-                for node_set_name, nodes in boundary_set_name_to_nodes.items():
-                    one_node_set = node.NodeSet(stent_part, node_set_name, frozenset(nodes))
-                    stent_part.add_node_set(one_node_set)
+            for node_set_name, nodes in boundary_set_name_to_nodes.items():
+                one_node_set = node.NodeSet(stent_part, node_set_name, frozenset(nodes))
+                stent_part.add_node_set(one_node_set)
 
         model.add_instance(one_instance)
 
@@ -304,11 +327,9 @@ def apply_loads(
         model: main.AbaqusModel
 ):
     _create_steps(optim_params, model)
-    if full_model:
-        _apply_loads_full(optim_params, stent_params, model)
 
-    else:
-        _apply_boundary_conds_submodel(sub_model_infos, model)
+    _apply_boundary_conds_submodel(sub_model_infos, model)
+    _apply_loads_full(optim_params, stent_params, model)
 
 
 
@@ -375,6 +396,29 @@ def _create_steps(optim_params: optimisation_parameters.OptimParams, model: main
         model.add_step(step_two)
 
 
+def _build_bound_disp_rot_if_nodes_found(
+        stent_part: part.Part,
+        name: str,
+        global_nsm_to_val: typing.Iterable[typing.Tuple[GlobalNodeSetNames, int, float]],
+        amp: typing.Optional[amplitude.Amplitude],
+) -> typing.Optional[boundary_condition.BoundaryDispRot]:
+
+    comps = []
+    for global_nsm, dof, value in global_nsm_to_val:
+        if global_nsm.name in stent_part.node_sets:
+            comps.append(boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[global_nsm.name], dof=dof, value=value))
+
+    if comps:
+        return boundary_condition.BoundaryDispRot(
+            name=name,
+            with_amplitude=amp,
+            components=tuple(comps),
+        )
+
+    else:
+        return None
+
+
 def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
 
     # Maximum displacement
@@ -389,23 +433,13 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
 
     stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
     stent_part = stent_instance.base_part
-    expand_disp = boundary_condition.BoundaryDispRot(
-        name="ExpandDisp",
-        with_amplitude=amp,
-        components=(
-            boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentTheta0.name], dof=1, value=0.0),
-            boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentThetaMax.name], dof=1, value=max_displacement),
-        ),
-    )
+
+    global_nsm_to_val = [ (GlobalNodeSetNames.PlanarStentTheta0, 1, 0.0), (GlobalNodeSetNames.PlanarStentThetaMax, 1, max_displacement),]
+
+    expand_disp = _build_bound_disp_rot_if_nodes_found(stent_part, "ExpandDisp", global_nsm_to_val, amp)
 
     if optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.release:
-        step_two_disp = boundary_condition.BoundaryDispRot(
-            name="ReleaseDisp",
-            with_amplitude=None,
-            components=(
-                boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentTheta0.name], dof=1, value=0.0),
-            ),
-        )
+        step_two_disp = _build_bound_disp_rot_if_nodes_found(stent_part, "ReleaseDisp", [(GlobalNodeSetNames.PlanarStentTheta0, 1, 0.0)], None)
 
     elif optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.oscillate:
         HEART_RATE_HZ = 1.2
@@ -413,39 +447,45 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
         OSC_AMP = 0.05  # For now, just 5% of the initial arc length
 
         amp_osc = amplitude.AmplitudePeriodic("Amp-Osc", HEART_RATE_TESTING, 0.0, 1.0, OSC_AMP)
-        step_two_disp = boundary_condition.BoundaryDispRot(
-            name="OscillateDisp",
-            with_amplitude=amp_osc,
+
+        osc_comps = [
+            (GlobalNodeSetNames.PlanarStentTheta0, 1, 0.0),
+            (GlobalNodeSetNames.PlanarStentThetaMax, 1, max_displacement),
+        ]
+
+        step_two_disp = _build_bound_disp_rot_if_nodes_found(stent_part, "OscillateDisp", osc_comps, amp_osc)
+
+    if GlobalNodeSetNames.PlanarStentZMin.name in stent_part.node_sets:
+
+        hold_base1 = boundary_condition.BoundaryDispRot(
+            name="HoldBaseA",
+            with_amplitude=None,
             components=(
-                boundary_condition.DispRotBoundComponent(
-                    node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentTheta0.name], dof=1, value=0.0),
-                boundary_condition.DispRotBoundComponent(
-                    node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentThetaMax.name], dof=1,
-                    value=max_displacement),
+                boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentZMin.name], dof=2, value=0.0),
             ),
         )
 
-    hold_base1 = boundary_condition.BoundaryDispRot(
-        name="HoldBaseA",
-        with_amplitude=None,
-        components=(
-            boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentZMin.name], dof=2, value=0.0),
-        ),
-    )
+        hold_base2 = boundary_condition.BoundaryDispRot(
+            name="HoldBaseB",
+            with_amplitude=None,
+            components=(
+                boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentZMin.name], dof=2, value=0.0),
+            ),
+        )
 
-    hold_base2 = boundary_condition.BoundaryDispRot(
-        name="HoldBaseB",
-        with_amplitude=None,
-        components=(
-            boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentZMin.name], dof=2, value=0.0),
-        ),
-    )
+    else:
+        hold_base1 = None
+        hold_base2 = None
 
+    if expand_disp: model.add_load_specific_steps([model.steps[0]], expand_disp)
+    if optim_params.simulation_has_second_step and step_two_disp: model.add_load_specific_steps([model.steps[1]], step_two_disp)
+    if hold_base1: model.add_load_specific_steps([model.steps[0]], hold_base1)
+    if optim_params.simulation_has_second_step and hold_base2: model.add_load_specific_steps([model.steps[1]], hold_base2)
 
-    model.add_load_specific_steps([model.steps[0]], expand_disp)
-    if optim_params.simulation_has_second_step: model.add_load_specific_steps([model.steps[1]], step_two_disp)
-    model.add_load_specific_steps([model.steps[0]], hold_base1)
-    if optim_params.simulation_has_second_step: model.add_load_specific_steps([model.steps[1]], hold_base2)
+    if stent_params.sym_y:
+        sym_y_bc = _build_bound_disp_rot_if_nodes_found(stent_part, "SymY", [(GlobalNodeSetNames.PlanarStentZMin, 2, 0.0)], None)
+        if sym_y_bc: model.add_load_specific_steps(model.steps, sym_y_bc)
+
 
     if optim_params.release_stent_after_expansion:
         # Rebound pressure (kind of like the blood vessel squeezing in).

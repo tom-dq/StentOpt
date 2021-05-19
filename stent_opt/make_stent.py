@@ -100,9 +100,9 @@ def run_model(optim_params, inp_fn, force_single_core: bool):
     _run_external_command(path, args)
 
 
-def perform_extraction(odb_fn, out_db_fn, override_z_val, working_dir_extract):
+def perform_extraction(odb_fn, out_db_fn, override_z_val, working_dir_extract, add_initial_node_pos):
 
-    args = ["abaqus.bat", "cae", "noGui=odb_extract.py", "--", str(odb_fn), str(out_db_fn), str(override_z_val)]
+    args = ["abaqus.bat", "cae", "noGui=odb_extract.py", "--", str(odb_fn), str(out_db_fn), str(override_z_val), str(add_initial_node_pos)]
 
     _run_external_command(working_dir_extract, args)
 
@@ -128,6 +128,7 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
         history.make_fn_in_dir(working_dir, ".db", starting_i),
         current_design.stent_params.nodal_z_override_in_odb,
         working_dir_extract,
+        add_initial_node_pos=optim_params.add_initial_node_pos,
     )
 
     with history.History(history_db_fn) as hist:
@@ -215,7 +216,7 @@ def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generat
 
     if run_one_args.do_run_extraction_TESTING:
         # with mp_lock:
-            perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract)
+            perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract, run_one_args.optim_params.add_initial_node_pos)
 
     # Sensitivity analysis with the "finite difference method"
     child_patch_run_one_args = []

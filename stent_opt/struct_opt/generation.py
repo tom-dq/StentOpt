@@ -468,7 +468,16 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
     num_to_go = max(num_with_new_additions - target_count, 0)
 
     # Remove however many we added.
-    existing_elems_only_ranked = {idx: val for idx,val in sensitivity_result.items() if idx in design_n_min_1.active_elements and idx in candidates_for.removal_from_boundary}
+    if optim_params.patched_elements == common.PatchedElements.boundary:
+        candidates_for_removal = candidates_for.removal_from_boundary
+
+    elif optim_params.patched_elements == common.PatchedElements.all:
+        candidates_for_removal = candidates_for.removal_from_everywhere
+
+    else:
+        raise ValueError(optim_params.patched_elements)
+
+    existing_elems_only_ranked = {idx: val for idx,val in sensitivity_result.items() if idx in design_n_min_1.active_elements and idx in candidates_for_removal}
     # to_go = get_top_n_elements(existing_elems_only_ranked, Tail.bottom, num_to_go)
     elem_working_set = design_n_min_1.active_elements | top_new_potential_elems
     to_go, _ = get_top_n_elements_maintaining_edge_connectivity(design_n_min_1.stent_params, elem_working_set, existing_elems_only_ranked, Tail.bottom, num_to_go, clean_elems_to_patch_buddies_idx, dirty_elems)
@@ -658,6 +667,8 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
     if not optim_params.do_patch_analysis:
         return
 
+    node_num_to_pos = {iNode: xyz for iNode, _, xyz in design.generate_nodes(stent_params)}
+
     elem_num_to_indices = {elem_num: polar_index for elem_num, polar_index in design.generate_elem_indices(stent_params.divs)}
     elem_indices_to_num = {polar_index: elem_num for elem_num, polar_index in elem_num_to_indices.items()}
 
@@ -699,9 +710,11 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
 
     graph = element_bucket.build_graph(element_bucket.GraphEdgeEntity.node, graph_fe_elems.values())
 
-    with patch_manager.PatchManager() as this_patch_manager:
+    with patch_manager.PatchManager(node_num_to_pos) as this_patch_manager:
         with datastore.Datastore(db_fn_prev) as data:
             this_patch_manager.ingest_node_pos(data.get_all_frames(), data.get_all_rows(db_defs.NodePos))
+
+        TEST = this_patch_manager.produce_amplitude_for(9, 2)
 
         for initial_active_state, elem_idxs in init_state_and_elems:
             for polar_index in elem_idxs:
@@ -741,9 +754,9 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
                     )
                     for this_trial_active_state in (False, True)
                 ]
-                # print(f"reference_elem_num={reference_elem_num}")
-                # print(f"   Off: {sub_model_pair[0]}")
-                # print(f"   On:  {sub_model_pair[1]}")
+                print(f"reference_elem_num={reference_elem_num}")
+                print(f"   Off: {sub_model_pair[0]}")
+                print(f"   On:  {sub_model_pair[1]}")
                 yield sub_model_pair
 
 
@@ -768,7 +781,7 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     floor_chunk_size = math.ceil(FLOOR_ELEMS_IN_MODEL / optim_params.nominal_number_of_patch_elements)
     chunk_size = max(floor_chunk_size, chunk_size_round)  # Don't need to make it too crazy tiny...
     print(f"  Chunk Size [Ideal / Round / Used]: {chunk_size_ideal} / {chunk_size_round} / {chunk_size}")
-
+    chunk_size = 1  # TEMP!!!
     # https://stackoverflow.com/a/312464
     def get_prefix_and_smi():
         for sm_idx, i in enumerate(range(0, len(sub_model_infos), chunk_size), start=1):
@@ -798,10 +811,13 @@ def _get_change_in_overall_objective_from_patches(
 
     def make_working_data():
         for model_info, ranking_results in model_info_to_patch_rank.items():
+
             ref_elem_num = model_info.reference_elem_num
 
             # Go through the same "final objective function" (like a p-Norm or whatever) as the global model.
             this_patch_vals = list(ranking_results.final_ranking_component_unsmoothed.values())
+            print(model_info)
+            print(this_patch_vals)
             obj_func = run_one_args.optim_params.final_target_measure.compute_aggregate(this_patch_vals)
             yield ref_elem_num, model_info.this_trial_active_state, obj_func
 
@@ -1178,7 +1194,7 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-3")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-163")
     testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir)
 
 

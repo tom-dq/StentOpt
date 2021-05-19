@@ -37,7 +37,7 @@ if psutil.cpu_count(logical=False) == 2:
 
 elif psutil.cpu_count(logical=False) == 8:
     n_cpus = 1  # TEMP! Was 8
-    base_working_dir = r"C:\Simulations\StentOpt"
+    base_working_dir = r"E:\Simulations\StentOpt"
     # fig_size = (1600, 800)  #  (2000, 1350)
     fig_size = (1800, 900)  #  (2000, 1350)
 
@@ -55,7 +55,7 @@ else:
 this_computer = Computer(
     n_cpus_abaqus_explicit=n_cpus,
     n_cpus_abaqus_implicit=1,
-    n_abaqus_parallel_solves=4,
+    n_abaqus_parallel_solves=1,
     base_working_dir=base_working_dir,
     working_dir=_get_next_free_dir(base_working_dir),
     # working_dir=r"E:\Simulations\StentOpt\AA-134",

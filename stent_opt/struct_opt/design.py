@@ -116,6 +116,7 @@ class StentParams(BaseModelForDB):
     inadmissible_regions: typing.Tuple[InadmissibleRegion, ...]
     end_connection_length_ratio: float = 0.3  # The middle 30% is the enforced displacement.
     whole_left_side_restrained: bool
+    sym_y: bool = False
 
     def level_is_restrained(self, is_theta_0: bool, z: float) -> bool:
         if is_theta_0:
@@ -134,9 +135,26 @@ class StentParams(BaseModelForDB):
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
 
+    def get_y_index_sym_plane(self) -> typing.Optional[int]:
+        if not self.sym_y:
+            return None
+
+        if self.divs.Z % 2 != 0:
+            raise ValueError("Need an even number of Z divisions so we can draw a line through the middle on the nodes.")
+
+        # e.g., z idx = [0, 1, 2, 3, 4, 5, 6]
+        top_allowable = self.divs.Z // 2
+        return top_allowable
+
     def polar_index_admissible(self, elem_polar_index: PolarIndex):
         elem_theta_delta = self.angle / (self.divs.Th - 1)
         elem_z_delta = self.length / (self.divs.Z - 1)
+
+        maybe_y_max_sym = self.get_y_index_sym_plane()
+        if maybe_y_max_sym:
+            if elem_polar_index.Z > maybe_y_max_sym:
+                return False
+
 
         def region_is_ok(inadmissible_region):
             elem_cent_th = (elem_polar_index.Th + 0.5) * elem_theta_delta  # The half is to get to the centroid
@@ -396,6 +414,7 @@ class GlobalNodeSetNames(enum.Enum):
     PlanarStentTheta0 = enum.auto()  # These are the sides - only enforce the displacement at the base
     PlanarStentThetaMax = enum.auto()
     PlanarStentZMin = enum.auto()
+    PlanarStentYSymPlane = enum.auto()
 
 
 
@@ -1222,9 +1241,12 @@ def make_initial_design_s_curve(stent_params: StentParams) -> StentDesign:
 
 
 def make_initial_design_overlapping_circles(stent_params: StentParams) -> StentDesign:
+    fully_populated = generate_elem_indices_admissible(stent_params)
+    fully_populated_indices = frozenset(elemIdx for _, elemIdx in fully_populated)
+
     circ_cent_radius = (
-        (base.XYZ(x=0, y=stent_params.length/2, z=0), 1.1),
-        (base.XYZ(x=stent_params.theta_arc_initial * 0.5, y=stent_params.length/2, z=0), 0.1),
+        (base.XYZ(x=0, y=stent_params.length/2, z=0), 2.0),  # r=1.1 has the corners off
+        # (base.XYZ(x=stent_params.theta_arc_initial * 0.5, y=stent_params.length/2, z=0), 0.1),
     )
 
     def elem_in_circle(ccr, e: element.Element):
@@ -1241,11 +1263,14 @@ def make_initial_design_overlapping_circles(stent_params: StentParams) -> StentD
         ave_node_pos = sum(node_pos) / len(node_pos)
         return ave_node_pos
 
-    def check_elem(e: element.Element) -> bool:
+    def check_elem(idx: PolarIndex, e: element.Element) -> bool:
+        if idx not in fully_populated_indices:
+            return False
+
         num_circs = [1 for ccr in circ_cent_radius if elem_in_circle(ccr, e)]
         return len(num_circs) % 2 == 1
 
-    included_elements = frozenset(idx for idx, iElem, e in generate_stent_part_elements(stent_params) if check_elem(e))
+    included_elements = frozenset(idx for idx, iElem, e in generate_stent_part_elements(stent_params) if check_elem(idx, e))
     return StentDesign(
         stent_params=stent_params,
         active_elements=included_elements,
@@ -1281,8 +1306,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=30,  # 20
-        Z=40,  # 80
+        Th=10,  # 20
+        Z=20,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1318,6 +1343,7 @@ dylan_r10n1_params = StentParams(
     ],
     end_connection_length_ratio=0.3,
     whole_left_side_restrained=True,
+    sym_y=True,
 )
 
 

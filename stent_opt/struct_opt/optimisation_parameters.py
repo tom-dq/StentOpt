@@ -92,6 +92,10 @@ class OptimParams(typing.NamedTuple):
     patched_elements: common.PatchedElements
 
     @property
+    def add_initial_node_pos(self) -> bool:
+        return True
+
+    @property
     def release_stent_after_expansion(self) -> bool:
         return bool(self.time_released)
 
@@ -336,7 +340,7 @@ active = OptimParams(
         # db_defs.ElementFatigueResult,
         db_defs.ElementCustomComposite,
     ],
-    primary_composite_calculator=score.primary_composite_energy_neg,
+    primary_composite_calculator=score.primary_composite_energy,
     nodal_position_components=[
         # score.get_primary_ranking_element_distortion,
         # score.get_primary_ranking_macro_deformation,
@@ -354,10 +358,10 @@ active = OptimParams(
     analysis_step_type=step.StepStatic,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=2,
+    patch_hops=1,
     nonlinear_geometry=False,
     nonlinear_material=False,
-    patched_elements=common.PatchedElements.boundary,
+    patched_elements=common.PatchedElements.all,
 )
 
 active = active._replace(region_gradient=None)

@@ -18,10 +18,12 @@ class PatchManager:
     """Handles the patch boundary conditions, etc"""
     node_dof_to_list: typing.Dict[typing.Tuple[int, int], T_DataList] = None
     nodes_we_have_results_for: typing.Set[int] = None
+    node_num_to_pos: dict
 
-    def __init__(self):
+    def __init__(self, node_num_to_pos: dict):
         self.node_dof_to_list = collections.defaultdict(list)
         self.nodes_we_have_results_for = set()
+        self.node_num_to_pos = node_num_to_pos
 
     def __enter__(self):
         return self
@@ -37,7 +39,8 @@ class PatchManager:
         for node_pos in node_pos_rows:
             self.nodes_we_have_results_for.add(node_pos.node_num)
             simulation_time = frame_rowid_to_total_time[node_pos.frame_rowid]
-            for dof, val in ( (X, node_pos.X), (Y, node_pos.Y) ):
+            node_initial_pos = self.node_num_to_pos[node_pos.node_num]
+            for dof, val in ( (X, node_pos.X - node_initial_pos.x), (Y, node_pos.Y - node_initial_pos.y) ):
                 key = (node_pos.node_num, dof)
                 pair = (simulation_time, val)
                 self.node_dof_to_list[key].append(pair)

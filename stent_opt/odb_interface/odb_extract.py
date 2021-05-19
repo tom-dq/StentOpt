@@ -34,9 +34,20 @@ from db_defs import Frame, NodePos, NodeReact, ElementStress, ElementPEEQ, Eleme
     ElementFatigueResult, ElementNodeForces, HistoryResult, expected_history_results
 
 # Get the command line option (should be last!).
-fn_odb = sys.argv[-3]
-db_fn = sys.argv[-2]
-_override_z_val_str = sys.argv[-1]
+fn_odb = sys.argv[-4]
+db_fn = sys.argv[-3]
+_override_z_val_str = sys.argv[-2]
+add_initial_node_pos_str = sys.argv[-1]
+
+if add_initial_node_pos_str == str(True):
+    add_initial_node_pos = True
+
+elif add_initial_node_pos_str == str(False):
+    add_initial_node_pos = False
+
+else:
+    raise ValueError(add_initial_node_pos_str)
+
 
 # If we are doing a planar analysis and we put the nodes at z=NomRadius, in the .odb file they're
 # back at the origin. Since we depend on them being at real z for later post-processing, put them back.
@@ -365,6 +376,7 @@ def get_node_position_one_frame(extraction_meta):
 
     for one_value in relevant_disp_field.values:
         overall_pos = _add_with_zero_pad(_get_data_array_as_double(one_value), extraction_meta.node_init_pos[one_value.nodeLabel])
+
         yield NodePos(
             frame_rowid=None,
             node_num=one_value.nodeLabel,
