@@ -1307,12 +1307,12 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=10,  # 20
-        Z=20,  # 80
+        Th=80,  # 20
+        Z=40,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
-    length=1.65, # Was 11.0
+    length=1.65/2, # Was 11.0
     stent_element_type=element.ElemType.CPS4R,
     balloon=Balloon(
         inner_radius_ratio=0.85,
@@ -1333,7 +1333,7 @@ dylan_r10n1_params = StentParams(
             Z=2,
         ),
     ),
-    expansion_ratio=1.2,  # 2.0
+    expansion_ratio=2.0,  # 2.0
     inadmissible_regions=[
         InadmissibleRegion(
             theta_min=26,

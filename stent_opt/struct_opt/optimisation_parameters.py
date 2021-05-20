@@ -366,17 +366,17 @@ active = OptimParams(
     use_double_precision=False,
     abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=0.2,  # Was 2.0
+    time_expansion=2.0,  # Was 2.0
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
-    analysis_step_type=step.StepStatic,
+    analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=3,
-    nonlinear_geometry=False,
-    nonlinear_material=False,
+    patch_hops=2,
+    nonlinear_geometry=True,
+    nonlinear_material=True,
     patched_elements=common.PatchedElements.all,
-    one_elem_per_patch=False,
+    one_elem_per_patch=True,
 )
 
 active = active._replace(region_gradient=None)
