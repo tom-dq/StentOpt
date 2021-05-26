@@ -6,6 +6,7 @@ import itertools
 import operator
 import pathlib
 import typing
+import enum
 
 import holoviews
 from holoviews import opts
@@ -58,7 +59,7 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-51")
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-125")
 
-WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-15")
+WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-69")
 
 
 
@@ -82,21 +83,35 @@ def _update_global_db_data():
 
 _update_global_db_data()
 
+
+class DeformationView(enum.Enum):
+    undeformed_active = "Undeformed (Active only)"
+    undeformed_all = "Undeformed (All with results)"
+    deformed_active = "Deformed (Active only)"
+
+    @property
+    def should_show_ghosts(self) -> bool:
+        return self == DeformationView.undeformed_all
+
+    @property
+    def is_deformed(self) -> bool:
+        return self == DeformationView.deformed_active
+
 class ContourView(typing.NamedTuple):
     iteration_num: int
     metric_name: str
-    deformed: bool
+    deformation_view: DeformationView
     min_val: typing.Optional[float]
     max_val: typing.Optional[float]
 
     def make_iteration_view(self) -> ContourIterationView:
-        return ContourIterationView(metric_name=self.metric_name, deformed=self.deformed)
+        return ContourIterationView(metric_name=self.metric_name, deformation_view=self.deformation_view)
 
 
 
 class ContourIterationView(typing.NamedTuple):
     metric_name: str
-    deformed: bool
+    deformation_view: DeformationView
 
 
 class GraphLine(typing.NamedTuple):
@@ -193,7 +208,7 @@ def _build_contour_view_data(
         return ContourView(
             iteration_num=status_check.iteration_num,
             metric_name=status_check.metric_name,
-            deformed=None,
+            deformation_view=None,
             min_val=None,
             max_val=None,
         )
@@ -231,9 +246,6 @@ def make_quadmesh(
 ) -> holoviews.Overlay:
     """Make a single Quadmesh representation"""
 
-    # If it's not deformed, all the nodal positions should be there so we can plot inactive elements as well.
-    INCLUDE_GHOST_ELEMENENTS = not contour_view.deformed
-
     # Make the undeformed meshgrid.
     x_vals = design.gen_ordinates(stent_params.divs.Th, 0.0, stent_params.theta_arc_initial)
     y_vals = design.gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
@@ -260,7 +272,7 @@ def make_quadmesh(
         if idx in active_elements:
             Z[idx.Z-z_low, idx.Th-th_low] = val
 
-        elif INCLUDE_GHOST_ELEMENENTS:
+        elif contour_view.deformation_view.should_show_ghosts:
             Z_ghost[idx.Z - z_low, idx.Th - th_low] = val
 
     all_ghosts_nan = numpy.isnan(Z_ghost).all()
@@ -279,7 +291,7 @@ def make_quadmesh(
     qmesh_real.options(cmap='viridis')
 
     qmesh_list = [qmesh_real]
-    if INCLUDE_GHOST_ELEMENENTS and not all_ghosts_nan:
+    if contour_view.deformation_view.should_show_ghosts and not all_ghosts_nan:
         qmesh_ghost = holoviews.QuadMesh((X, Y, Z_ghost), vdims='level', group=contour_view.metric_name)
         qmesh_ghost.options(cmap='inferno')
         qmesh_list.append(qmesh_ghost)
@@ -305,9 +317,10 @@ elemental_metric_selector = panel.widgets.Select(
     size=len(_all_elemental_metrics),
 )
 
-deformed_selector = panel.widgets.Checkbox(
-    name="Deformed",
-    value=True,
+deformation_view_selector = panel.widgets.RadioButtonGroup(
+    name="Deformation View",
+    options=[dv.value for dv in DeformationView],
+    value=list(DeformationView)[0].value
 )
 
 history_plot_vars_selector = panel.widgets.MultiSelect(
@@ -322,7 +335,7 @@ def _update_controls():
     _update_global_db_data()
     iteration_selector.end = _max_dashboard_increment
 
-@panel.depends(iteration_selector, elemental_metric_selector, deformed_selector)
+@panel.depends(iteration_selector, elemental_metric_selector, deformation_view_selector)
 def _make_single_contour(*args, **kwargs) -> holoviews.Overlay:
     _update_controls()
 
@@ -330,33 +343,38 @@ def _make_single_contour(*args, **kwargs) -> holoviews.Overlay:
 
     # Parameters
     iteration_num = iteration_selector.value
-    deformed = deformed_selector.value
+    deformation_view_value = deformation_view_selector.value
     metric_name = elemental_metric_selector.value
 
-    print(iteration_num, deformed, metric_name)
+    deformation_view = DeformationView(deformation_view_value)
+    print(iteration_num, deformation_view, metric_name)
 
-    return _contour_build_from_db(stent_params, iteration_num, deformed, metric_name)
+    return _contour_build_from_db(stent_params, iteration_num, deformation_view, metric_name)
 
 
 @functools.lru_cache(1024)
-def _contour_build_from_db(stent_params: design.StentParams, iteration_num: int, deformed: bool, metric_name: str) -> holoviews.Overlay:
+def _contour_build_from_db(stent_params: design.StentParams, iteration_num: int, deformation_view: DeformationView, metric_name: str) -> holoviews.Overlay:
     node_num_to_idx = {iNode: idx for iNode, idx, pos in design.generate_nodes(stent_params)}
     elem_num_to_idx = {iElem: idx for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
 
     snapshot = global_hist.get_one_snapshot(iteration_num)
 
     # Node positions
-    if deformed:
+    if deformation_view.is_deformed:
         node_pos = {
             node_pos.node_num: base.XYZ(x=node_pos.x, y=node_pos.y, z=node_pos.z)
             for node_pos in global_hist.get_node_positions(iteration_num)
         }
 
-        active_elements = frozenset(elem_num_to_idx[iElem] for iElem in snapshot.active_elements)
-
     else:
         node_pos = {iNode: pos.to_xyz() for iNode, idx, pos in design.generate_nodes(stent_params)}
+
+
+    if deformation_view.should_show_ghosts:
         active_elements = frozenset(elem_num_to_idx.values())
+
+    else:
+        active_elements = frozenset(elem_num_to_idx[iElem] for iElem in snapshot.active_elements)
 
     # Should just be one contour here
     one_contour_view = list(_build_contour_view_data(global_hist, single_iteration=iteration_num, metric_name=metric_name))
@@ -364,7 +382,7 @@ def _contour_build_from_db(stent_params: design.StentParams, iteration_num: int,
         raise ValueError(f"Expected one here.")
 
     contour_view, elem_data = one_contour_view[0]
-    contour_view._replace(deformed=deformed)
+    contour_view = contour_view._replace(deformation_view=deformation_view)
 
     elem_idx_to_value = {elem_num_to_idx[iElem]: val for iElem, val in elem_data.items() if elem_num_to_idx[iElem] in active_elements}
 
@@ -471,7 +489,7 @@ def make_dashboard(working_dir: pathlib.Path):
     controls = panel.Column(
         iteration_selector,
         elemental_metric_selector,
-        deformed_selector,
+        deformation_view_selector,
         history_plot_vars_selector,
     )
 

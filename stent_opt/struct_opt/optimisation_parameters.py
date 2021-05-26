@@ -77,7 +77,7 @@ class OptimParams(typing.NamedTuple):
     primary_composite_calculator_two: T_composite_primary_calculator
     final_target_measure_one: common.GlobalStatusType
     final_target_measure_two: typing.Optional[common.GlobalStatusType]
-    gaussian_sigma: float
+    gaussian_sigma: typing.Optional[float]
     local_deformation_stencil_length: float
     working_dir: str
     use_double_precision: bool
@@ -316,8 +316,8 @@ def _clamp_update(old, new, max_delta):
 
 
 volume_ratio = VolumeTargetOpts(
-    initial_ratio=0.4,
-    final_ratio=0.4,
+    initial_ratio=0.5,
+    final_ratio=0.2,
     num_iters=50,
 )
 
@@ -330,7 +330,7 @@ volume_ratio_v2 = VolumeTargetOpts(
 
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
-    max_change_in_vol_ratio=0.02,  # Was 0.0025
+    max_change_in_vol_ratio=0.01,  # Was 0.0025
     volume_target_opts=volume_ratio,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
@@ -359,24 +359,24 @@ active = OptimParams(
         # score.get_primary_ranking_macro_deformation,
     ],
     final_target_measure_one=history.GlobalStatusType.aggregate_sum,
-    final_target_measure_two=history.GlobalStatusType.aggregate_p_norm_8,
-    gaussian_sigma=0.3,  # Was 0.15 forever
+    final_target_measure_two=None, # history.GlobalStatusType.aggregate_p_norm_8,
+    gaussian_sigma=None,  # Was 0.3
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
     abaqus_output_time_interval=0.025,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=2.0,  # Was 2.0
+    time_expansion=0.2,  # Was 2.0
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
-    analysis_step_type=step.StepDynamicExplicit,
+    analysis_step_type=step.StepStatic,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
     patch_hops=2,
-    nonlinear_geometry=True,
-    nonlinear_material=True,
+    nonlinear_geometry=False,
+    nonlinear_material=False,
     patched_elements=common.PatchedElements.all,
-    one_elem_per_patch=True,
+    one_elem_per_patch=False,
 )
 
 active = active._replace(region_gradient=None)

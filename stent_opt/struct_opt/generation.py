@@ -122,6 +122,11 @@ def get_gradient_input_data(
 T_index_to_val = typing.Dict[design.PolarIndex, float]
 T_index_to_two_val = typing.Dict[design.PolarIndex, typing.Tuple[int, float, float]]
 def gaussian_smooth(optim_params: optimisation_parameters.OptimParams, stent_params: design.StentParams, unsmoothed: T_index_to_val) -> T_index_to_val:
+
+    if not optim_params.gaussian_sigma:
+        # If it's None or 0.0, don't smooth anything.
+        return unsmoothed.copy()
+
     # Make a 3D array
 
     design_space = stent_params.divs
@@ -216,6 +221,7 @@ def get_top_n_elements(data: T_index_to_val, tail: Tail, n_elems: int) -> typing
 
 
 def get_top_n_elements_maintaining_edge_connectivity(
+        optim_params: optimisation_parameters.OptimParams,
         stent_params: design.StentParams,
         initial_active_elems: typing.Set[design.PolarIndex],
         data: T_index_to_val,
@@ -297,7 +303,7 @@ def get_top_n_elements_maintaining_edge_connectivity(
         elemIdxCandidate, obj_fun_val = sorted_data.pop()
 
         elem_idx_is_clean = elemIdxCandidate not in dirty_elems
-        if not elem_idx_is_clean:
+        if optim_params.one_elem_per_patch and not elem_idx_is_clean:
             print(f"  [Conn] {elemIdxCandidate} = {obj_fun_val} skipping... invalidated by a prior patch buddy being changed.")
             continue
 
@@ -459,7 +465,7 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
 
     # top_new_potential_elems_all = get_top_n_elements(sensitivity_result, Tail.top, max_new_num)
     dirty_elems = set()
-    top_new_potential_elems_all, dirty_elems = get_top_n_elements_maintaining_edge_connectivity(design_n_min_1.stent_params, design_n_min_1.active_elements, sensitivity_result, Tail.top, max_new_num, clean_elems_to_patch_buddies_idx, dirty_elems)
+    top_new_potential_elems_all, dirty_elems = get_top_n_elements_maintaining_edge_connectivity(optim_params, design_n_min_1.stent_params, design_n_min_1.active_elements, sensitivity_result, Tail.top, max_new_num, clean_elems_to_patch_buddies_idx, dirty_elems)
     top_new_potential_elems = {idx for idx in top_new_potential_elems_all if idx in candidates_for.existing_next_round}
     actual_new_elems = top_new_potential_elems - design_n_min_1.active_elements
     num_new = len(actual_new_elems)
@@ -480,7 +486,7 @@ def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_m
     existing_elems_only_ranked = {idx: val for idx,val in sensitivity_result.items() if idx in design_n_min_1.active_elements and idx in candidates_for_removal}
     # to_go = get_top_n_elements(existing_elems_only_ranked, Tail.bottom, num_to_go)
     elem_working_set = design_n_min_1.active_elements | top_new_potential_elems
-    to_go, _ = get_top_n_elements_maintaining_edge_connectivity(design_n_min_1.stent_params, elem_working_set, existing_elems_only_ranked, Tail.bottom, num_to_go, clean_elems_to_patch_buddies_idx, dirty_elems)
+    to_go, _ = get_top_n_elements_maintaining_edge_connectivity(optim_params, design_n_min_1.stent_params, elem_working_set, existing_elems_only_ranked, Tail.bottom, num_to_go, clean_elems_to_patch_buddies_idx, dirty_elems)
 
     new_active_elems = (design_n_min_1.active_elements | top_new_potential_elems) - to_go
     return new_active_elems
@@ -1187,16 +1193,16 @@ def _make_testing_run_one_args(working_dir, optim_params=None, iter_this=0) -> R
 def evolve_decider_test():
     from stent_opt.make_stent import process_pool_run_and_process
 
-    iter_n_min_1 = 14
+    iter_n_min_1 = 4
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"E:\Simulations\StentOpt\AA-189\history.db")
+    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-59\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
 
-    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"E:\Simulations\StentOpt\AA-189"), optim_params, iter_n_min_1)
+    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-59"), optim_params, iter_n_min_1)
     run_one_args_completed = process_pool_run_and_process(run_one_args_input)
     with history.History(history_db) as hist:
         elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
@@ -1228,7 +1234,7 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-197")
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-59")
     testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir)
 
 
@@ -1244,9 +1250,9 @@ def run_test_process_completed_simulation():
 
 
 if __name__ == '__main__':
-    # evolve_decider_test()
+    evolve_decider_test()
 
-    run_test_process_completed_simulation()
+    # run_test_process_completed_simulation()
 
 
 if False:
