@@ -91,6 +91,7 @@ T_nodenum_dof_amp = typing.Tuple[int, typing.Dict[int, amplitude.Amplitude]]
 
 @dataclasses.dataclass(unsafe_hash=True)
 class SubModelInfoBase:
+    stent_design: "design.StentDesign"
     boundary_node_nums: typing.FrozenSet[int]
     patch_manager: PatchManager
     node_elem_offset: int
@@ -146,6 +147,7 @@ class SubModelInfoBase:
 
 @dataclasses.dataclass(unsafe_hash=True)
 class FullModelInfo(SubModelInfoBase):
+    stent_design: "design.StentDesign"
     boundary_node_nums: typing.FrozenSet[int] = frozenset()
     patch_manager: PatchManager = None
     node_elem_offset: int = 0
@@ -175,9 +177,9 @@ class FullModelInfo(SubModelInfoBase):
 
 @dataclasses.dataclass(unsafe_hash=True)
 class SubModelInfo(SubModelInfoBase):
+    stent_design: "design.StentDesign"
     boundary_node_nums: typing.FrozenSet[int]
     patch_manager: PatchManager
-    stent_design: typing.Any
 
     elem_nums: typing.FrozenSet[int]
     node_nums: typing.FrozenSet[int]

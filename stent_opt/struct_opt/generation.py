@@ -820,13 +820,6 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
             construct_model.make_stent_model(optim_params, stent_design_with_extras, flat_sub_model_infos, sub_fn_inp)
             suffix_to_patch_list[suffix] = flat_sub_model_infos
 
-            # DEBUG PRINTING!!!
-            ref_elems = set(smi.reference_elem_num for smi in flat_sub_model_infos)
-            print(f"   DEBUG {suffix} {sorted(ref_elems)}")
-            for smi in flat_sub_model_infos:
-                if smi.reference_elem_num == 40:
-                    print(smi.reference_elem_num, smi.this_trial_active_state, smi.node_elem_offset)
-
     return suffix_to_patch_list
 
 
@@ -1174,9 +1167,9 @@ def plot_history_gradient():
     plt.show()
 
 
-def _make_testing_run_one_args(working_dir, optim_params=None, iter_this=0) -> RunOneArgs:
+def _make_testing_run_one_args(working_dir, stent_design: design.StentDesign, optim_params=None, iter_this=0) -> RunOneArgs:
 
-    from stent_opt.make_stent import run_model, working_dir_extract, FULL_INFO_MODEL_LIST, process_pool_run_and_process
+    from stent_opt.make_stent import run_model, working_dir_extract, make_full_model_list, process_pool_run_and_process
 
     from stent_opt.struct_opt.design import basic_stent_params as stent_params
 
@@ -1189,7 +1182,7 @@ def _make_testing_run_one_args(working_dir, optim_params=None, iter_this=0) -> R
         iter_this=iter_this,
         nodal_z_override_in_odb=stent_params.nodal_z_override_in_odb,
         working_dir_extract=working_dir_extract,
-        model_infos=FULL_INFO_MODEL_LIST,
+        model_infos=make_full_model_list(stent_design),
         patch_suffix='',
         child_patch_run_one_args=tuple(),
         executed_feedback_text='',
@@ -1210,9 +1203,6 @@ def evolve_decider_test():
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
 
-    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-69"), optim_params, iter_n_min_1)
-    run_one_args_completed = process_pool_run_and_process(run_one_args_input)
-    with history.History(history_db) as hist:
         elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
 
         snapshot_n_min_1 = hist.get_snapshot(iter_n_min_1)
@@ -1221,6 +1211,10 @@ def evolve_decider_test():
             active_elements=frozenset( (elem_num_to_indices[iElem] for iElem in snapshot_n_min_1.active_elements)),
             label=snapshot_n_min_1.label,
         )
+
+    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-69"), design_n_min_1, optim_params, iter_n_min_1)
+    run_one_args_completed = process_pool_run_and_process(run_one_args_input)
+    with history.History(history_db) as hist:
 
         status_checks = hist.get_status_checks(0, 1_000_000_000)
         smoothed_checks = [st for st in status_checks if st.stage == history.StatusCheckStage.smoothed]

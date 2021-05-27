@@ -4,7 +4,10 @@ import pathlib
 import subprocess
 import typing
 
+import logging
+
 import psutil
+import retry
 
 from stent_opt.struct_opt import design
 from stent_opt.struct_opt import construct_model
@@ -16,6 +19,7 @@ from stent_opt.struct_opt import patch_manager
 from stent_opt.struct_opt import history
 from stent_opt.struct_opt.computer import this_computer
 
+logging.basicConfig()
 
 working_dir_orig = os.getcwd()
 working_dir_extract = os.path.join(working_dir_orig, "odb_interface")
@@ -35,7 +39,8 @@ if multiprocessing.parent_process() is None:
 # - Rasterise and build (offline) the images of each step.
 
 
-FULL_INFO_MODEL_LIST = [patch_manager.FullModelInfo()]
+def make_full_model_list(stent_design: design.StentDesign) -> typing.List[patch_manager.FullModelInfo]:
+    return [patch_manager.FullModelInfo(stent_design=stent_design)]
 
 
 def kill_process_id(proc_id: int):
@@ -46,7 +51,9 @@ def kill_process_id(proc_id: int):
     process.kill()
 
 
+@retry.retry(tries=1000, delay=2, )
 def _run_external_command(path, args):
+
     old_working_dir = os.getcwd()
 
     os.chdir(path)
@@ -120,7 +127,7 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
     starting_i = 0
     fn_inp = history.make_fn_in_dir(working_dir, ".inp", starting_i)
     current_design = design.make_initial_design(stent_params)
-    construct_model.make_stent_model(optim_params, current_design, [patch_manager.FullModelInfo()], fn_inp)
+    construct_model.make_stent_model(optim_params, current_design, make_full_model_list(current_design), fn_inp)
 
     run_model(optim_params, fn_inp, force_single_core=False)
     perform_extraction(
@@ -183,7 +190,7 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
         iter_this=0,
         nodal_z_override_in_odb=stent_params.nodal_z_override_in_odb,
         working_dir_extract=working_dir_extract,
-        model_infos=FULL_INFO_MODEL_LIST,
+        model_infos=make_full_model_list(current_design),
         patch_suffix='',
         child_patch_run_one_args=tuple(child_patch_run_one_args),
         executed_feedback_text=f"{multiprocessing.current_process().name} Finished Initial Setup",
@@ -310,7 +317,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
         fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_this)
 
-        construct_model.make_stent_model(optim_params, one_new_design, FULL_INFO_MODEL_LIST, fn_inp)
+        construct_model.make_stent_model(optim_params, one_new_design, make_full_model_list(one_new_design), fn_inp)
 
         run_one_args_input = generation.RunOneArgs(
             working_dir=working_dir,
@@ -318,7 +325,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
             iter_this=iter_this,
             nodal_z_override_in_odb=one_design.stent_params.nodal_z_override_in_odb,
             working_dir_extract=working_dir_extract,
-            model_infos=[patch_manager.FullModelInfo()],
+            model_infos=[patch_manager.FullModelInfo(one_new_design)],
             patch_suffix='',
             child_patch_run_one_args=tuple(),
             executed_feedback_text='',

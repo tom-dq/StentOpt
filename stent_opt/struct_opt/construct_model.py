@@ -11,12 +11,14 @@ from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalNode
 from stent_opt.struct_opt import patch_manager
 
 
-def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design: StentDesign, full_model: bool, sub_model_infos: typing.List[patch_manager.SubModelInfoBase]):
+def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: bool, sub_model_infos: typing.List[patch_manager.SubModelInfoBase]):
 
     model = main.AbaqusModel("StentModel", abaqus_history_time_interval=optim_params.get_abaqus_history_time_interval())
 
-    element_dimensions = stent_design.stent_params.stent_element_dimensions
-    node_num_idx_pos = design.generate_nodes(stent_design.stent_params)
+    reference_stent_design = sub_model_infos[0].stent_design
+
+    element_dimensions = reference_stent_design.stent_params.stent_element_dimensions
+    node_num_idx_pos = design.generate_nodes(reference_stent_design.stent_params)
     node_pos = {iNode: xyz for iNode, _, xyz in node_num_idx_pos}
     node_num_to_polar_index = {iNode: polar_index for iNode, polar_index, _ in node_num_idx_pos}
     model.abaqus_output_time_interval = optim_params.abaqus_output_time_interval
@@ -24,19 +26,19 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
 
     # Potentially modify the parameters if it's 2D
     if element_dimensions == 3:
-        stent_params = stent_design.stent_params
+        stent_params = reference_stent_design.stent_params
         section_thickness = None
         transform_to_cyl = True
 
     elif element_dimensions == 2:
-        sp_divs = stent_design.stent_params.divs.copy_with_updates(R=1)
-        stent_params = stent_design.stent_params.copy_with_updates(divs=sp_divs)
+        sp_divs = reference_stent_design.stent_params.divs.copy_with_updates(R=1)
+        stent_params = reference_stent_design.stent_params.copy_with_updates(divs=sp_divs)
 
         section_thickness = stent_params.radial_thickness
         transform_to_cyl = False
 
     else:
-        raise ValueError(stent_design.stent_params.stent_element_dimensions)
+        raise ValueError(reference_stent_design.stent_params.stent_element_dimensions)
 
     def make_stent_part():
 
@@ -104,7 +106,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
         # Make the elements.
         for sub_model_info in sub_model_infos:
             for idx, elem_num, one_elem in design.generate_stent_part_elements(stent_params):
-                if idx in stent_design.active_elements and sub_model_info.elem_in_submodel(elem_num):
+                if idx in sub_model_info.stent_design.active_elements and sub_model_info.elem_in_submodel(elem_num):
                     stent_part.add_element_validate(elem_num, one_elem, node_elem_offset=sub_model_info.node_elem_offset)
 
         # Remove any nodes which are not used
@@ -118,7 +120,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
             iNode_to_idx_active = {iNode: idx for iNode, idx, _ in node_num_idx_pos if iNode in used_node_nums}
 
             # Apply sum stuff for sub-model as well...
-            maybe_y_sym_plane = stent_design.stent_params.get_y_index_sym_plane()
+            maybe_y_sym_plane = reference_stent_design.stent_params.get_y_index_sym_plane()
 
             # Z may not span the whole thing...
             if full_model:
@@ -144,7 +146,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, stent_design
                     if stent_params.node_idx_z_is_restrained(False, node_idx.Z):
                         yield design.GlobalNodeSetNames.PlanarStentThetaMax
 
-                if stent_design.stent_params.fix_base:
+                if reference_stent_design.stent_params.fix_base:
                     if node_idx.Z == min_idx_z: yield design.GlobalNodeSetNames.PlanarStentZMin
 
             boundary_set_name_to_nodes = collections.defaultdict(set)
@@ -728,7 +730,7 @@ def write_model(model: main.AbaqusModel, fn_inp):
 def make_stent_model(
         optim_params: optimisation_parameters.OptimParams,
         stent_design: StentDesign,
-        sub_model_infos: typing.Iterable[patch_manager.SubModelInfoBase],
+        sub_model_infos: typing.List[patch_manager.SubModelInfoBase],
         fn_inp: str):
 
     if all(sub_model_info.is_sub_model for sub_model_info in sub_model_infos):
@@ -740,7 +742,12 @@ def make_stent_model(
     else:
         raise ValueError("Ambiguous")
 
-    model = make_a_stent(optim_params, stent_design, full_model, sub_model_infos)
+    # TEMP sanity check
+    if full_model:
+        if stent_design != sub_model_infos[0].stent_design:
+            raise ValueError(stent_design, sub_model_infos[0].stent_design)
+
+    model = make_a_stent(optim_params, full_model, sub_model_infos)
     if full_model:
         create_surfaces(stent_design.stent_params, model)
     apply_loads(optim_params, stent_design.stent_params, full_model, sub_model_infos, model)
