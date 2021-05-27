@@ -815,9 +815,17 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
             flat_sub_model_infos = [sub_mod_inf for sub_model_info_pair in sub_model_info_list for sub_mod_inf in sub_model_info_pair]
 
             # Make a dummy stent design with all the newly activated elements in it too.
+            # TODO! - fix this! This is adding all the extra elements of all the patches! Need to do it on a sub-model by sub-model basis.
             stent_design_with_extras = flat_sub_model_infos[0].stent_design.with_additional_elements(fsmi.reference_elem_idx for fsmi in flat_sub_model_infos)
             construct_model.make_stent_model(optim_params, stent_design_with_extras, flat_sub_model_infos, sub_fn_inp)
             suffix_to_patch_list[suffix] = flat_sub_model_infos
+
+            # DEBUG PRINTING!!!
+            ref_elems = set(smi.reference_elem_num for smi in flat_sub_model_infos)
+            print(f"   DEBUG {suffix} {sorted(ref_elems)}")
+            for smi in flat_sub_model_infos:
+                if smi.reference_elem_num == 40:
+                    print(smi.reference_elem_num, smi.this_trial_active_state, smi.node_elem_offset)
 
     return suffix_to_patch_list
 
@@ -1193,16 +1201,16 @@ def _make_testing_run_one_args(working_dir, optim_params=None, iter_this=0) -> R
 def evolve_decider_test():
     from stent_opt.make_stent import process_pool_run_and_process
 
-    iter_n_min_1 = 4
+    iter_n_min_1 = 2
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-59\history.db")
+    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-69\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
         optim_params = hist.get_opt_params()
 
-    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-59"), optim_params, iter_n_min_1)
+    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-69"), optim_params, iter_n_min_1)
     run_one_args_completed = process_pool_run_and_process(run_one_args_input)
     with history.History(history_db) as hist:
         elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
