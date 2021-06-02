@@ -643,16 +643,20 @@ def generate_brick_elements_all(divs: PolarIndex) -> typing.Iterable[typing.Tupl
         )
 
 
+@functools.lru_cache(maxsize=1)
 def generate_plate_elements_all(divs: PolarIndex, elem_type: element.ElemType) -> typing.Iterable[typing.Tuple[PolarIndex, int, element.Element]]:
 
     if divs.R != 1:
         raise ValueError(divs)
 
+    out_list = []
     for iElem, one_elem_idx in generate_elem_indices(divs):
-        yield one_elem_idx, iElem, element.Element(
+        out_list.append((one_elem_idx, iElem, element.Element(
             name=elem_type,
             connection=get_2d_plate_connection(divs, one_elem_idx),
-        )
+        )))
+
+    return out_list
 
 
 def gen_active_pairs(stent_params: StentParams, active_node_nums):
@@ -1311,8 +1315,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=12,  # 20
-        Z=24,  # 80
+        Th=30,  # 20
+        Z=60,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
