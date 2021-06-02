@@ -2,6 +2,7 @@ import multiprocessing
 import os
 import pathlib
 import subprocess
+import time
 import typing
 
 import logging
@@ -54,6 +55,8 @@ def kill_process_id(proc_id: int):
 @retry.retry(tries=1000, delay=2, )
 def _run_external_command(path, args):
 
+    t_start = time.time()
+
     old_working_dir = os.getcwd()
 
     os.chdir(path)
@@ -84,6 +87,10 @@ def _run_external_command(path, args):
         raise subprocess.SubprocessError(ret_code)
 
     os.chdir(old_working_dir)
+
+    t_end = time.time()
+    t_elapsed = t_end - t_start
+    print(f"  Took {t_elapsed} seconds to {' '.join(args)}")
 
 
 def run_model(optim_params, inp_fn, force_single_core: bool):
@@ -298,7 +305,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     iter_prev = main_loop_start_i - 1
     previous_max_i = iter_prev
 
-    while iter_prev < 2:
+    while True:
         # Extract ONE from the previous generation
         one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
         if len(model_info_to_rank) != 1:
