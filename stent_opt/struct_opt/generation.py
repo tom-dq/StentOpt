@@ -590,7 +590,9 @@ def _get_ranking_functions(
             include_in_opt = include_in_opt_comp and include_in_opt_filter
 
             # Only extract the element results from this patch.
-            elem_results_this_submod = list(x for x in data.get_all_rows_at_frame(elem_component, one_frame) if model_info.patch_elem_id_in_this_model(x.elem_num))
+            maybe_only_these_elem_nums = model_info.all_patch_elem_ids_in_this_model()
+
+            elem_results_this_submod = list(data.get_all_rows_at_frame(elem_component, one_frame, maybe_only_these_elem_nums))
             this_comp_rows = score.get_primary_ranking_components(include_in_opt, one_filter, optim_params, elem_results_this_submod)
             raw_elem_rows.append(list(this_comp_rows))
 
@@ -1194,10 +1196,10 @@ def _make_testing_run_one_args(working_dir, stent_design: design.StentDesign, op
 def evolve_decider_test():
     from stent_opt.make_stent import process_pool_run_and_process
 
-    iter_n_min_1 = 2
+    iter_n_min_1 = 0
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-69\history.db")
+    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-87\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -1212,14 +1214,13 @@ def evolve_decider_test():
             label=snapshot_n_min_1.label,
         )
 
-    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-69"), design_n_min_1, optim_params, iter_n_min_1)
+    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-87"), design_n_min_1, optim_params, iter_n_min_1)
     run_one_args_completed = process_pool_run_and_process(run_one_args_input)
     with history.History(history_db) as hist:
 
         status_checks = hist.get_status_checks(0, 1_000_000_000)
         smoothed_checks = [st for st in status_checks if st.stage == history.StatusCheckStage.smoothed]
         smoothed = {elem_num_to_indices[st.elem_num]: st.metric_val for st in smoothed_checks}
-
 
 
     new_active_elems = evolve_decider(optim_params, design_n_min_1, smoothed, run_one_args_completed)
@@ -1236,8 +1237,15 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-59")
-    testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir)
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-87")
+
+    history_db = working_dir / "history.db"
+
+
+    with history.History(history_db) as hist:
+        old_design = hist.get_most_recent_design()
+
+    testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir, old_design)
 
 
     testing_run_one_args_completed = process_pool_run_and_process(testing_run_one_args_skeleton)
@@ -1252,7 +1260,7 @@ def run_test_process_completed_simulation():
 
 
 if __name__ == '__main__':
-    evolve_decider_test()
+    run_test_process_completed_simulation()
 
     # run_test_process_completed_simulation()
 

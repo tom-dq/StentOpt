@@ -144,6 +144,10 @@ class SubModelInfoBase:
         real_node_id = self.model_to_real_node(node_num_submodel)
         return self.node_in_submodel(real_node_id)
 
+    @abc.abstractmethod
+    def all_patch_elem_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+        raise NotImplementedError()
+
 
 @dataclasses.dataclass(unsafe_hash=True)
 class FullModelInfo(SubModelInfoBase):
@@ -173,6 +177,10 @@ class FullModelInfo(SubModelInfoBase):
 
     def model_to_real_elem(self, elem_num_submodel: int) -> int:
         return elem_num_submodel
+
+    def all_patch_elem_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+        # Don't need to filter (just use all the elements in the model)
+        return None
 
 
 @dataclasses.dataclass(unsafe_hash=True)
@@ -221,4 +229,7 @@ class SubModelInfo(SubModelInfoBase):
     def model_to_real_elem(self, elem_num_submodel: int) -> int:
         return elem_num_submodel - self.node_elem_offset
 
-
+    def all_patch_elem_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+        # Do need to filter.
+        working_elem_nums = {self.real_to_model_elem(elem_num_full_model) for elem_num_full_model in self.elem_nums}
+        return frozenset(working_elem_nums)

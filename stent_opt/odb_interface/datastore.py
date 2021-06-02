@@ -115,10 +115,17 @@ class Datastore:
 
         return None  # This can happen!!
 
-    def get_all_rows_at_frame(self, named_tuple_class, frame):
+    def get_all_rows_at_frame(self, named_tuple_class, frame, only_these_elem_nums=None):
         with self.connection:
-            select_string = "SELECT * FROM {0} WHERE frame_rowid=?".format(named_tuple_class.__name__)
+            if only_these_elem_nums is not None:
+                only_these_elem_nums_str = ",".join(str(x) for x in only_these_elem_nums)
+                select_string = "SELECT * FROM {0} WHERE frame_rowid=? AND elem_num IN ({1})".format(named_tuple_class.__name__, only_these_elem_nums_str)
+
+            else:
+                select_string = "SELECT * FROM {0} WHERE frame_rowid=?".format(named_tuple_class.__name__)
+
             rows = self.connection.execute(select_string, (frame.rowid, ))
+
             for row in rows:
                 yield named_tuple_class(*row)
 
@@ -130,9 +137,16 @@ class Datastore:
             for row in self.get_all_rows_at_frame(named_tuple_class, frame):
                 yield row
 
-    def get_all_rows_at_all_frames_any_element_type(self):
+    def get_all_rows_at_all_frames_any_element_type_old_and_slow(self):
         for frame in self.get_all_frames():
             for row in self.get_all_rows_at_frame_any_element_type(frame):
+                yield row
+
+    def get_all_rows_at_all_frames_any_element_type(self):
+        nt_class_names = [x for x in dir(db_defs) if x.startswith("Element")]
+        for nt_class_name in nt_class_names:
+            named_tuple_class = getattr(db_defs, nt_class_name)
+            for row in self.get_all_rows(named_tuple_class):
                 yield row
 
     def get_all_rows(self, named_tuple_class):
