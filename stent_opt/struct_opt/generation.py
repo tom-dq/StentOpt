@@ -549,9 +549,9 @@ def _combine_constraint_violations_rows(elem_num_to_indices, cons_viol_rows: typ
 
 
 T_filter_applicable_primary_components = typing.Union[db_defs.ElementFatigueResult, db_defs.ElementPEEQ]
-def _get_raw_data_relevant_to_constraint_filter(data: datastore.Datastore, one_frame) -> typing.Iterable[T_filter_applicable_primary_components]:
+def _get_raw_data_relevant_to_constraint_filter(data: datastore.Datastore, one_frame, maybe_only_these_elem_nums) -> typing.Iterable[T_filter_applicable_primary_components]:
     for elem_component in T_filter_applicable_primary_components.__args__:
-        yield from data.get_all_rows_at_frame(elem_component, one_frame)
+        yield from data.get_all_rows_at_frame(elem_component, one_frame, only_these_elem_nums=maybe_only_these_elem_nums)
 
 
 def _get_ranking_functions(
@@ -583,22 +583,22 @@ def _get_ranking_functions(
     one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
     raw_elem_rows = []
 
+    # Only extract the element results from this patch.
+    maybe_only_these_elem_nums = model_info.all_patch_elem_ids_in_this_model()
+
     # Element based funtions
     elem_components_data = list(optim_params.get_all_elem_components(patch_model_context=model_info.is_sub_model))
     for include_in_opt_comp, elem_component in elem_components_data:
         for include_in_opt_filter, one_filter in optim_params.get_all_primary_ranking_fitness_filters():
             include_in_opt = include_in_opt_comp and include_in_opt_filter
 
-            # Only extract the element results from this patch.
-            maybe_only_these_elem_nums = model_info.all_patch_elem_ids_in_this_model()
-
-            elem_results_this_submod = list(data.get_all_rows_at_frame(elem_component, one_frame, maybe_only_these_elem_nums))
+            elem_results_this_submod = list(data.get_all_rows_at_frame(elem_component, one_frame, only_these_elem_nums=maybe_only_these_elem_nums))
             this_comp_rows = score.get_primary_ranking_components(include_in_opt, one_filter, optim_params, elem_results_this_submod)
             raw_elem_rows.append(list(this_comp_rows))
 
     # Nodal position based functions
-    # TODO - maybe_only_these_elem_nums equiv for nodes
-    pos_rows_submod = list(x for x in data.get_all_rows_at_frame(db_defs.NodePos, one_frame) if model_info.patch_node_id_in_this_model(x.node_num))
+    maybe_only_these_node_nums = model_info.all_patch_node_ids_in_this_model()
+    pos_rows_submod = list(data.get_all_rows_at_frame(db_defs.NodePos, one_frame, only_these_node_nums=maybe_only_these_node_nums))
     pos_rows = [pos_row._replace(node_num=model_info.model_to_real_node(pos_row.node_num)) for pos_row in pos_rows_submod]
     for include_in_opt, one_func in optim_params.get_all_node_position_components(patch_model_context=model_info.is_sub_model):
         this_comp_rows = one_func(optim_params, include_in_opt, design_n_min_1, pos_rows)
@@ -658,7 +658,7 @@ def _get_ranking_functions(
 
     # Constraint violation filters
     constraint_violations = []
-    aba_db_rows_submod_ids = list(x for x in _get_raw_data_relevant_to_constraint_filter(data, one_frame) if model_info.patch_elem_id_in_this_model(x.elem_num))
+    aba_db_rows_submod_ids = list(_get_raw_data_relevant_to_constraint_filter(data, one_frame, maybe_only_these_elem_nums))
     aba_db_rows_full_mod_ids = [elem_row._replace(elem_num=model_info.model_to_real_elem(elem_row.elem_num)) for elem_row in aba_db_rows_submod_ids]
     for include_in_opt_comp, one_filter_func in optim_params.get_all_filter_components():
         this_filter_rows = list(one_filter_func(include_in_opt_comp, aba_db_rows_full_mod_ids))
@@ -881,12 +881,16 @@ def process_completed_simulation(run_one_args: RunOneArgs
 
     # Add any composite results which need to be added.
     with datastore.Datastore(db_fn_prev) as data:
+        data._DEBUG_drop_all_idx()  # TODO - REMOVE!!!
+
+        data.prepare_indices_for_extraction(db_defs.IndexCreateStage.primary_extract)
         one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
         abaqus_created_primary_rows = list(data.get_all_rows_at_all_frames_any_element_type())
         composite_primary_rows_one = score.compute_composite_ranking_component_one(optim_params, abaqus_created_primary_rows)
         composite_primary_rows_two = score.compute_composite_ranking_component_two(optim_params, abaqus_created_primary_rows)
         data.add_results_on_existing_frame(one_frame, composite_primary_rows_one)
         data.add_results_on_existing_frame(one_frame, composite_primary_rows_two)
+        data.prepare_indices_for_extraction(db_defs.IndexCreateStage.composite)
 
     # Go between num (1234) and idx (5, 6, 7)...
     elem_num_to_indices = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
@@ -908,6 +912,7 @@ def process_completed_simulation(run_one_args: RunOneArgs
             for elem_num, gradient_from_patch in elem_patch_deltas.items()]
 
         data.add_results_on_existing_frame(one_frame, in_db_form)
+        data.prepare_indices_for_extraction(db_defs.IndexCreateStage.patch)
 
     with history.History(history_db) as hist:
         snapshot_n_min_1 = hist.get_snapshot(iter_prev)

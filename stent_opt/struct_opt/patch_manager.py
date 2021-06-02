@@ -148,6 +148,10 @@ class SubModelInfoBase:
     def all_patch_elem_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
         raise NotImplementedError()
 
+    @abc.abstractmethod
+    def all_patch_node_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+        raise NotImplementedError()
+
 
 @dataclasses.dataclass(unsafe_hash=True)
 class FullModelInfo(SubModelInfoBase):
@@ -179,6 +183,10 @@ class FullModelInfo(SubModelInfoBase):
         return elem_num_submodel
 
     def all_patch_elem_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+        # Don't need to filter (just use all the elements in the model)
+        return None
+
+    def all_patch_node_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
         # Don't need to filter (just use all the elements in the model)
         return None
 
@@ -232,4 +240,9 @@ class SubModelInfo(SubModelInfoBase):
     def all_patch_elem_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
         # Do need to filter.
         working_elem_nums = {self.real_to_model_elem(elem_num_full_model) for elem_num_full_model in self.elem_nums}
+        return frozenset(working_elem_nums)
+
+    def all_patch_node_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+        # Do need to filter.
+        working_elem_nums = {self.real_to_model_node(node_num_full_model) for node_num_full_model in self.node_nums}
         return frozenset(working_elem_nums)

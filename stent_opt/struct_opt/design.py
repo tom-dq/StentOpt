@@ -331,14 +331,17 @@ def elem_from_index(divs: PolarIndex, iR, iTh, iZ):
     divs_minus_one = node_to_elem_design_space(divs)
     return node_from_index(divs_minus_one, iR, iTh, iZ)
 
-
+@functools.lru_cache(maxsize=1)
 def generate_node_indices(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int, PolarIndex]]:
+    out_list = []
     for iNode, (iR, iTh, iZ) in enumerate(itertools.product(
             range(divs.R),
             range(divs.Th),
             range(divs.Z)), start=1):
 
-        yield iNode, PolarIndex(R=iR, Th=iTh, Z=iZ)
+        out_list.append((iNode, PolarIndex(R=iR, Th=iTh, Z=iZ)))
+
+    return out_list
 
 def generate_stent_boundary_nodes(stent_params: StentParams) -> typing.Iterable[PolarIndex]:
     """Not in order!"""
@@ -353,9 +356,10 @@ def generate_stent_boundary_nodes(stent_params: StentParams) -> typing.Iterable[
     else:
         raise ValueError("3D Code Writing Time!")
 
+@functools.lru_cache(maxsize=1)
 def generate_elem_indices(divs: PolarIndex) -> typing.Iterable[typing.Tuple[int, PolarIndex]]:
     divs_minus_one = node_to_elem_design_space(divs)
-    yield from generate_node_indices(divs_minus_one)
+    return generate_node_indices(divs_minus_one)
 
 
 def generate_elem_indices_admissible(stent_params: StentParams) -> typing.Iterable[typing.Tuple[int, PolarIndex]]:

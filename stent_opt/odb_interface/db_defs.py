@@ -5,6 +5,12 @@ import collections
 ### Written by the code which parses .odbs
 
 
+class IndexCreateStage:
+    """Make these step by step so the inserts are faster"""
+    primary_extract = 0
+    composite = 1
+    patch = 2
+
 """Main frames are referenced by the "frame_rowid" column on the other results"""
 
 Frame = collections.namedtuple("Frame", (
@@ -61,12 +67,17 @@ all_nt_and_table_defs = [
     (HistoryResult, make_history)
 ]
 
+all_index_defs = []
+
 class ResultEntity:
     node_num = "node_num"
     elem_num = "elem_num"
 
 
-def _make_nt_and_table_create(table_name, result_entity, field_names):
+def make_index_name(NT_type):
+    return "idx_{0}".format(NT_type.__name__)
+
+def _make_nt_and_table_create(table_name, result_entity, field_names, index_create_stage):
     """This is a horrible global mutation sideffect-y thing but hopefully I'll
     never have to think about it again."""
 
@@ -90,20 +101,26 @@ frame_rowid REFERENCES Frame(rowid),
 
     all_nt_and_table_defs.append( (NT_type, create_table_string) )
 
+    # Make an index for effective lookups
+    # e.g. - "CREATE INDEX IF NOT EXISTS idx_AAA ON ElementEnergyElastic (frame_rowid, elem_num);"
+    create_index = "CREATE INDEX IF NOT EXISTS {0} ON {1} (frame_rowid, {2})".format(make_index_name(NT_type), table_name, result_entity)
+    drop_index = "DROP INDEX IF EXISTS {0}".format(make_index_name(NT_type))
+    all_index_defs.append((index_create_stage, create_index, drop_index))
+
     return NT_type
 
 
-NodePos = _make_nt_and_table_create("NodePos", ResultEntity.node_num, ("X", "Y", "Z"))
-NodeReact = _make_nt_and_table_create("NodeReact", ResultEntity.node_num, ("X", "Y", "Z"))
-ElementStress = _make_nt_and_table_create("ElementStress", ResultEntity.elem_num, ("SP1", "SP2", "SP3", "von_mises"))
-ElementPEEQ = _make_nt_and_table_create("ElementPEEQ", ResultEntity.elem_num, ("PEEQ", ))
-ElementEnergyElastic = _make_nt_and_table_create("ElementEnergyElastic", ResultEntity.elem_num, ("ESEDEN", ))
-ElementEnergyPlastic = _make_nt_and_table_create("ElementEnergyPlastic", ResultEntity.elem_num, ("EPDDEN",))
-ElementFatigueResult = _make_nt_and_table_create("ElementFatigueResult", ResultEntity.elem_num, ("SAmp", "SMean", "LGoodman",))
-ElementNodeForces = _make_nt_and_table_create("ElementNodeForces", ResultEntity.elem_num, ("N1X", "N1Y", "N2X", "N2Y", "N3X", "N3Y", "N4X", "N4Y", "overall_norm"))
-ElementGlobalPatchSensitivity = _make_nt_and_table_create("ElementGlobalPatchSensitivity", ResultEntity.elem_num, ("gradient_from_patch",))
-ElementCustomCompositeOne = _make_nt_and_table_create("ElementCustomCompositeOne", ResultEntity.elem_num, ("comp_val",))
-ElementCustomCompositeTwo = _make_nt_and_table_create("ElementCustomCompositeTwo", ResultEntity.elem_num, ("comp_val",))
+NodePos = _make_nt_and_table_create("NodePos", ResultEntity.node_num, ("X", "Y", "Z"), IndexCreateStage.primary_extract)
+NodeReact = _make_nt_and_table_create("NodeReact", ResultEntity.node_num, ("X", "Y", "Z"), IndexCreateStage.primary_extract)
+ElementStress = _make_nt_and_table_create("ElementStress", ResultEntity.elem_num, ("SP1", "SP2", "SP3", "von_mises"), IndexCreateStage.primary_extract)
+ElementPEEQ = _make_nt_and_table_create("ElementPEEQ", ResultEntity.elem_num, ("PEEQ", ), IndexCreateStage.primary_extract)
+ElementEnergyElastic = _make_nt_and_table_create("ElementEnergyElastic", ResultEntity.elem_num, ("ESEDEN", ), IndexCreateStage.primary_extract)
+ElementEnergyPlastic = _make_nt_and_table_create("ElementEnergyPlastic", ResultEntity.elem_num, ("EPDDEN",), IndexCreateStage.primary_extract)
+ElementFatigueResult = _make_nt_and_table_create("ElementFatigueResult", ResultEntity.elem_num, ("SAmp", "SMean", "LGoodman",), IndexCreateStage.primary_extract)
+ElementNodeForces = _make_nt_and_table_create("ElementNodeForces", ResultEntity.elem_num, ("N1X", "N1Y", "N2X", "N2Y", "N3X", "N3Y", "N4X", "N4Y", "overall_norm"), IndexCreateStage.primary_extract)
+ElementGlobalPatchSensitivity = _make_nt_and_table_create("ElementGlobalPatchSensitivity", ResultEntity.elem_num, ("gradient_from_patch",), IndexCreateStage.patch)
+ElementCustomCompositeOne = _make_nt_and_table_create("ElementCustomCompositeOne", ResultEntity.elem_num, ("comp_val",), IndexCreateStage.composite)
+ElementCustomCompositeTwo = _make_nt_and_table_create("ElementCustomCompositeTwo", ResultEntity.elem_num, ("comp_val",), IndexCreateStage.composite)
 
 expected_history_results = ["ALLSE", "ALLPD", "ALLKE", "ALLWK"]
 

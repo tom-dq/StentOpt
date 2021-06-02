@@ -60,10 +60,29 @@ class Datastore:
         frame_rowid = self._get_rowid_of_frame_in_db(frame)
         self._add_results_with_frame_rowid(many_results, frame_rowid)
 
+
+    def _DEBUG_CHECK_index_exists(self, nt_class):
+        with self.connection:
+            query_str = "SELECT count(*) FROM sqlite_master WHERE type='index' and name=?"
+            rows = list(self.connection.execute(query_str, (db_defs.make_index_name(nt_class), )))
+            num = rows[0][0]
+            if num == 0:
+                return False
+
+            elif num == 1:
+                return True
+
+            else:
+                raise ValueError(num)
+
     def _add_results_with_frame_rowid(self, many_results, frame_rowid):
         with self.connection:
             cursor = self.connection.cursor()
             for nt_class, iter_of_nts in itertools.groupby(many_results, type):
+
+                if self._DEBUG_CHECK_index_exists(nt_class):
+                    raise ValueError("Should not have the index here, doing inserts...")
+
                 insert_data = self._generate_insert_string_nt_class(nt_class)
                 with_row_id = (nt._replace(frame_rowid=frame_rowid) for nt in iter_of_nts)
                 cursor.executemany(insert_data, with_row_id)
@@ -115,14 +134,16 @@ class Datastore:
 
         return None  # This can happen!!
 
-    def get_all_rows_at_frame(self, named_tuple_class, frame, only_these_elem_nums=None):
+    def get_all_rows_at_frame(self, named_tuple_class, frame, only_these_elem_nums=None, only_these_node_nums=None):
         with self.connection:
+            select_string = "SELECT * FROM {0} WHERE frame_rowid=?".format(named_tuple_class.__name__)
             if only_these_elem_nums is not None:
                 only_these_elem_nums_str = ",".join(str(x) for x in only_these_elem_nums)
-                select_string = "SELECT * FROM {0} WHERE frame_rowid=? AND elem_num IN ({1})".format(named_tuple_class.__name__, only_these_elem_nums_str)
+                select_string = select_string + " AND elem_num in ({0})".format(only_these_elem_nums_str)
 
-            else:
-                select_string = "SELECT * FROM {0} WHERE frame_rowid=?".format(named_tuple_class.__name__)
+            if only_these_node_nums is not None:
+                only_these_node_nums_str = ",".join(str(x) for x in only_these_node_nums)
+                select_string = select_string + " AND node_num in ({0})".format(only_these_node_nums_str)
 
             rows = self.connection.execute(select_string, (frame.rowid, ))
 
@@ -167,7 +188,16 @@ class Datastore:
                 final_row = next(many_rows)
                 yield final_row
 
+    def prepare_indices_for_extraction(self, for_stage):
+        with self.connection:
+            for this_index_stage, create_idx, _ in db_defs.all_index_defs:
+                if for_stage >= this_index_stage:
+                    self.connection.execute(create_idx)
 
+    def _DEBUG_drop_all_idx(self):
+        with self.connection:
+            for _, _, drop_idx in db_defs.all_index_defs:
+                self.connection.execute(drop_idx)
 
 if __name__ == "__main__":
     db_fn = r"c:\temp\aba\db-6.db"
