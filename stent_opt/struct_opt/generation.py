@@ -597,6 +597,7 @@ def _get_ranking_functions(
             raw_elem_rows.append(list(this_comp_rows))
 
     # Nodal position based functions
+    # TODO - maybe_only_these_elem_nums equiv for nodes
     pos_rows_submod = list(x for x in data.get_all_rows_at_frame(db_defs.NodePos, one_frame) if model_info.patch_node_id_in_this_model(x.node_num))
     pos_rows = [pos_row._replace(node_num=model_info.model_to_real_node(pos_row.node_num)) for pos_row in pos_rows_submod]
     for include_in_opt, one_func in optim_params.get_all_node_position_components(patch_model_context=model_info.is_sub_model):
