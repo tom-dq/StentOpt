@@ -34,7 +34,7 @@ def patch_matrix_OK(sub_model_info: patch_manager.SubModelInfo):
     if not is_ok:
         print(f"{sub_model_info.reference_elem_num} {sub_model_info.this_trial_active_state} {is_ok_text} cond={cond_num}")
 
-    return True ## TEMP!
+    return is_ok
 
 
 def _build_elems_array(sub_model_info: patch_manager.SubModelInfo, node_mapping):

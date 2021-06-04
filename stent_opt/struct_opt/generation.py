@@ -2,6 +2,7 @@ import collections
 import functools
 import itertools
 import math
+import multiprocessing
 import pathlib
 import statistics
 import time
@@ -786,6 +787,9 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
                 # print(f"   On:  {sub_model_pair[1]}")
                 yield sub_model_pair
 
+def _smi_pair_are_good(smi_pair):
+    pair_are_ok = all(singular_filter.patch_matrix_OK(smi) for smi in smi_pair)
+    return pair_are_ok, smi_pair
 
 
 def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Dict[
@@ -806,7 +810,10 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
 
     # Filter out the ones which are heading for a singular matrix...
     t_before_patch = time.time()
-    sub_model_infos = [smi_pair for smi_pair in sub_model_infos_all if all(singular_filter.patch_matrix_OK(smi) for smi in smi_pair)]
+    with multiprocessing.Pool(processes=computer.this_computer.n_abaqus_parallel_solves) as pool:
+        sub_model_infos = [smi_pair for is_ok, smi_pair in pool.imap_unordered(_smi_pair_are_good, sub_model_infos_all) if is_ok]
+
+    # sub_model_infos = [smi_pair for smi_pair in sub_model_infos_all if all(singular_filter.patch_matrix_OK(smi) for smi in smi_pair)]
     print(f"Time to check singularity of {len(sub_model_infos_all)} patch pairs: {time.time() - t_before_patch} sec")
 
     # Batch them up into even-ish chunks
@@ -1258,7 +1265,7 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-109")
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-95")
 
     history_db = working_dir / "history.db"
 
@@ -1266,8 +1273,7 @@ def run_test_process_completed_simulation():
     with history.History(history_db) as hist:
         old_design = hist.get_most_recent_design()
 
-    testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir, old_design, iter_this=1)
-
+    testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir, old_design, iter_this=12)
 
     testing_run_one_args_completed = process_pool_run_and_process(testing_run_one_args_skeleton)
     one_design, model_info_to_rank = process_completed_simulation(testing_run_one_args_completed)
