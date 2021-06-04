@@ -741,7 +741,7 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
             this_patch_manager.ingest_node_pos(data.get_all_frames(), data.get_all_rows(db_defs.NodePos))
 
         for initial_active_state, elem_idxs in init_state_and_elems:
-            for polar_index in elem_idxs:
+            for polar_index in sorted(elem_idxs):
                 # Make a stent design with this element active (so we can support Off->On checks
                 design_n_min_1_with_elem = design_n_min_1.with_additional_elements( [polar_index])
                 reference_elem_num = elem_indices_to_num[polar_index]
@@ -755,7 +755,7 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
                 node_nums_this_trial_inactive = set()
                 for fe_elem in interior_fe_elems:
                     node_nums_this_trial_active.update(fe_elem.conn)
-                    if fe_elem != reference_elem_num:
+                    if fe_elem.num != reference_elem_num:
                         node_nums_this_trial_inactive.update(fe_elem.conn)
 
                 node_nums_lookup = {
@@ -796,6 +796,11 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
 
     sub_model_infos_all = list(prepare_patch_models(working_dir, optim_params, iter_prev))
 
+    def sort_key(smi_pair):
+        return smi_pair[0].reference_elem_num, smi_pair[0].this_trial_active_state
+
+    sub_model_infos_all.sort(key=sort_key)
+
     # Filter out the ones which are heading for a singular matrix...
     sub_model_infos = [smi_pair for smi_pair in sub_model_infos_all if all(singular_filter.patch_matrix_OK(smi) for smi in smi_pair)]
 
@@ -808,6 +813,7 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     floor_chunk_size = math.ceil(FLOOR_ELEMS_IN_MODEL / optim_params.nominal_number_of_patch_elements)
     chunk_size = max(floor_chunk_size, chunk_size_round)  # Don't need to make it too crazy tiny...
     print(f"  Chunk Size [Ideal / Round / Used]: {chunk_size_ideal} / {chunk_size_round} / {chunk_size}")
+    #  chunk_size = 1 # TEMP!!!
     # https://stackoverflow.com/a/312464
     def get_prefix_and_smi():
         for sm_idx, i in enumerate(range(0, len(sub_model_infos), chunk_size), start=1):
@@ -1247,7 +1253,7 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-87")
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-105")
 
     history_db = working_dir / "history.db"
 

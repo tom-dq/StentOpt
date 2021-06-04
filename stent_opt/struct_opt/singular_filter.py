@@ -31,7 +31,8 @@ def patch_matrix_OK(sub_model_info: patch_manager.SubModelInfo):
 
     is_ok_text = "ok" if is_ok else "SINGULAR"
 
-    print(f"{sub_model_info.reference_elem_num} {sub_model_info.this_trial_active_state} {is_ok_text} cond={cond_num}")
+    if not is_ok:
+        print(f"{sub_model_info.reference_elem_num} {sub_model_info.this_trial_active_state} {is_ok_text} cond={cond_num}")
 
     return is_ok
 
@@ -41,9 +42,9 @@ def _build_elems_array(sub_model_info: patch_manager.SubModelInfo, node_mapping)
     elems = []
     QUAD4 = 1
     MAT0 = 0
-    for idx, elem_num, one_elem in design.generate_stent_part_elements(sub_model_info.stent_design.stent_params):
+    for congi_idx, (idx, elem_num, one_elem) in enumerate(design.generate_stent_part_elements(sub_model_info.stent_design.stent_params)):
         if idx in sub_model_info.stent_design.active_elements and sub_model_info.elem_in_submodel(elem_num):
-            elem_row = [elem_num, QUAD4, MAT0] + [node_mapping[iNodeFull] for iNodeFull in one_elem.connection]
+            elem_row = [congi_idx, QUAD4, MAT0] + [node_mapping[iNodeFull] for iNodeFull in one_elem.connection]
             elems.append(elem_row)
 
     return numpy.array(elems)
