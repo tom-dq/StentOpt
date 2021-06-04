@@ -148,13 +148,14 @@ class StentParams(BaseModelForDB):
         return top_allowable
 
     def node_polar_index_admissible(self, node_polar_index: PolarIndex):
+        # If any attached element is in, the node is in.
         for elem_att_th in (node_polar_index.Th-1, node_polar_index.Th):
             for elem_att_z in (node_polar_index.Z-1, node_polar_index.Z):
-                maybe_elem_polar = node_polar_index._replace(Th=elem_att_th, Z=elem_att_z)
-                if not self.polar_index_admissible(maybe_elem_polar):
-                    return False
+                maybe_elem_polar = node_polar_index.copy_with_updates(Th=elem_att_th, Z=elem_att_z)
+                if self.polar_index_admissible(maybe_elem_polar):
+                    return True
 
-        return True
+        return False
 
     def polar_index_admissible(self, elem_polar_index: PolarIndex):
         elem_theta_delta = self.angle / (self.divs.Th - 1)

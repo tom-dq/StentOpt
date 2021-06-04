@@ -4,6 +4,7 @@ import itertools
 import math
 import pathlib
 import statistics
+import time
 import typing
 import enum
 import operator
@@ -748,15 +749,17 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
                 graph_elem = graph_fe_elems[reference_elem_num]
 
                 boundary_node_nums, interior_fe_elems = element_bucket.get_fe_nodes_on_boundary_interface(graph, optim_params.patch_hops, graph_elem)
-                elem_nums = frozenset(fe_elem.num for fe_elem in interior_fe_elems)
+                elem_nums = frozenset(fe_elem.num for fe_elem in interior_fe_elems if elem_num_to_indices[fe_elem.num] in design_n_min_1_with_elem.active_elements)
 
                 # Potentially different nodes active in the model if there are nodes only attached to the trial element.
                 node_nums_this_trial_active = set()
                 node_nums_this_trial_inactive = set()
                 for fe_elem in interior_fe_elems:
-                    node_nums_this_trial_active.update(fe_elem.conn)
-                    if fe_elem.num != reference_elem_num:
-                        node_nums_this_trial_inactive.update(fe_elem.conn)
+                    elem_idx = elem_num_to_indices[fe_elem.num]
+                    if elem_idx in design_n_min_1_with_elem.active_elements:
+                        node_nums_this_trial_active.update(fe_elem.conn)
+                        if fe_elem.num != reference_elem_num:
+                            node_nums_this_trial_inactive.update(fe_elem.conn)
 
                 node_nums_lookup = {
                     False: frozenset(node_nums_this_trial_inactive),
@@ -802,7 +805,9 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     sub_model_infos_all.sort(key=sort_key)
 
     # Filter out the ones which are heading for a singular matrix...
+    t_before_patch = time.time()
     sub_model_infos = [smi_pair for smi_pair in sub_model_infos_all if all(singular_filter.patch_matrix_OK(smi) for smi in smi_pair)]
+    print(f"Time to check singularity of {len(sub_model_infos_all)} patch pairs: {time.time() - t_before_patch} sec")
 
     # Batch them up into even-ish chunks
     chunk_size_ideal = len(sub_model_infos) / computer.this_computer.n_abaqus_parallel_solves
@@ -1212,10 +1217,10 @@ def _make_testing_run_one_args(working_dir, stent_design: design.StentDesign, op
 def evolve_decider_test():
     from stent_opt.make_stent import process_pool_run_and_process
 
-    iter_n_min_1 = 0
+    iter_n_min_1 = 1
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-87\history.db")
+    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-109\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -1230,7 +1235,7 @@ def evolve_decider_test():
             label=snapshot_n_min_1.label,
         )
 
-    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-87"), design_n_min_1, optim_params, iter_n_min_1)
+    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-109"), design_n_min_1, optim_params, iter_n_min_1)
     run_one_args_completed = process_pool_run_and_process(run_one_args_input)
     with history.History(history_db) as hist:
 
@@ -1253,7 +1258,7 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-107")
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-109")
 
     history_db = working_dir / "history.db"
 
@@ -1261,7 +1266,7 @@ def run_test_process_completed_simulation():
     with history.History(history_db) as hist:
         old_design = hist.get_most_recent_design()
 
-    testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir, old_design)
+    testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir, old_design, iter_this=1)
 
 
     testing_run_one_args_completed = process_pool_run_and_process(testing_run_one_args_skeleton)
