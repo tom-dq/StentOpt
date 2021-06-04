@@ -117,7 +117,6 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
 
             return base.XYZ(min_x, min_y, min_z)
 
-
         node_num_patch_to_global_and_polar_index = dict()
         submodel_boundary_nodes = set()
 

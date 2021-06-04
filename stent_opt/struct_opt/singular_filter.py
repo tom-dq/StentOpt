@@ -34,7 +34,7 @@ def patch_matrix_OK(sub_model_info: patch_manager.SubModelInfo):
     if not is_ok:
         print(f"{sub_model_info.reference_elem_num} {sub_model_info.this_trial_active_state} {is_ok_text} cond={cond_num}")
 
-    return is_ok
+    return True ## TEMP!
 
 
 def _build_elems_array(sub_model_info: patch_manager.SubModelInfo, node_mapping):
@@ -43,6 +43,7 @@ def _build_elems_array(sub_model_info: patch_manager.SubModelInfo, node_mapping)
     QUAD4 = 1
     MAT0 = 0
     for congi_idx, (idx, elem_num, one_elem) in enumerate(design.generate_stent_part_elements(sub_model_info.stent_design.stent_params)):
+        print(congi_idx, (idx, elem_num, one_elem))
         if idx in sub_model_info.stent_design.active_elements and sub_model_info.elem_in_submodel(elem_num):
             elem_row = [congi_idx, QUAD4, MAT0] + [node_mapping[iNodeFull] for iNodeFull in one_elem.connection]
             elems.append(elem_row)
@@ -59,7 +60,7 @@ def _produce_nodes_with_gaps_in_numbers(sub_model_info: patch_manager.SubModelIn
         if iNodeFull in sub_model_info.node_nums:
             x_rest, y_rest = FREE, FREE
             # Restrained if on the patch boundary
-            if iNodeFull in sub_model_info.boundary_node_nums:
+            if iNodeFull in sub_model_info.boundary_node_nums and sub_model_info.stent_design.stent_params.node_polar_index_admissible(node_idx):
                 x_rest, y_rest = FIXED, FIXED
 
             # Restrained if ordained by the global model
