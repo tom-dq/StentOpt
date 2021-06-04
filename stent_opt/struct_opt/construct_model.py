@@ -2,6 +2,7 @@ import collections
 import statistics
 import typing
 
+import stent_opt.struct_opt.design
 from stent_opt.abaqus_model import main, material, section, part, instance, node, element, surface, amplitude, \
     boundary_condition, load, step, interaction_property, interaction, base
 from stent_opt.struct_opt import optimisation_parameters, design
@@ -9,6 +10,40 @@ from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalNode
     GlobalSurfNames
 
 from stent_opt.struct_opt import patch_manager
+
+
+def get_boundary_node_set_2d(
+        submodel_boundary_nodes: typing.Set[int],
+        stent_params: StentParams,
+        reference_stent_design: StentDesign,
+        iNodeModel: int,
+        node_idx: design.PolarIndex
+) -> typing.Iterable[design.GlobalNodeSetNames]:
+    # print("get_boundary_node_set", iNodeModel, node_idx)
+    # If this node is on the sub-model boundary interface, don't add it to any sets (it is fully definied
+    # by the displacement history)
+    if iNodeModel in submodel_boundary_nodes:
+        return
+
+    min_idx_z = reference_stent_design.get_min_idx_z()
+
+    # Apply sum stuff for sub-model as well...
+    maybe_y_sym_plane = reference_stent_design.stent_params.get_y_index_sym_plane()
+
+    # Sub model or full model
+    if node_idx.Z == maybe_y_sym_plane: yield design.GlobalNodeSetNames.PlanarStentYSymPlane
+
+    # TODO - make "is_in_bottom_chunk" generalisable and more robust.
+    if node_idx.Th == 0:
+        if stent_params.node_idx_z_is_restrained(True, node_idx.Z):
+            yield design.GlobalNodeSetNames.PlanarStentTheta0
+
+    if node_idx.Th == stent_params.divs.Th - 1:
+        if stent_params.node_idx_z_is_restrained(False, node_idx.Z):
+            yield design.GlobalNodeSetNames.PlanarStentThetaMax
+
+    if reference_stent_design.stent_params.fix_base:
+        if node_idx.Z == min_idx_z: yield design.GlobalNodeSetNames.PlanarStentZMin
 
 
 def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: bool, sub_model_infos: typing.List[patch_manager.SubModelInfoBase]):
@@ -119,40 +154,22 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
             used_node_nums = stent_part.get_used_node_nums()
             iNode_to_idx_active = {iNode: idx for iNode, idx, _ in node_num_idx_pos if iNode in used_node_nums}
 
-            # Apply sum stuff for sub-model as well...
-            maybe_y_sym_plane = reference_stent_design.stent_params.get_y_index_sym_plane()
-
             # Z may not span the whole thing...
             if full_model:
                 min_idx_z = min(idx.Z for idx in iNode_to_idx_active.values())
 
-            def get_boundary_node_set(iNodeModel: int, node_idx: design.PolarIndex):
-
-                # print("get_boundary_node_set", iNodeModel, node_idx)
-                # If this node is on the sub-model boundary interface, don't add it to any sets (it is fully definied
-                # by the displacement history)
-                if iNodeModel in submodel_boundary_nodes:
-                    return
-
-                # Sub model or full model
-                if node_idx.Z == maybe_y_sym_plane: yield design.GlobalNodeSetNames.PlanarStentYSymPlane
-
-                # TODO - make "is_in_bottom_chunk" generalisable and more robust.
-                if node_idx.Th == 0:
-                    if stent_params.node_idx_z_is_restrained(True, node_idx.Z):
-                        yield design.GlobalNodeSetNames.PlanarStentTheta0
-
-                if node_idx.Th == stent_params.divs.Th-1:
-                    if stent_params.node_idx_z_is_restrained(False, node_idx.Z):
-                        yield design.GlobalNodeSetNames.PlanarStentThetaMax
-
-                if reference_stent_design.stent_params.fix_base:
-                    if node_idx.Z == min_idx_z: yield design.GlobalNodeSetNames.PlanarStentZMin
+            else:
+                min_idx_z = None
 
             boundary_set_name_to_nodes = collections.defaultdict(set)
             for iNodeModel, (iNodeFull, idx) in node_num_patch_to_global_and_polar_index.items():
                 if iNodeModel in used_node_nums:
-                    for node_set in get_boundary_node_set(iNodeModel, idx):
+                    for node_set in get_boundary_node_set_2d(
+                            submodel_boundary_nodes,
+                            stent_params,
+                            reference_stent_design,
+                            iNodeModel,
+                            idx):
                         boundary_set_name_to_nodes[node_set.name].add(iNodeModel)
 
             for node_set_name, nodes in boundary_set_name_to_nodes.items():

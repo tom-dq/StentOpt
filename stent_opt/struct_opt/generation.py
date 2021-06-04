@@ -22,6 +22,7 @@ from stent_opt.struct_opt import element_bucket
 from stent_opt.struct_opt import construct_model
 from stent_opt.struct_opt import computer
 from stent_opt.struct_opt import common
+from stent_opt.struct_opt import singular_filter
 
 
 class Tail(enum.Enum):
@@ -793,7 +794,10 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
 
     suffix_to_patch_list = dict()
 
-    sub_model_infos = list(prepare_patch_models(working_dir, optim_params, iter_prev))
+    sub_model_infos_all = list(prepare_patch_models(working_dir, optim_params, iter_prev))
+
+    # Filter out the ones which are heading for a singular matrix...
+    sub_model_infos = [smi_pair for smi_pair in sub_model_infos_all if all(singular_filter.patch_matrix_OK(smi) for smi in smi_pair)]
 
     # Batch them up into even-ish chunks
     chunk_size_ideal = len(sub_model_infos) / computer.this_computer.n_abaqus_parallel_solves

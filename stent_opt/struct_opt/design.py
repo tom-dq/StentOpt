@@ -309,6 +309,11 @@ class StentDesign(typing.NamedTuple):
 
         return self._replace(active_elements=frozenset(working_active))
 
+    def get_min_idx_z(self) -> int:
+        """Lowest z of any active node"""
+
+        # Since the element spans z -> z+1, just take min from here...
+        return min(idx.Z for idx in self.active_elements)
 
 def node_to_elem_design_space(divs: PolarIndex) -> PolarIndex:
     return PolarIndex(
@@ -420,6 +425,27 @@ class GlobalNodeSetNames(enum.Enum):
     PlanarStentThetaMax = enum.auto()
     PlanarStentZMin = enum.auto()
     PlanarStentYSymPlane = enum.auto()
+
+    def planar_x_is_constrained(self) -> bool:
+        if self in (GlobalNodeSetNames.PlanarStentTheta0, GlobalNodeSetNames.PlanarStentThetaMax):
+            return True
+
+        elif self in (GlobalNodeSetNames.PlanarStentZMin, GlobalNodeSetNames.PlanarStentYSymPlane):
+            return False
+
+        else:
+            raise ValueError(self)
+
+    def planar_y_is_constrained(self) -> bool:
+        if self in (GlobalNodeSetNames.PlanarStentTheta0, GlobalNodeSetNames.PlanarStentThetaMax):
+            return False
+
+        elif self in (GlobalNodeSetNames.PlanarStentZMin, GlobalNodeSetNames.PlanarStentYSymPlane):
+            return True
+
+        else:
+            raise ValueError(self)
+
 
 
 
@@ -1315,8 +1341,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=50,  # 20
-        Z=100,  # 80
+        Th=10,  # 20
+        Z=20,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
