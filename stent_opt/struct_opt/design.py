@@ -1351,8 +1351,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=25,  # 20
-        Z=50,  # 80
+        Th=16,  # 20
+        Z=32,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1377,7 +1377,7 @@ dylan_r10n1_params = StentParams(
             Z=2,
         ),
     ),
-    expansion_ratio=2.0,  # 2.0
+    expansion_ratio=1.1,  # 2.0
     inadmissible_regions=[
         InadmissibleRegion(
             theta_min=26,

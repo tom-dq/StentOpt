@@ -79,7 +79,17 @@ def build_graph(graph_edge_entity: GraphEdgeEntity, elems: typing.Iterable[Eleme
 
     """Confusingly, the "Nodes" in the graph are the elements in the FE mesh. And "graph_edges" is an interface between
     the finite elements. Could be a shared node or a shared edge."""
-    G = networkx.MultiGraph()
+
+    if graph_edge_entity == GraphEdgeEntity.node:
+        # Use MultiGraph - more than one finite element node can connect two elements.
+        G = networkx.MultiGraph()
+
+    elif graph_edge_entity == GraphEdgeEntity.fe_elem_edge:
+        # Only one edge every goes between two elements
+        G = networkx.Graph()
+
+    else:
+        raise ValueError(graph_edge_entity)
 
     elems = list(elems)
 
