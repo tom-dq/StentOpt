@@ -79,7 +79,7 @@ def build_graph(graph_edge_entity: GraphEdgeEntity, elems: typing.Iterable[Eleme
 
     """Confusingly, the "Nodes" in the graph are the elements in the FE mesh. And "graph_edges" is an interface between
     the finite elements. Could be a shared node or a shared edge."""
-    G = networkx.Graph()
+    G = networkx.MultiGraph()
 
     elems = list(elems)
 

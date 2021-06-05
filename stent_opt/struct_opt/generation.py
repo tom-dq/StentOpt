@@ -1265,7 +1265,7 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-95")
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-119")
 
     history_db = working_dir / "history.db"
 
@@ -1273,7 +1273,7 @@ def run_test_process_completed_simulation():
     with history.History(history_db) as hist:
         old_design = hist.get_most_recent_design()
 
-    testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir, old_design, iter_this=12)
+    testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir, old_design, iter_this=0)
 
     testing_run_one_args_completed = process_pool_run_and_process(testing_run_one_args_skeleton)
     one_design, model_info_to_rank = process_completed_simulation(testing_run_one_args_completed)
