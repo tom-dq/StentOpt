@@ -360,7 +360,12 @@ class History:
             rows = self.connection.execute(f"SELECT Min(metric_val), Max(metric_val) FROM StatusCheck WHERE metric_name = ?", (metric_name,))
             maybe_rows = list(rows)
             if maybe_rows:
-                return maybe_rows[0]
+                db_min, db_max = maybe_rows[0]
+                if db_min != 0:
+                    if db_max / db_min > 1e6:
+                        db_min = db_max/1e6
+
+                return db_min, db_max
 
             else:
                 return 0.0, 5.0

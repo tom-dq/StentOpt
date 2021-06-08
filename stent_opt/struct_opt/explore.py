@@ -59,7 +59,7 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-51")
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-125")
 
-WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-139")
+WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-143")
 
 
 
@@ -107,6 +107,11 @@ class ContourView(typing.NamedTuple):
     def make_iteration_view(self) -> ContourIterationView:
         return ContourIterationView(metric_name=self.metric_name, deformation_view=self.deformation_view)
 
+    def get_cnorm(self) -> str:
+        if self.min_val <= 0:
+            return 'linear'
+        else:
+            return 'log'
 
 
 class ContourIterationView(typing.NamedTuple):
@@ -297,7 +302,17 @@ def make_quadmesh(
         qmesh_list.append(qmesh_ghost)
 
     for qmesh in qmesh_list:
-        qmesh.opts(aspect='equal', line_width=0.1, padding=0.1, width=this_computer.fig_size[0], height=this_computer.fig_size[1], colorbar=True, bgcolor='lightgray', title=title)
+        qmesh.opts(
+            aspect='equal',
+            line_width=0.1,
+            padding=0.1,
+            width=this_computer.fig_size[0],
+            height=this_computer.fig_size[1],
+            colorbar=True,
+            bgcolor='lightgray',
+            title=title,
+            cnorm=contour_view.get_cnorm(),
+        )
 
     return holoviews.Overlay(qmesh_list)
 

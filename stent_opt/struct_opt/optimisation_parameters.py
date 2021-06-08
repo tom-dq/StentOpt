@@ -378,7 +378,7 @@ active = OptimParams(
     nonlinear_material=False,
     patched_elements=common.PatchedElements.all,
     one_elem_per_patch=False,
-    filter_singular_patches=True,
+    filter_singular_patches=False,
 )
 
 active = active._replace(region_gradient=None)
