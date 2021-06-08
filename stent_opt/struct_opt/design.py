@@ -1359,8 +1359,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=30,  # 20
-        Z=60,  # 80
+        Th=20,  # 20
+        Z=40,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1405,7 +1405,7 @@ inadmissable_bottom_test = (
     InadmissibleRegion(theta_min=0, theta_max=45, z_min=0.165, z_max=2*0.165),
 )
 
-basic_stent_params = dylan_r10n1_params.copy_with_updates(balloon=None, cylinder=None, inadmissible_regions=tuple())
+basic_stent_params = dylan_r10n1_params.copy_with_updates(balloon=None, cylinder=None, inadmissible_regions=inadmissable_bottom_test)
 
 
 if __name__ == "__main__":

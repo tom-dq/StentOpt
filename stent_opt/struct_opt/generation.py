@@ -234,10 +234,12 @@ def get_top_n_elements_maintaining_edge_connectivity(
         dirty_elems: typing.Set[design.PolarIndex]
 ) -> typing.Tuple[typing.Set[design.PolarIndex], typing.Set[design.PolarIndex]]:
 
-    # Build a graph so we can keep track of connectivity as we go.
-    graph_element_pool = {
-        element_bucket.Element(num=elemIdx, conn=design.get_single_element_connection(stent_params, elemIdx))
-        for elemIdx in initial_active_elems}
+    # Graph of connectivity if all elements are enabled, for stack connectivity stuff.
+    all_in_elements = initial_active_elems.copy() | set(data.keys())
+    graph_element_pool_all = {
+        elemIdx: element_bucket.Element(num=elemIdx, conn=design.get_single_element_connection(stent_params, elemIdx))
+        for elemIdx in all_in_elements}
+    graph_all_in = element_bucket.build_graph(element_bucket.GraphEdgeEntity.fe_elem_edge, graph_element_pool_all.values())
 
     sorted_data = _evolve_decider_sorted_data(data, tail, n_elems)
 
@@ -279,12 +281,12 @@ def get_top_n_elements_maintaining_edge_connectivity(
         has_all_thetas = len(elems_at_each_slice)+1 == stent_params.divs.Th
         return has_all_thetas and bool(left_side) and bool(right_side)
 
-
     def element_pool_is_OK(elem_working_set: typing.Set[design.PolarIndex]):
         if not element_pool_has_boundaries_attached(elem_working_set):
             return False
 
-        if not element_pool_is_connected(elem_working_set):
+        is_connected = element_pool_is_connected(elem_working_set)
+        if not is_connected:
             return False
 
         return True
@@ -300,6 +302,10 @@ def get_top_n_elements_maintaining_edge_connectivity(
 
         else:
             return len(top_n & initial_active_elems)
+
+    # If we make a change to an element and it was attached to some other elements which were skipped, they can go back on the stack to be checked.
+    # If they were skipped in the first place, they must be a higher priority so they can go on top.
+    back_on_stack_after_change = collections.defaultdict(dict)
 
     halfway = len(sorted_data) // 2
     while num_changed_elements() < n_elems and len(sorted_data) > halfway:
@@ -319,6 +325,7 @@ def get_top_n_elements_maintaining_edge_connectivity(
             trial_working_set.discard(elemIdxCandidate)
 
         DEBUG_verb = "add" if tail.action_is_adding_element else "remove"
+        connected_to_candidate = list(graph_all_in.neighbors(graph_element_pool_all[elemIdxCandidate]))
         if element_pool_is_OK(trial_working_set):
             # Was OK - add to the real mesh
             top_n.add(elemIdxCandidate)
@@ -338,8 +345,17 @@ def get_top_n_elements_maintaining_edge_connectivity(
 
             print(f"  [Conn] {elemIdxCandidate} = {obj_fun_val} OK to {DEBUG_verb}{suffix_text}")
 
+            back_on_stack_elems = back_on_stack_after_change[elemIdxCandidate]
+            # Put stuff back on the stack - do it in reverse order so the top ranked one ends up on top.
+            for reactivated_idx, reactivated_value in reversed(_evolve_decider_sorted_data(back_on_stack_elems, tail, len(back_on_stack_elems))):
+                print(f"  [Conn] reactivating {reactivated_idx}={reactivated_value}.")
+                sorted_data.insert(0, reactivated_idx, reactivated_value)
+
         else:
             print(f"  [Conn] {elemIdxCandidate} = {obj_fun_val} not going to  {DEBUG_verb} {elemIdxCandidate} - would create disconnection.")
+            for element_i_am_attached_to in connected_to_candidate:
+                print(f"  [Conn] stacking {elemIdxCandidate} to be reactivated if {element_i_am_attached_to} changes state.")
+                back_on_stack_after_change[element_i_am_attached_to][elemIdxCandidate] = obj_fun_val
 
     return top_n, dirty_elems
 
@@ -813,16 +829,19 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
 
     # Filter out the ones which are heading for a singular matrix...
     t_before_patch = time.time()
-    if computer.this_computer.n_abaqus_parallel_solves > 1:
-        with multiprocessing.Pool(processes=computer.this_computer.n_abaqus_parallel_solves) as pool:
-            sub_model_infos = [smi_pair for is_ok, smi_pair in pool.imap_unordered(_smi_pair_are_good, sub_model_infos_all) if is_ok]
+    if optim_params.filter_singular_patches:
+        if computer.this_computer.n_abaqus_parallel_solves > 1:
+            with multiprocessing.Pool(processes=computer.this_computer.n_abaqus_parallel_solves) as pool:
+                sub_model_infos = [smi_pair for is_ok, smi_pair in pool.imap_unordered(_smi_pair_are_good, sub_model_infos_all) if is_ok]
 
+        else:
+            sub_model_infos = []
+            for smi_pair in sub_model_infos_all:
+                is_ok, _ = _smi_pair_are_good(smi_pair)
+                if is_ok:
+                    sub_model_infos.append(smi_pair)
     else:
-        sub_model_infos = []
-        for smi_pair in sub_model_infos_all:
-            is_ok, _ = _smi_pair_are_good(smi_pair)
-            if is_ok:
-                sub_model_infos.append(smi_pair)
+        sub_model_infos = list(sub_model_infos_all)
 
     # sub_model_infos = [smi_pair for smi_pair in sub_model_infos_all if all(singular_filter.patch_matrix_OK(smi) for smi in smi_pair)]
     print(f"Time to check singularity of {len(sub_model_infos_all)} patch pairs: {time.time() - t_before_patch} sec")
@@ -1276,7 +1295,7 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-119")
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-135")
 
     history_db = working_dir / "history.db"
 
