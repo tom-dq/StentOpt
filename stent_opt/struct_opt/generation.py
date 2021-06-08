@@ -830,8 +830,8 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     # Filter out the ones which are heading for a singular matrix...
     t_before_patch = time.time()
     if optim_params.filter_singular_patches:
-        if computer.this_computer.n_abaqus_parallel_solves > 1:
-            with multiprocessing.Pool(processes=computer.this_computer.n_abaqus_parallel_solves) as pool:
+        if computer.this_computer.n_processes_unlicensed > 1:
+            with multiprocessing.Pool(processes=computer.this_computer.n_processes_unlicensed) as pool:
                 sub_model_infos = [smi_pair for is_ok, smi_pair in pool.imap_unordered(_smi_pair_are_good, sub_model_infos_all) if is_ok]
 
         else:
