@@ -204,6 +204,7 @@ class SubModelInfo(SubModelInfoBase):
     initial_active_state: bool
     this_trial_active_state: bool
     node_elem_offset: int
+    all_node_polar_index_admissible: typing.FrozenSet["design.PolarIndex"]  # This is just so it's cached for performance.
 
     def __str__(self) -> str:
         return f"SubModelInfo(reference_elem_num={self.reference_elem_num}, node_elem_offset={self.node_elem_offset}, elem_nums={sorted(self.elem_nums)}"

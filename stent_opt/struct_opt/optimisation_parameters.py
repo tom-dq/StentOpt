@@ -93,7 +93,7 @@ class OptimParams(typing.NamedTuple):
     nonlinear_geometry: bool
     nonlinear_material: bool
     patched_elements: common.PatchedElements
-    one_elem_per_patch: bool = True
+    one_elem_per_patch: bool
 
     def get_multi_level_aggregator(self) -> typing.Dict[common.GlobalStatusType, T_elem_result]:
         working_dict = {self.final_target_measure_one: self.primary_composite_calculator_one}
@@ -330,7 +330,7 @@ volume_ratio_v2 = VolumeTargetOpts(
 
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
-    max_change_in_vol_ratio=0.01,  # Was 0.0025
+    max_change_in_vol_ratio=0.005,  # Was 0.0025
     volume_target_opts=volume_ratio,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
@@ -359,7 +359,7 @@ active = OptimParams(
         # score.get_primary_ranking_macro_deformation,
     ],
     final_target_measure_one=history.GlobalStatusType.aggregate_sum,
-    final_target_measure_two=history.GlobalStatusType.aggregate_p_norm_8,
+    final_target_measure_two=None,  # history.GlobalStatusType.aggregate_p_norm_8,
     gaussian_sigma=None,  # Was 0.3
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
@@ -373,8 +373,8 @@ active = OptimParams(
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
     patch_hops=2,
-    nonlinear_geometry=True,
-    nonlinear_material=True,
+    nonlinear_geometry=False,
+    nonlinear_material=False,
     patched_elements=common.PatchedElements.all,
     one_elem_per_patch=False,
 )

@@ -186,6 +186,13 @@ class StentParams(BaseModelForDB):
 
         return True
 
+    def get_all_node_polar_indices_admissible(self) -> typing.FrozenSet[PolarIndex]:
+        all_idx = set()
+        for iNode, node_polar_index in generate_node_indices(self.divs):
+            if self.node_polar_index_admissible(node_polar_index):
+                all_idx.add(node_polar_index)
+
+        return frozenset(all_idx)
 
 
     @classmethod
@@ -1351,8 +1358,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=16,  # 20
-        Z=32,  # 80
+        Th=30,  # 20
+        Z=60,  # 80
     ),
     r_min=0.65,
     r_max=0.75,

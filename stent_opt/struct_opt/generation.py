@@ -700,6 +700,8 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
     elem_num_to_indices = {elem_num: polar_index for elem_num, polar_index in design.generate_elem_indices(stent_params.divs)}
     elem_indices_to_num = {polar_index: elem_num for elem_num, polar_index in elem_num_to_indices.items()}
 
+    all_node_polar_index_admissible = stent_params.get_all_node_polar_indices_admissible()
+
     with history.History(history_db) as hist:
         snapshot_n_min_1 = hist.get_snapshot(iter_prev)
         design_n_min_1 = design.StentDesign(
@@ -779,6 +781,7 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
                         initial_active_state=initial_active_state,
                         this_trial_active_state=this_trial_active_state,
                         node_elem_offset=next(offset_counter),
+                        all_node_polar_index_admissible=all_node_polar_index_admissible,
                     )
                     for this_trial_active_state in (False, True)
                 ]
@@ -810,8 +813,16 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
 
     # Filter out the ones which are heading for a singular matrix...
     t_before_patch = time.time()
-    with multiprocessing.Pool(processes=computer.this_computer.n_abaqus_parallel_solves) as pool:
-        sub_model_infos = [smi_pair for is_ok, smi_pair in pool.imap_unordered(_smi_pair_are_good, sub_model_infos_all) if is_ok]
+    if computer.this_computer.n_abaqus_parallel_solves > 1:
+        with multiprocessing.Pool(processes=computer.this_computer.n_abaqus_parallel_solves) as pool:
+            sub_model_infos = [smi_pair for is_ok, smi_pair in pool.imap_unordered(_smi_pair_are_good, sub_model_infos_all) if is_ok]
+
+    else:
+        sub_model_infos = []
+        for smi_pair in sub_model_infos_all:
+            is_ok, _ = _smi_pair_are_good(smi_pair)
+            if is_ok:
+                sub_model_infos.append(smi_pair)
 
     # sub_model_infos = [smi_pair for smi_pair in sub_model_infos_all if all(singular_filter.patch_matrix_OK(smi) for smi in smi_pair)]
     print(f"Time to check singularity of {len(sub_model_infos_all)} patch pairs: {time.time() - t_before_patch} sec")

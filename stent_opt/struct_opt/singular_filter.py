@@ -56,7 +56,7 @@ def _produce_nodes_with_gaps_in_numbers(sub_model_info: patch_manager.SubModelIn
     # Nodes are in the format [iNode, x, y x_fixed, y_fixed]
     stent_params = sub_model_info.stent_design.stent_params
     for iNodeFull, node_idx, xyz in design.generate_nodes(stent_params):
-        is_within_design_domain = sub_model_info.stent_design.stent_params.node_polar_index_admissible(node_idx)
+        is_within_design_domain = node_idx in sub_model_info.all_node_polar_index_admissible
         is_in_this_patch = iNodeFull in sub_model_info.node_nums
         if is_within_design_domain and is_in_this_patch:
             x_rest, y_rest = FREE, FREE
