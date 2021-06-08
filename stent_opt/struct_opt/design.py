@@ -1405,7 +1405,7 @@ inadmissable_bottom_test = (
     InadmissibleRegion(theta_min=0, theta_max=45, z_min=0.165, z_max=2*0.165),
 )
 
-basic_stent_params = dylan_r10n1_params.copy_with_updates(balloon=None, cylinder=None, inadmissible_regions=inadmissable_bottom_test)
+basic_stent_params = dylan_r10n1_params.copy_with_updates(balloon=None, cylinder=None, inadmissible_regions=tuple())
 
 
 if __name__ == "__main__":

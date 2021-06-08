@@ -319,7 +319,7 @@ def _clamp_update(old, new, max_delta):
 volume_ratio = VolumeTargetOpts(
     initial_ratio=0.5,
     final_ratio=0.08,
-    num_iters=10,
+    num_iters=50,
 )
 
 volume_ratio_v2 = VolumeTargetOpts(
@@ -331,7 +331,7 @@ volume_ratio_v2 = VolumeTargetOpts(
 
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
-    max_change_in_vol_ratio=0.1,  # Was 0.0025
+    max_change_in_vol_ratio=0.025,  # Was 0.0025
     volume_target_opts=volume_ratio,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
@@ -378,7 +378,7 @@ active = OptimParams(
     nonlinear_material=False,
     patched_elements=common.PatchedElements.all,
     one_elem_per_patch=False,
-    filter_singular_patches=False,
+    filter_singular_patches=True,
 )
 
 active = active._replace(region_gradient=None)
