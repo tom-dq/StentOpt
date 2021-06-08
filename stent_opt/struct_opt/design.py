@@ -487,6 +487,7 @@ def gen_ordinates(n, low, high):
         return vals
 
 
+@functools.lru_cache(maxsize=1)
 def generate_nodes(stent_params: StentParams) -> typing.List[typing.Tuple[int, PolarIndex, typing.Union[base.XYZ, base.RThZ]]]:
     if stent_params.stent_element_dimensions == 2:
         return list(_generate_nodes_stent_planar(stent_params))
