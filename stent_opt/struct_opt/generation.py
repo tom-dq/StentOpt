@@ -1294,7 +1294,7 @@ def run_test_process_completed_simulation():
 
     from stent_opt.make_stent import process_pool_run_and_process
 
-    # working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
+    # ssd_working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
     working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-135")
 
     history_db = working_dir / "history.db"

@@ -473,9 +473,13 @@ def plot_history(hist_fn):
     plt.show()
 
 
+def make_fn_alone_stem(iter_num: int, suffix: str='') -> str:
+    return f'It-{str(iter_num).rjust(6, "0")}{suffix}'
+
 def make_fn_in_dir(working_dir: pathlib.Path, ext: str, iter_num: int, suffix: str='') -> pathlib.Path:
     """e.g., iter_num=123 and ext=".inp" """
-    intermediary = working_dir / f'It-{str(iter_num).rjust(6, "0")}{suffix}.XXX'
+    fn_alone = make_fn_alone_stem(iter_num, suffix)
+    intermediary = working_dir / f'{fn_alone}.XXX'
     return intermediary.with_suffix(ext)
 
 

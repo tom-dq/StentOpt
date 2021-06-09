@@ -1,7 +1,9 @@
 import multiprocessing
 import os
 import pathlib
+import shutil
 import subprocess
+import tempfile
 import time
 import typing
 
@@ -93,6 +95,57 @@ def _run_external_command(path, args):
     print(f"  Took {t_elapsed} seconds to {' '.join(args)}")
 
 
+def _run_external_command_tempdir(path, args):
+    """Runs the job in a temporary directory. This has a few advantages:
+       1. My temporary directory is on the c: drive so it's heaps faster for swapping, etc.
+       2. The only files left over are the .odb files so it doesn't take up as much space.
+       3. The .odb files only exist when they are finished. So it's always safe to post-process them."""
+
+    # Set up temp dir on the c: drive. Can't use the context manager since we need to be able to clean it up explicitly
+    temp_dir_obj = tempfile.TemporaryDirectory()
+    temp_dir = temp_dir_obj.name
+
+    # Copy the .inp file over
+    local_inp_file = os.path.join(temp_dir, os.path.split(job_info.FnInp)[1])
+    _ = shutil.copy2(job_info.FnInp, local_inp_file)
+
+    # If there's a user subroutine, copy that too...
+    if job_info.UserSub:
+        orig_fortran_file = os.path.join(os.path.split(job_info.FnInp)[0], job_info.UserSub)
+        local_fortran_file = os.path.join(temp_dir, os.path.split(job_info.UserSub)[1])
+        _ = shutil.copy2(orig_fortran_file, local_fortran_file)
+
+    # Run the job
+    job_info_temp_dir = job_info._replace(FnInp=local_inp_file)
+    result = run_job(job_info_temp_dir)
+
+    for ret_file_extension in _return_extensions_lower_case_:
+        # Copy just the .odb file back.
+        created_file = os.path.splitext(local_inp_file)[0] + ret_file_extension
+        original_file = os.path.splitext(job_info.FnInp)[0] + ret_file_extension
+        try:
+            _ = shutil.copy2(created_file, original_file)
+
+        except FileNotFoundError as e:
+            print(e)
+
+    # Clean up the temporary directory. Sometimes we have to wait for Abaqus to mop up.
+    iCleanTries = 0
+    cleaned = False
+    while iCleanTries < 50 and (not cleaned):
+        try:
+            temp_dir_obj.cleanup()
+            cleaned = True
+
+        except PermissionError as e:
+            time.sleep(0.1)
+            iCleanTries += 1
+
+    if not cleaned:
+        raise e
+
+    return result
+
 def run_model(optim_params, inp_fn, force_single_core: bool):
 
     path, fn = os.path.split(inp_fn)
@@ -121,6 +174,79 @@ def perform_extraction(odb_fn, out_db_fn, override_z_val, working_dir_extract, a
     _run_external_command(working_dir_extract, args)
 
 
+class TempDirWrapper:
+    """Acts does all the stuff in a temporary directory (Abaqus runs faster on an SSD)"""
+    use_temp_dir: bool
+    global_working_dir: pathlib.Path
+    ssd_working_dir: pathlib.Path
+    example_file_stem: pathlib.Path
+
+    def __init__(self, global_working_dir, example_file_stem, use_temp_dir: bool):
+        self.global_working_dir = pathlib.Path(global_working_dir)
+        self.use_temp_dir = use_temp_dir
+        self.example_file_stem = example_file_stem
+
+        if self.use_temp_dir:
+            self.temp_dir_obj = tempfile.TemporaryDirectory()
+            self.ssd_working_dir = pathlib.Path(self.temp_dir_obj.name)
+
+        else:
+            self.ssd_working_dir = self.global_working_dir
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if not self.use_temp_dir:
+            return
+
+        # Copy the useful files back again
+        _return_extensions_lower_case_ = {
+            '.inp',
+            '.odb',
+            '.msg',
+            '.sta',
+            '.dat',
+            '.db',
+        }
+        if any(ext != ext.lower() for ext in _return_extensions_lower_case_):
+            raise ValueError('All the extensions in _return_extensions_lower_case_ need to be lower case.')
+
+        moved_files = 0
+        for ret_file_extension in _return_extensions_lower_case_:
+            # Copy just the .odb file back.
+            created_file = self.ssd_working_dir / f'{self.example_file_stem}{ret_file_extension}'
+            original_file = self.global_working_dir / f'{self.example_file_stem}{ret_file_extension}'
+
+            try:
+                _ = shutil.copy2(created_file, original_file)
+                moved_files += 1
+
+            except FileNotFoundError as e:
+                print(e)
+
+        # Clean up the temporary directory. Sometimes we have to wait for Abaqus to mop up.
+        iCleanTries = 0
+        cleaned = False
+        while iCleanTries < 50 and (not cleaned):
+            try:
+                self.temp_dir_obj.cleanup()
+                cleaned = True
+
+            except PermissionError as e:
+                time.sleep(0.1)
+                iCleanTries += 1
+
+        if not cleaned:
+            raise e
+
+        print(f"Moved {moved_files} back to {self.global_working_dir}")
+
+    def copy_in_inp(self):
+        original_inp = self.global_working_dir / f'{self.example_file_stem}.inp'
+        created_inp = self.ssd_working_dir / f'{self.example_file_stem}.inp'
+        _ = shutil.copy2(original_inp, created_inp)
+
 
 def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
     init(mp_lock)
@@ -132,18 +258,21 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
 
     # Do the initial setup from a first model.
     starting_i = 0
-    fn_inp = history.make_fn_in_dir(working_dir, ".inp", starting_i)
-    current_design = design.make_initial_design(stent_params)
-    construct_model.make_stent_model(optim_params, current_design, make_full_model_list(current_design), fn_inp)
 
-    run_model(optim_params, fn_inp, force_single_core=False)
-    perform_extraction(
-        history.make_fn_in_dir(working_dir, ".odb", starting_i),
-        history.make_fn_in_dir(working_dir, ".db", starting_i),
-        current_design.stent_params.nodal_z_override_in_odb,
-        working_dir_extract,
-        add_initial_node_pos=optim_params.add_initial_node_pos,
-    )
+    with TempDirWrapper(this_computer.working_dir, history.make_fn_alone_stem(starting_i), this_computer.should_use_temp_dir) as ssd_dir:
+
+        fn_inp = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".inp", starting_i)
+        current_design = design.make_initial_design(stent_params)
+        construct_model.make_stent_model(optim_params, current_design, make_full_model_list(current_design), fn_inp)
+
+        run_model(optim_params, fn_inp, force_single_core=False)
+        perform_extraction(
+            history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".odb", starting_i),
+            history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".db", starting_i),
+            current_design.stent_params.nodal_z_override_in_odb,
+            working_dir_extract,
+            add_initial_node_pos=optim_params.add_initial_node_pos,
+        )
 
     with history.History(history_db_fn) as hist:
         elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
@@ -222,15 +351,19 @@ new_design_trials.append((generation.produce_new_generation, "generation.produce
 def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
     """This returns a new version of the input argument, with info about the children filled in."""
 
-    fn_odb = run_one_args.fn_inp.with_suffix('.odb')
+    example_stem = history.make_fn_alone_stem(run_one_args.iter_this, run_one_args.patch_suffix)
+    with TempDirWrapper(this_computer.working_dir, example_stem, this_computer.should_use_temp_dir) as ssd_dir:
+        ssd_dir.copy_in_inp()
+        fn_inp = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".inp", run_one_args.iter_this, run_one_args.patch_suffix)
 
-    if run_one_args.do_run_model_TESTING: run_model(run_one_args.optim_params, run_one_args.fn_inp, force_single_core=False)
+        if run_one_args.do_run_model_TESTING: run_model(run_one_args.optim_params, fn_inp, force_single_core=False)
 
-    fn_db_current = history.make_fn_in_dir(run_one_args.working_dir, ".db", run_one_args.iter_this, run_one_args.patch_suffix)
+        fn_db_current = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".db", run_one_args.iter_this, run_one_args.patch_suffix)
+        fn_odb = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".odb", run_one_args.iter_this, run_one_args.patch_suffix)
 
-    if run_one_args.do_run_extraction_TESTING:
-        # with mp_lock:
-            perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract, run_one_args.optim_params.add_initial_node_pos)
+        if run_one_args.do_run_extraction_TESTING:
+            # with mp_lock:
+                perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract, run_one_args.optim_params.add_initial_node_pos)
 
     # Sensitivity analysis with the "finite difference method"
     child_patch_run_one_args = []
@@ -363,7 +496,7 @@ if __name__ == "__main__":
 
     stent_params = design.basic_stent_params
     optim_params = optimisation_parameters.active._replace(working_dir=str(this_computer.working_dir))
-    # optim_params = optimisation_parameters.active._replace(working_dir=r"E:\Simulations\StentOpt\AA-256")
+    # optim_params = optimisation_parameters.active._replace(ssd_working_dir=r"E:\Simulations\StentOpt\AA-256")
 
     # Check the serialisation
     optim_param_data = list(optim_params.to_db_strings())

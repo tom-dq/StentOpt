@@ -15,6 +15,19 @@ class Computer(typing.NamedTuple):
     working_dir: str
     fig_size: typing.Tuple[int, int]
 
+    @property
+    def should_use_temp_dir(self) -> bool:
+        drive_letter = self.base_working_dir.lower()[0]
+        if drive_letter == 'c':
+            return False
+
+        elif drive_letter in ('d', 'e'):
+            return True
+
+        else:
+            raise ValueError(drive_letter)
+
+
 def _get_next_free_dir(base_dir):
     def idea(i):
         return f"AA-{i}"
@@ -63,7 +76,7 @@ this_computer = Computer(
     n_processes_unlicensed=n_cpus,
     base_working_dir=base_working_dir,
     working_dir=_get_next_free_dir(base_working_dir),
-    # working_dir=r"E:\Simulations\StentOpt\AA-134",
+    # ssd_working_dir=r"E:\Simulations\StentOpt\AA-134",
     fig_size=fig_size,
 )
 
