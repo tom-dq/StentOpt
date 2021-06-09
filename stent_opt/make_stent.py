@@ -355,7 +355,7 @@ def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generat
     """This returns a new version of the input argument, with info about the children filled in."""
 
     example_stem = history.make_fn_alone_stem(run_one_args.iter_this, run_one_args.patch_suffix)
-    with TempDirWrapper(this_computer.working_dir, example_stem, this_computer.should_use_temp_dir) as ssd_dir:
+    with TempDirWrapper(run_one_args.working_dir, example_stem, this_computer.should_use_temp_dir) as ssd_dir:
         ssd_dir.copy_in_inp()
         fn_inp = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".inp", run_one_args.iter_this, run_one_args.patch_suffix)
 
