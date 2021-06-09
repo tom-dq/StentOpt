@@ -59,8 +59,8 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-51")
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-125")
 
-WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-0")
-# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-220")
+# WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-0")
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-225")
 
 
 
@@ -109,6 +109,7 @@ class ContourView(typing.NamedTuple):
         return ContourIterationView(metric_name=self.metric_name, deformation_view=self.deformation_view)
 
     def get_cnorm(self) -> str:
+        return 'linear'
         if self.min_val <= 0:
             return 'linear'
         else:

@@ -161,12 +161,14 @@ def primary_composite_stress_peeq_energy(composite_result_helper: CompositeResul
         )
 
 def primary_composite_stress_over_crit(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
-    """Max( vM-10, 0.0)"""
+    """Max( (vM-20000)/20_000, 0.0)"""
 
+    high_stress = 20_000
+    TEMP_ENERGY_FACTOR = 2_000  # TODO - loose this
     for elem_num in composite_result_helper.get_all_element_nums():
         vM = composite_result_helper.get_last_point(elem_num, db_defs.ElementStress)
 
-        one_val = max(vM-10.0, 0.0)
+        one_val = TEMP_ENERGY_FACTOR * max(vM-high_stress, 0.0) / high_stress
         yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
@@ -432,6 +434,8 @@ def primary_composite_energy(composite_result_helper: CompositeResultHelper) -> 
 
 def primary_composite_energy_neg(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
     """ - EnergyTotal """
+
+    # TODO - make this normalised and energy density
 
     for elem_num in composite_result_helper.get_all_element_nums():
         ElementEnergyElastic = composite_result_helper.get_last_point(elem_num, db_defs.ElementEnergyElastic)
