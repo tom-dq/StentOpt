@@ -243,6 +243,9 @@ class TempDirWrapper:
         print(f"Moved {moved_files} back to {self.global_working_dir}")
 
     def copy_in_inp(self):
+        if not self.use_temp_dir:
+            return
+
         original_inp = self.global_working_dir / f'{self.example_file_stem}.inp'
         created_inp = self.ssd_working_dir / f'{self.example_file_stem}.inp'
         _ = shutil.copy2(original_inp, created_inp)
