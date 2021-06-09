@@ -72,7 +72,7 @@ else:
 this_computer = Computer(
     n_cpus_abaqus_explicit=n_cpus,
     n_cpus_abaqus_implicit=1,
-    n_abaqus_parallel_solves=min(6, n_cpus),
+    n_abaqus_parallel_solves=min(4, n_cpus),
     n_processes_unlicensed=n_cpus,
     base_working_dir=base_working_dir,
     working_dir=_get_next_free_dir(base_working_dir),
