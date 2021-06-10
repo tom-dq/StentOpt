@@ -319,7 +319,7 @@ def _clamp_update(old, new, max_delta):
 volume_ratio = VolumeTargetOpts(
     initial_ratio=0.5,
     final_ratio=0.20,
-    num_iters=50,
+    num_iters=25,
 )
 
 volume_ratio_v2 = VolumeTargetOpts(
