@@ -54,7 +54,7 @@ def kill_process_id(proc_id: int):
     process.kill()
 
 
-@retry.retry(tries=1000, delay=2, )
+@retry.retry(tries=10, delay=2, )
 def _run_external_command(path, args):
 
     t_start = time.time()
@@ -349,8 +349,7 @@ new_design_trials.append((generation.produce_new_generation, "generation.produce
 # print(f"Doing {len(new_design_trials)} trails each time...")
 
 
-
-
+@retry.retry(tries=5, delay=2,)
 def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
     """This returns a new version of the input argument, with info about the children filled in."""
 

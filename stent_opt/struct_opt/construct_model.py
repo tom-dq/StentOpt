@@ -25,12 +25,16 @@ def get_boundary_node_set_2d(
     if iNodeModel in submodel_boundary_nodes:
         return
 
+    # TODO - use contains_polar_index on the boundary conditions
+
     min_idx_z = reference_stent_design.get_min_idx_z()
 
     # Apply sum stuff for sub-model as well...
+    maybe_x_sym_plane = reference_stent_design.stent_params.get_x_index_sym_plane()
     maybe_y_sym_plane = reference_stent_design.stent_params.get_y_index_sym_plane()
 
     # Sub model or full model
+    if node_idx.Th == maybe_x_sym_plane: yield design.GlobalNodeSetNames.PlanarStentXSymPlane
     if node_idx.Z == maybe_y_sym_plane: yield design.GlobalNodeSetNames.PlanarStentYSymPlane
 
     # TODO - make "is_in_bottom_chunk" generalisable and more robust.
@@ -427,17 +431,24 @@ def _create_steps(optim_params: optimisation_parameters.OptimParams, model: main
         model.add_step(step_two)
 
 
+T_GlobalNSMOrBCName = typing.Union[GlobalNodeSetNames, str]
 def _build_bound_disp_rot_if_nodes_found(
         stent_part: part.Part,
         name: str,
-        global_nsm_to_val: typing.Iterable[typing.Tuple[GlobalNodeSetNames, int, float]],
+        global_nsm_to_val: typing.Iterable[typing.Tuple[T_GlobalNSMOrBCName, int, float]],
         amp: typing.Optional[amplitude.Amplitude],
 ) -> typing.Optional[boundary_condition.BoundaryDispRot]:
 
     comps = []
     for global_nsm, dof, value in global_nsm_to_val:
-        if global_nsm.name in stent_part.node_sets:
-            comps.append(boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[global_nsm.name], dof=dof, value=value))
+        if isinstance(global_nsm, str):
+            global_nsm_name = global_nsm
+
+        else:
+            global_nsm_name = global_nsm.name
+
+        if global_nsm_name in stent_part.node_sets:
+            comps.append(boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[global_nsm_name], dof=dof, value=value))
 
     if comps:
         return boundary_condition.BoundaryDispRot(
@@ -465,7 +476,15 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
     stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
     stent_part = stent_instance.base_part
 
-    global_nsm_to_val = [ (GlobalNodeSetNames.PlanarStentTheta0, 1, 0.0), (GlobalNodeSetNames.PlanarStentThetaMax, 1, max_displacement),]
+    global_nsm_to_val = []
+    for logical_bc in stent_params.boundary_conds:
+        for dof in logical_bc.get_dofs():
+            bc_val = max_displacement if logical_bc.is_load_factor else 0.0
+            global_nsm_to_val.append(
+                (logical_bc.bc_name, dof, bc_val)
+            )
+
+    # global_nsm_to_val = [ (GlobalNodeSetNames.PlanarStentTheta0, 1, 0.0), (GlobalNodeSetNames.PlanarStentThetaMax, 1, max_displacement),]
 
     expand_disp = _build_bound_disp_rot_if_nodes_found(stent_part, "ExpandDisp", global_nsm_to_val, amp)
 
@@ -512,6 +531,10 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
     if optim_params.simulation_has_second_step and step_two_disp: model.add_load_specific_steps([model.steps[1]], step_two_disp)
     if hold_base1: model.add_load_specific_steps([model.steps[0]], hold_base1)
     if optim_params.simulation_has_second_step and hold_base2: model.add_load_specific_steps([model.steps[1]], hold_base2)
+
+    if stent_params.sym_x:
+        sym_x_bc = _build_bound_disp_rot_if_nodes_found(stent_part, "SymX", [(GlobalNodeSetNames.PlanarStentXSymPlane, 1, 0.0)], None)
+        if sym_x_bc: model.add_load_specific_steps(model.steps, sym_x_bc)
 
     if stent_params.sym_y:
         sym_y_bc = _build_bound_disp_rot_if_nodes_found(stent_part, "SymY", [(GlobalNodeSetNames.PlanarStentYSymPlane, 2, 0.0)], None)

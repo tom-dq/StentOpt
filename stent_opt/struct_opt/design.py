@@ -103,6 +103,41 @@ class InadmissibleRegion(BaseModelForDB):
         return history.nt_from_db_strings(cls, data)
 
 
+class BoundaryCond(BaseModelForDB):
+    th_min: float
+    th_max: float
+    z_min: float
+    z_max: float
+    bc_th: bool
+    bc_z: bool
+    is_load_factor: bool
+    # TODO - step (expand, osc)
+    # TODO - static or amplitude or whatever
+
+    def to_db_strings(self):
+        yield from history.nt_to_db_strings(self)
+
+    @classmethod
+    def from_db_strings(cls, data):
+        return history.nt_from_db_strings(cls, data)
+
+    @property
+    def bc_name(self) -> str:
+        h = str(hash(self))[0:8]
+        return f"BC_{h}"
+
+    def get_dofs(self) -> typing.Iterable[int]:
+        if self.bc_th:
+            yield 1
+
+        if self.bc_z:
+            yield 2
+
+    def contains_polar_index(self, stent_param: "StentParams", node_idx: PolarIndex) -> bool:
+        raise NotImplementedError("TODO!!!!")
+
+
+
 class StentParams(BaseModelForDB):
     angle: float
     divs: PolarIndex
@@ -114,8 +149,10 @@ class StentParams(BaseModelForDB):
     cylinder: typing.Optional[Cylinder]
     expansion_ratio: typing.Optional[float]
     inadmissible_regions: typing.Tuple[InadmissibleRegion, ...]
-    end_connection_length_ratio: float = 0.3  # The middle 30% is the enforced displacement.
+    boundary_conds: typing.Tuple[BoundaryCond, ...]
+    end_connection_length_ratio: float # The middle 30% is the enforced displacement.
     whole_left_side_restrained: bool
+    sym_x: bool
     sym_y: bool
     fix_base: bool
 
@@ -136,16 +173,28 @@ class StentParams(BaseModelForDB):
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
 
+    def _get_index_sym_plane(self, divs_val: int):
+        if divs_val % 2 != 0:
+            raise ValueError("Need an even number of divisions so we can draw a line through the middle on the nodes.")
+
+        top_allowable = divs_val // 2
+        # e.g., z idx = [0, 1, 2, 3, 4, 5, 6]
+
+        return top_allowable
+
+    def get_x_index_sym_plane(self) -> typing.Optional[int]:
+        if not self.sym_x:
+            return None
+
+        return self._get_index_sym_plane(self.divs.Th)
+
     def get_y_index_sym_plane(self) -> typing.Optional[int]:
         if not self.sym_y:
             return None
 
-        if self.divs.Z % 2 != 0:
-            raise ValueError("Need an even number of Z divisions so we can draw a line through the middle on the nodes.")
+        return self._get_index_sym_plane(self.divs.Z)
 
-        # e.g., z idx = [0, 1, 2, 3, 4, 5, 6]
-        top_allowable = self.divs.Z // 2
-        return top_allowable
+
 
     def node_polar_index_admissible(self, node_polar_index: PolarIndex):
         # If any attached element is in, the node is in.
@@ -161,11 +210,16 @@ class StentParams(BaseModelForDB):
         elem_theta_delta = self.angle / (self.divs.Th - 1)
         elem_z_delta = self.length / (self.divs.Z - 1)
 
+        maybe_x_max_sym = self.get_x_index_sym_plane()
         maybe_y_max_sym = self.get_y_index_sym_plane()
+
+        if maybe_x_max_sym:
+            if elem_polar_index.Th+1 > maybe_x_max_sym:  # The Plus One is to go from node to elements
+                return False
+
         if maybe_y_max_sym:
             if elem_polar_index.Z+1 > maybe_y_max_sym:  # The Plus One is to go from node to elements
                 return False
-
 
         def region_is_ok(inadmissible_region):
             elem_cent_th = (elem_polar_index.Th + 0.5) * elem_theta_delta  # The half is to get to the centroid
@@ -441,10 +495,11 @@ class GlobalNodeSetNames(enum.Enum):
     PlanarStentTheta0 = enum.auto()  # These are the sides - only enforce the displacement at the base
     PlanarStentThetaMax = enum.auto()
     PlanarStentZMin = enum.auto()
+    PlanarStentXSymPlane = enum.auto()
     PlanarStentYSymPlane = enum.auto()
 
     def planar_x_is_constrained(self) -> bool:
-        if self in (GlobalNodeSetNames.PlanarStentTheta0, GlobalNodeSetNames.PlanarStentThetaMax):
+        if self in (GlobalNodeSetNames.PlanarStentTheta0, GlobalNodeSetNames.PlanarStentThetaMax, GlobalNodeSetNames.PlanarStentXSymPlane):
             return True
 
         elif self in (GlobalNodeSetNames.PlanarStentZMin, GlobalNodeSetNames.PlanarStentYSymPlane):
@@ -454,7 +509,7 @@ class GlobalNodeSetNames(enum.Enum):
             raise ValueError(self)
 
     def planar_y_is_constrained(self) -> bool:
-        if self in (GlobalNodeSetNames.PlanarStentTheta0, GlobalNodeSetNames.PlanarStentThetaMax):
+        if self in (GlobalNodeSetNames.PlanarStentTheta0, GlobalNodeSetNames.PlanarStentThetaMax, GlobalNodeSetNames.PlanarStentXSymPlane):
             return False
 
         elif self in (GlobalNodeSetNames.PlanarStentZMin, GlobalNodeSetNames.PlanarStentYSymPlane):
@@ -1354,6 +1409,12 @@ def show_initial_model_test():
     stent_design = make_initial_design(basic_stent_params)
     display.show_design(stent_design)
 
+# Enforced disp pull conds
+bc_fix_left_edge = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=1.0, bc_th=True, bc_z=False, is_load_factor=False)
+bc_strain_right_edge = BoundaryCond(th_min=1.0, th_max=1.0, z_min=0.35, z_max=0.65, bc_th=True, bc_z=False, is_load_factor=True)
+bc_fix_bootom_left = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.0, bc_th=True, bc_z=True, is_load_factor=False)
+
+
 
 dylan_r10n1_params = StentParams(
     angle=60,
@@ -1394,8 +1455,10 @@ dylan_r10n1_params = StentParams(
             z_max=2.25,
         )
     ],
+    boundary_conds=(bc_fix_left_edge, bc_strain_right_edge, bc_fix_bootom_left),
     end_connection_length_ratio=0.3,
     whole_left_side_restrained=True,
+    sym_x=False,
     sym_y=True,
     fix_base=False,
 )
