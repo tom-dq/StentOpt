@@ -229,7 +229,7 @@ class OptimParams(typing.NamedTuple):
         if not target_stabilised:
             return False
 
-        same_design = previous_design == this_design
+        same_design = previous_design.active_elements == this_design.active_elements
         if not same_design:
             return False
 
