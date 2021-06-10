@@ -65,7 +65,7 @@ def _run_external_command(path, args):
 
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    TIMEOUT = 3600 * 24  # 1 day
+    TIMEOUT = 30 * 60  # Half an hour
 
     out, errs = [], []
     try:
