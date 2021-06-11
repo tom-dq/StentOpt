@@ -1462,16 +1462,20 @@ def show_initial_model_test():
 # Enforced disp pull conds
 bc_fix_left_edge = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=1.0, bc_th=True, bc_z=False, is_load_factor=False)
 bc_strain_right_edge = BoundaryCond(th_min=1.0, th_max=1.0, z_min=0.35, z_max=0.65, bc_th=True, bc_z=False, is_load_factor=True)
-bc_fix_bootom_left = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.0, bc_th=True, bc_z=True, is_load_factor=False)
+bc_fix_bottom_left = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.0, bc_th=True, bc_z=True, is_load_factor=False)
+
+bcs_pull_30pc = (bc_fix_left_edge, bc_strain_right_edge, bc_fix_bottom_left)
 
 
+bc_cent_load_enf_disp = BoundaryCond(th_min=0.5, th_max=0.5, z_min=0.0, z_max=1.0, bc_th=False, bc_z=True, is_load_factor=True)
+bc_simon = (bc_fix_bottom_left, bc_cent_load_enf_disp)
 
 dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=20,  # 20
-        Z=40,  # 80
+        Th=40,  # 20
+        Z=20,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1505,11 +1509,11 @@ dylan_r10n1_params = StentParams(
             z_max=2.25,
         )
     ],
-    boundary_conds=(bc_fix_left_edge, bc_strain_right_edge, bc_fix_bootom_left),
+    boundary_conds=bc_simon,
     end_connection_length_ratio=0.3,
     whole_left_side_restrained=True,
-    sym_x=False,
-    sym_y=True,
+    sym_x=True,
+    sym_y=False,
     fix_base=False,
 )
 

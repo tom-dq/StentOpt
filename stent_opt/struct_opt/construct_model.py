@@ -40,6 +40,7 @@ def get_boundary_node_set_2d(
     if node_idx.Z == maybe_y_sym_plane: yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentYSymPlane.name, planar_y_is_constrained=True)
 
     # TODO - make "is_in_bottom_chunk" generalisable and more robust.
+    return
     if node_idx.Th == 0:
         if stent_params.node_idx_z_is_restrained(True, node_idx.Z):
             yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentTheta0.name, planar_x_is_constrained=True)
