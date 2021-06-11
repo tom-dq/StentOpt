@@ -60,7 +60,7 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-125")
 
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-0")
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-244")
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-246")
 
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOptDesktop\AA-229")
 

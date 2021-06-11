@@ -318,7 +318,7 @@ def _clamp_update(old, new, max_delta):
 
 volume_ratio = VolumeTargetOpts(
     initial_ratio=0.5,
-    final_ratio=0.10,
+    final_ratio=0.20,
     num_iters=25,
 )
 
@@ -378,7 +378,7 @@ active = OptimParams(
     nonlinear_material=False,
     patched_elements=common.PatchedElements.all,
     one_elem_per_patch=False,
-    filter_singular_patches=False,
+    filter_singular_patches=True,
 )
 
 active = active._replace(region_gradient=None)
