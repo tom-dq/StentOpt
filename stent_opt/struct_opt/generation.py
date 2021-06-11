@@ -264,8 +264,27 @@ def get_top_n_elements_maintaining_edge_connectivity(
         elems_at_each_slice = collections.Counter()
         left_side = set()
         right_side = set()
+
+        # Get the nodes on each of the boundary conditions
+        # TODO - make this get the "full" boundary. So pre-determine the number of nodes subject to the BC in the fully populated design,
+        #   and make sure all the nodes are in this. Another approach would be to create some "non-negotiable" nodes, which much be present
+        #   in the design.
+
+        node_working_set = {node_idx for elem_idx in elem_working_set for node_idx in design.get_2d_plate_connection_polar_index(elem_idx)}
+        bcs_not_yet_hit = {bc for bc in stent_params.boundary_conds}
+
+        for node_idx in sorted(node_working_set):
+            bcs_hit_by_node = []
+            for bc in bcs_not_yet_hit:
+                if bc.contains_polar_index(stent_params, node_idx):
+                    bcs_hit_by_node.append(bc)
+
+            for bc in bcs_hit_by_node:
+                bcs_not_yet_hit.remove(bc)
+
         for elem_idx in elem_working_set:
             elems_at_each_slice[elem_idx.Th] += 1
+
 
             # TODO - make this use the new stuff in stent_params
             bottom_bound_cutoff = stent_params.length * (0.5 - 0.5 * stent_params.end_connection_length_ratio)
@@ -278,8 +297,8 @@ def get_top_n_elements_maintaining_edge_connectivity(
                 elif elem_idx.Th+2 == stent_params.divs.Th:
                     right_side.add(elem_idx)
 
-        has_all_thetas = len(elems_at_each_slice)+1 == stent_params.divs.Th
-        return has_all_thetas and bool(left_side) and bool(right_side)
+        has_all_thetas = len(elems_at_each_slice)+1 >= stent_params.get_divs_with_sym().Th
+        return has_all_thetas and not bcs_not_yet_hit
 
     def element_pool_is_OK(elem_working_set: typing.Set[design.PolarIndex]):
         if not element_pool_has_boundaries_attached(elem_working_set):
@@ -1295,7 +1314,7 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # ssd_working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-135")
+    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-243")
 
     history_db = working_dir / "history.db"
 

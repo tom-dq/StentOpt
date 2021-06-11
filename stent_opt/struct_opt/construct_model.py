@@ -482,7 +482,7 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
     global_nsm_to_val = []
     for logical_bc in stent_params.boundary_conds:
         for dof in logical_bc.get_dofs():
-            bc_val = max_displacement if logical_bc.is_load_factor else 0.0
+            bc_val = logical_bc.load_factor_scale * max_displacement
             global_nsm_to_val.append(
                 (logical_bc.bc_name, dof, bc_val)
             )

@@ -111,7 +111,7 @@ class BoundaryCond(BaseModelForDB):
     z_max: float
     bc_th: bool
     bc_z: bool
-    is_load_factor: bool
+    load_factor_scale: float  # 0 for unscaled, -1 or 1 to reverse or forward
     # TODO - step (expand, osc)
     # TODO - static or amplitude or whatever
 
@@ -142,7 +142,11 @@ class BoundaryCond(BaseModelForDB):
             else:
                 yield f'Z{self.z_min}-{self.z_max}'
 
-            yield 'LF' if self.is_load_factor else 'Cons'
+            if float(int(self.load_factor_scale)) == self.load_factor_scale:
+                yield f"LF{int(self.load_factor_scale)}"
+
+            else:
+                yield f"LF{self.load_factor_scale}"
 
         # No dots in the name or Abaqus will be unhappy
         name_safe = (bit.replace('.', 'o') for bit in make_name_bits())
@@ -164,7 +168,8 @@ class BoundaryCond(BaseModelForDB):
 
         buffered_upper = upper + 1e-4 if math.isclose(upper, 1.0) else upper
 
-        this_ratio = this_idx / (max_idx-1)
+        this_ratio = this_idx / max_idx
+
         if math.isclose(lower, upper):
             # Special case to make suer we don't miss a 0->0 or whatever.
             if math.isclose(this_ratio, lower):
@@ -239,6 +244,14 @@ class StentParams(BaseModelForDB):
 
         return self._get_index_sym_plane(self.divs.Z)
 
+    def get_divs_with_sym(self) -> PolarIndex:
+        sym_th = self._get_index_sym_plane(self.divs.Th) if self.sym_x else self.divs.Th
+        sym_z = self._get_index_sym_plane(self.divs.Z) if self.sym_y else self.divs.Z
+        return PolarIndex(
+            R=self.divs.R,
+            Th=sym_th,
+            Z=sym_z,
+        )
 
 
     def node_polar_index_admissible(self, node_polar_index: PolarIndex):
@@ -515,6 +528,14 @@ def get_2d_plate_connection(design_space: PolarIndex, i: PolarIndex):
 
     return tuple(connection)
 
+
+def get_2d_plate_connection_polar_index(i: PolarIndex):
+    return (
+        PolarIndex(R=i.R, Th=i.Th, Z=i.Z),
+        PolarIndex(R=i.R, Th=i.Th + 1, Z=i.Z),
+        PolarIndex(R=i.R, Th=i.Th + 1, Z=i.Z + 1),
+        PolarIndex(R=i.R, Th=i.Th, Z=i.Z + 1),
+    )
 
 class GlobalPartNames:
     STENT = "Stent"
@@ -1460,26 +1481,28 @@ def show_initial_model_test():
     display.show_design(stent_design)
 
 # Enforced disp pull conds
-bc_fix_left_edge = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=1.0, bc_th=True, bc_z=False, is_load_factor=False)
-bc_strain_right_edge = BoundaryCond(th_min=1.0, th_max=1.0, z_min=0.35, z_max=0.65, bc_th=True, bc_z=False, is_load_factor=True)
-bc_fix_bottom_left = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.0, bc_th=True, bc_z=True, is_load_factor=False)
+bc_fix_left_edge = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=1.0, bc_th=True, bc_z=False, load_factor_scale=0)
+bc_strain_right_edge = BoundaryCond(th_min=1.0, th_max=1.0, z_min=0.35, z_max=0.65, bc_th=True, bc_z=False, load_factor_scale=1)
+bc_fix_bottom_left = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.0, bc_th=True, bc_z=True, load_factor_scale=0)
 
 bcs_pull_30pc = (bc_fix_left_edge, bc_strain_right_edge, bc_fix_bottom_left)
 
 
-bc_cent_load_enf_disp = BoundaryCond(th_min=0.5, th_max=0.5, z_min=0.0, z_max=1.0, bc_th=False, bc_z=True, is_load_factor=True)
-bc_simon = (bc_fix_bottom_left, bc_cent_load_enf_disp)
+bc_cent_load_enf_disp = BoundaryCond(th_min=0.5, th_max=0.5, z_min=0.0, z_max=1.0, bc_th=False, bc_z=True, load_factor_scale=-1)
+bc_cent_bottom_10pc_A = BoundaryCond(th_min=0.0, th_max=0.1, z_min=0.0, z_max=0.0, bc_th=False, bc_z=True, load_factor_scale=0)
+bc_cent_bottom_10pc_B = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.1, bc_th=True, bc_z=False, load_factor_scale=0)
+bc_simon = (bc_cent_bottom_10pc_A, bc_cent_bottom_10pc_B, bc_cent_load_enf_disp)
 
 dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=40,  # 20
-        Z=20,  # 80
+        Th=20,  # 20
+        Z=10,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
-    length=1.65, # Was 11.0
+    length=1.65 / 4, # Was 11.0
     stent_element_type=element.ElemType.CPS4R,
     balloon=Balloon(
         inner_radius_ratio=0.85,
