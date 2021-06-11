@@ -18,14 +18,16 @@ def get_boundary_node_set_2d(
         reference_stent_design: StentDesign,
         iNodeModel: int,
         node_idx: design.PolarIndex
-) -> typing.Iterable[design.GlobalNodeSetNames]:
+) -> typing.Iterable[design.NodeSetName]:
     # print("get_boundary_node_set", iNodeModel, node_idx)
     # If this node is on the sub-model boundary interface, don't add it to any sets (it is fully definied
     # by the displacement history)
     if iNodeModel in submodel_boundary_nodes:
         return
 
-    # TODO - use contains_polar_index on the boundary conditions
+    for bc_logical in stent_params.boundary_conds:
+        if bc_logical.contains_polar_index(stent_params, node_idx):
+            yield design.NodeSetName(bc_logical.bc_name)
 
     min_idx_z = reference_stent_design.get_min_idx_z()
 
@@ -34,20 +36,20 @@ def get_boundary_node_set_2d(
     maybe_y_sym_plane = reference_stent_design.stent_params.get_y_index_sym_plane()
 
     # Sub model or full model
-    if node_idx.Th == maybe_x_sym_plane: yield design.GlobalNodeSetNames.PlanarStentXSymPlane
-    if node_idx.Z == maybe_y_sym_plane: yield design.GlobalNodeSetNames.PlanarStentYSymPlane
+    if node_idx.Th == maybe_x_sym_plane: yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentXSymPlane.name, planar_x_is_constrained=True)
+    if node_idx.Z == maybe_y_sym_plane: yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentYSymPlane.name, planar_y_is_constrained=True)
 
     # TODO - make "is_in_bottom_chunk" generalisable and more robust.
     if node_idx.Th == 0:
         if stent_params.node_idx_z_is_restrained(True, node_idx.Z):
-            yield design.GlobalNodeSetNames.PlanarStentTheta0
+            yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentTheta0.name, planar_x_is_constrained=True)
 
     if node_idx.Th == stent_params.divs.Th - 1:
         if stent_params.node_idx_z_is_restrained(False, node_idx.Z):
-            yield design.GlobalNodeSetNames.PlanarStentThetaMax
+            yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentThetaMax.name, planar_x_is_constrained=True)
 
     if reference_stent_design.stent_params.fix_base:
-        if node_idx.Z == min_idx_z: yield design.GlobalNodeSetNames.PlanarStentZMin
+        if node_idx.Z == min_idx_z: yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentZMin.name, planar_y_is_constrained=True)
 
 
 def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: bool, sub_model_infos: typing.List[patch_manager.SubModelInfoBase]):
@@ -167,16 +169,16 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
             boundary_set_name_to_nodes = collections.defaultdict(set)
             for iNodeModel, (iNodeFull, idx) in node_num_patch_to_global_and_polar_index.items():
                 if iNodeModel in used_node_nums:
-                    for node_set in get_boundary_node_set_2d(
+                    for node_set_name in get_boundary_node_set_2d(
                             submodel_boundary_nodes,
                             stent_params,
                             reference_stent_design,
                             iNodeModel,
                             idx):
-                        boundary_set_name_to_nodes[node_set.name].add(iNodeModel)
+                        boundary_set_name_to_nodes[node_set_name].add(iNodeModel)
 
             for node_set_name, nodes in boundary_set_name_to_nodes.items():
-                one_node_set = node.NodeSet(stent_part, node_set_name, frozenset(nodes))
+                one_node_set = node.NodeSet(stent_part, node_set_name.name, frozenset(nodes))
                 stent_part.add_node_set(one_node_set)
 
         model.add_instance(one_instance)

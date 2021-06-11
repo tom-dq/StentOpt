@@ -1,4 +1,5 @@
 import collections
+import dataclasses
 import enum
 import functools
 import itertools
@@ -123,8 +124,33 @@ class BoundaryCond(BaseModelForDB):
 
     @property
     def bc_name(self) -> str:
-        h = str(hash(self))[0:8]
-        return f"BC_{h}"
+        def make_name_bits():
+            coords = []
+            if self.bc_th: coords.append('Th')
+            if self.bc_z: coords.append('Z')
+            yield ''.join(coords)
+
+            if self.th_min == self.th_max:
+                yield f'Th_{self.th_min}'
+
+            else:
+                yield f'Th_{self.th_min}-{self.th_max}'
+
+            if self.z_min == self.z_max:
+                yield f'Z_{self.z_min}'
+
+            else:
+                yield f'Z{self.z_min}-{self.z_max}'
+
+            yield 'LF' if self.is_load_factor else 'Cons'
+
+        # No dots in the name or Abaqus will be unhappy
+        name_safe = (bit.replace('.', 'o') for bit in make_name_bits())
+        return 'BC-' + '-'.join(name_safe)
+
+
+        #h = hashlib.md5(str(self).encode()).hexdigest()[0:8]
+        #return f"BC_{h}"
 
     def get_dofs(self) -> typing.Iterable[int]:
         if self.bc_th:
@@ -133,8 +159,27 @@ class BoundaryCond(BaseModelForDB):
         if self.bc_z:
             yield 2
 
+    @staticmethod
+    def _is_in_bounds(lower: float, upper: float, this_idx: int, max_idx: int) -> bool:
+
+        buffered_upper = upper + 1e-4 if math.isclose(upper, 1.0) else upper
+
+        this_ratio = this_idx / (max_idx-1)
+        if math.isclose(lower, upper):
+            # Special case to make suer we don't miss a 0->0 or whatever.
+            if math.isclose(this_ratio, lower):
+                return True
+
+        return lower <= this_ratio <= buffered_upper
+
     def contains_polar_index(self, stent_param: "StentParams", node_idx: PolarIndex) -> bool:
-        raise NotImplementedError("TODO!!!!")
+        if not self._is_in_bounds(self.th_min, self.th_max, node_idx.Th, stent_param.divs.Th):
+            return False
+
+        if not self._is_in_bounds(self.z_min, self.z_max, node_idx.Z, stent_param.divs.Z):
+            return False
+
+        return True
 
 
 
@@ -518,8 +563,13 @@ class GlobalNodeSetNames(enum.Enum):
         else:
             raise ValueError(self)
 
+NodeSetNameString = typing.NewType('NodeSetNameString', str)
 
-
+@dataclasses.dataclass(frozen=True)
+class NodeSetName:
+    name: str
+    planar_x_is_constrained: bool = False
+    planar_y_is_constrained: bool = False
 
 
 def _pairwise(iterable):

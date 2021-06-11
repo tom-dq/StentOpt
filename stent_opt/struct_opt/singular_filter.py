@@ -72,10 +72,10 @@ def _produce_nodes_with_gaps_in_numbers(sub_model_info: patch_manager.SubModelIn
                     iNodeModel=iNodeFull,
                     node_idx=node_idx,
             ):
-                if global_node_set.planar_x_is_constrained():
+                if global_node_set.planar_x_is_constrained:
                     x_rest = FIXED
 
-                if global_node_set.planar_y_is_constrained():
+                if global_node_set.planar_y_is_constrained:
                     y_rest = FIXED
 
             yield iNodeFull, (xyz.x, xyz.y, x_rest, y_rest)
