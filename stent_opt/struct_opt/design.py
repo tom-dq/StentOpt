@@ -1489,9 +1489,9 @@ bcs_pull_30pc = (bc_fix_left_edge, bc_strain_right_edge, bc_fix_bottom_left)
 
 
 bc_cent_load_enf_disp = BoundaryCond(th_min=0.5, th_max=0.5, z_min=0.0, z_max=1.0, bc_th=False, bc_z=True, load_factor_scale=-1)
-bc_cent_bottom_10pc_A = BoundaryCond(th_min=0.0, th_max=0.1, z_min=0.0, z_max=0.0, bc_th=False, bc_z=True, load_factor_scale=0)
-bc_cent_bottom_10pc_B = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.1, bc_th=True, bc_z=False, load_factor_scale=0)
-bc_simon = (bc_cent_bottom_10pc_A, bc_cent_bottom_10pc_B, bc_cent_load_enf_disp)
+bc_cent_bottom_20pc_A = BoundaryCond(th_min=0.0, th_max=0.1, z_min=0.0, z_max=0.0, bc_th=False, bc_z=True, load_factor_scale=0)
+bc_cent_bottom_20pc_B = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.2, bc_th=True, bc_z=False, load_factor_scale=0)  # Twice as much for sym
+bc_simon = (bc_cent_bottom_20pc_A, bc_cent_bottom_20pc_B, bc_cent_load_enf_disp)
 
 dylan_r10n1_params = StentParams(
     angle=60,
