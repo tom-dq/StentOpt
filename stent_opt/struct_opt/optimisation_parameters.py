@@ -376,7 +376,7 @@ active = OptimParams(
     patch_hops=2,
     nonlinear_geometry=False,
     nonlinear_material=False,
-    patched_elements=common.PatchedElements.all,
+    patched_elements=common.PatchedElements.boundary,
     one_elem_per_patch=False,
     filter_singular_patches=True,
 )
