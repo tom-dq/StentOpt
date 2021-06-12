@@ -358,7 +358,8 @@ def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generat
         ssd_dir.copy_in_inp()
         fn_inp = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".inp", run_one_args.iter_this, run_one_args.patch_suffix)
 
-        if run_one_args.do_run_model_TESTING: run_model(run_one_args.optim_params, fn_inp, force_single_core=False)
+        is_sub_model = not run_one_args.is_full_model
+        if run_one_args.do_run_model_TESTING: run_model(run_one_args.optim_params, fn_inp, force_single_core=is_sub_model)
 
         fn_db_current = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".db", run_one_args.iter_this, run_one_args.patch_suffix)
         fn_odb = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".odb", run_one_args.iter_this, run_one_args.patch_suffix)
