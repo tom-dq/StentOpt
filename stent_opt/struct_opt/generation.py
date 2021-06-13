@@ -15,6 +15,7 @@ import numpy
 import scipy.ndimage
 import matplotlib.pyplot as plt
 
+import stent_opt.abaqus_model.step
 from stent_opt.odb_interface import datastore, db_defs
 from stent_opt.abaqus_model import base
 from stent_opt.struct_opt import design, display, score, history, optimisation_parameters
@@ -870,7 +871,7 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
     chunk_size_round = math.ceil(chunk_size_ideal)
 
     # Don't need to divide them up too much (no point having four models with one patch in each...
-    FLOOR_ELEMS_IN_MODEL = 1000
+    FLOOR_ELEMS_IN_MODEL = 1000 if optim_params.analysis_step_type == stent_opt.abaqus_model.step.StepStatic else 250
     floor_chunk_size = math.ceil(FLOOR_ELEMS_IN_MODEL / optim_params.nominal_number_of_patch_elements)
     chunk_size = max(floor_chunk_size, chunk_size_round)  # Don't need to make it too crazy tiny...
     print(f"  Chunk Size [Ideal / Round / Used]: {chunk_size_ideal} / {chunk_size_round} / {chunk_size}")

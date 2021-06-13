@@ -64,7 +64,7 @@ elif psutil.cpu_count(logical=False) == 6:
     # base_working_dir = r"C:\Users\Tom Wilson\Documents\Stent-Opt-Data\StentOpt"
     base_working_dir = r"C:\Simulations\StentOpt"
     fig_size = (900, 500)  # (2000, 1350)
-    n_abaqus_parallel_solves = 2
+    n_abaqus_parallel_solves = 4
 
 else:
     raise ValueError()
@@ -72,7 +72,7 @@ else:
 this_computer = Computer(
     n_cpus_abaqus_explicit=n_cpus,
     n_cpus_abaqus_implicit=1,
-    n_abaqus_parallel_solves=min(4, n_cpus),
+    n_abaqus_parallel_solves=min(4, n_abaqus_parallel_solves),
     n_processes_unlicensed=n_cpus,
     base_working_dir=base_working_dir,
     working_dir=_get_next_free_dir(base_working_dir),
