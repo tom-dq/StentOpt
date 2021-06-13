@@ -369,7 +369,7 @@ def get_top_n_elements_maintaining_edge_connectivity(
             # Put stuff back on the stack - do it in reverse order so the top ranked one ends up on top.
             for reactivated_idx, reactivated_value in reversed(_evolve_decider_sorted_data(back_on_stack_elems, tail, len(back_on_stack_elems))):
                 print(f"  [Conn] reactivating {reactivated_idx}={reactivated_value}.")
-                sorted_data.insert(0, reactivated_idx, reactivated_value)
+                sorted_data.append((reactivated_idx, reactivated_value))
 
         else:
             print(f"  [Conn] {elemIdxCandidate} = {obj_fun_val} not going to  {DEBUG_verb} {elemIdxCandidate} - would create disconnection.")
