@@ -360,7 +360,7 @@ active = OptimParams(
         # score.get_primary_ranking_macro_deformation,
     ],
     final_target_measure_one=history.GlobalStatusType.aggregate_mean,  # Since we're working with the energy density, the mean is the average density of the part.
-    final_target_measure_two=history.GlobalStatusType.aggregate_p_norm_8,
+    final_target_measure_two=None, # history.GlobalStatusType.aggregate_p_norm_8,
     gaussian_sigma=None,  # Was 0.3
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
