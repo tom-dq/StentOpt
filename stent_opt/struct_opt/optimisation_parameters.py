@@ -318,8 +318,8 @@ def _clamp_update(old, new, max_delta):
 
 volume_ratio = VolumeTargetOpts(
     initial_ratio=0.5,
-    final_ratio=0.20,
-    num_iters=50,
+    final_ratio=0.25,
+    num_iters=25,
 )
 
 volume_ratio_v2 = VolumeTargetOpts(
@@ -360,8 +360,8 @@ active = OptimParams(
         # score.get_primary_ranking_macro_deformation,
     ],
     final_target_measure_one=history.GlobalStatusType.aggregate_mean,  # Since we're working with the energy density, the mean is the average density of the part.
-    final_target_measure_two=None, # history.GlobalStatusType.aggregate_p_norm_8,
-    gaussian_sigma=0.3,  # Was 0.3
+    final_target_measure_two=history.GlobalStatusType.aggregate_p_norm_8,
+    gaussian_sigma=0.6,  # Was 0.3
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,

@@ -161,13 +161,14 @@ def primary_composite_stress_peeq_energy(composite_result_helper: CompositeResul
         )
 
 def primary_composite_stress_over_crit(composite_result_helper: CompositeResultHelper) -> typing.Iterable[T_Any_Composite_Res]:
-    """Max( (vM-200)/200, 0.0)"""
+    """Max( 3 * (vM-200)/200, 0.0)"""
 
     high_stress = 200
+    fact = 3.0
     for elem_num in composite_result_helper.get_all_element_nums():
         vM = composite_result_helper.get_last_point(elem_num, db_defs.ElementStress)
 
-        one_val = max(vM-high_stress, 0.0) / high_stress
+        one_val = fact * max(vM-high_stress, 0.0) / high_stress
         yield composite_result_helper.ret_obj(
             frame_rowid=None,
             elem_num=elem_num,
