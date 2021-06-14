@@ -83,7 +83,6 @@ class GlobalStatusType(enum.Enum):
 
         return self.name[len(agg_start):].title()
 
-
     def compute_aggregate(self, elemental_vals: typing.List[float]) -> float:
 
         is_p_norm, maybe_p_norm_val = self.get_p_norm_status()
