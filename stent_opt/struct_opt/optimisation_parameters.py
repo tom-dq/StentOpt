@@ -361,7 +361,7 @@ active = OptimParams(
     ],
     final_target_measure_one=history.GlobalStatusType.aggregate_mean,  # Since we're working with the energy density, the mean is the average density of the part.
     final_target_measure_two=None, # history.GlobalStatusType.aggregate_p_norm_8,
-    gaussian_sigma=None,  # Was 0.3
+    gaussian_sigma=0.3,  # Was 0.3
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
@@ -373,7 +373,7 @@ active = OptimParams(
     analysis_step_type=step.StepDynamicExplicit,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
-    patch_hops=3,
+    patch_hops=2,
     nonlinear_geometry=True,
     nonlinear_material=True,
     patched_elements=common.PatchedElements.all,

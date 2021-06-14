@@ -59,8 +59,8 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-51")
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-125")
 
-# WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-0")
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-262")
+WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-180")
+# WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-262")
 
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOptDesktop\AA-229")
 
@@ -402,7 +402,8 @@ def _contour_build_from_db(stent_params: design.StentParams, iteration_num: int,
     contour_view, elem_data = one_contour_view[0]
     contour_view = contour_view._replace(deformation_view=deformation_view)
 
-    elem_idx_to_value = {elem_num_to_idx[iElem]: val for iElem, val in elem_data.items() if elem_num_to_idx[iElem] in active_elements}
+    # iElem in elem_num_to_idx is for the smoothed results with sym planes, etc.
+    elem_idx_to_value = {elem_num_to_idx[iElem]: val for iElem, val in elem_data.items() if iElem in elem_num_to_idx and elem_num_to_idx[iElem] in active_elements}
 
     node_idx_pos = {node_num_to_idx[iNode]: pos for iNode, pos in node_pos.items()}
     qmesh = make_quadmesh(stent_params, active_elements, node_idx_pos, contour_view, elem_idx_to_value, snapshot.label)
