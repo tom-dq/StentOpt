@@ -55,7 +55,7 @@ elif psutil.cpu_count(logical=False) == 8:
     base_working_dir = r"E:\Simulations\StentOpt"
     # fig_size = (1600, 800)  #  (2000, 1350)
     fig_size = (1800, 900)  #  (2000, 1350)
-    n_abaqus_parallel_solves = 8
+    n_abaqus_parallel_solves = 4
 
 elif psutil.cpu_count(logical=False) == 6:
     # Macbook - just for viewing results at the moment.
@@ -72,7 +72,7 @@ else:
 this_computer = Computer(
     n_cpus_abaqus_explicit=1,
     n_cpus_abaqus_implicit=1,
-    n_abaqus_parallel_solves=min(4, n_abaqus_parallel_solves),
+    n_abaqus_parallel_solves=min(8, n_abaqus_parallel_solves),
     n_processes_unlicensed=n_cpus,
     base_working_dir=base_working_dir,
     working_dir=_get_next_free_dir(base_working_dir),
