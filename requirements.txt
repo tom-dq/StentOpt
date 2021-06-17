@@ -9,3 +9,4 @@ rmsd
 networkx
 pydantic
 solidspy
+selenium

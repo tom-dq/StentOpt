@@ -60,7 +60,7 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-125")
 
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-180")
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-281")
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-285")
 
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOptDesktop\AA-229")
 
@@ -365,10 +365,26 @@ def _make_single_contour(*args, **kwargs) -> holoviews.Overlay:
     metric_name = elemental_metric_selector.value
 
     deformation_view = DeformationView(deformation_view_value)
+
+    one_contour = _contour_build_from_db(stent_params, iteration_num, deformation_view, metric_name)
     print(iteration_num, deformation_view, metric_name)
+    return one_contour
 
-    return _contour_build_from_db(stent_params, iteration_num, deformation_view, metric_name)
+def _make_animation():
+    stent_params = global_hist.get_stent_params()
 
+    # Parameters
+    deformation_view_value = deformation_view_selector.value
+    metric_name = elemental_metric_selector.value
+
+    # deformation_view = DeformationView(deformation_view_value)
+    deformation_view = DeformationView.deformed_active
+
+    for iteration_num in range(_max_dashboard_increment):
+        print(iteration_num)
+        one_contour = _contour_build_from_db(stent_params, iteration_num, deformation_view, metric_name)
+        iter_str = str(iteration_num).rjust(3, "0")
+        holoviews.save(one_contour, fr"C:\Temp\aaaholo\{WORKING_DIR_TEMP.parts[-1]}-{metric_name}-{deformation_view.name}-{iter_str}.png")
 
 @functools.lru_cache(1024)
 def _contour_build_from_db(stent_params: design.StentParams, iteration_num: int, deformation_view: DeformationView, metric_name: str) -> holoviews.Overlay:
@@ -515,6 +531,10 @@ def make_dashboard(working_dir: pathlib.Path):
     cols = panel.Column(dmap, hist_map)
 
     graph_row = panel.Row(cols, controls)
+
+    holoviews.save(dmap, filename=r"c:\temp\aaa.gif", fmt='gif')
+
+    _make_animation()
 
     panel.panel(graph_row).show()
 
