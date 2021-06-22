@@ -2,6 +2,8 @@ import sys
 
 import solidspy
 
+import memory_profiler
+
 import numpy
 
 from stent_opt.struct_opt import patch_manager
@@ -9,6 +11,7 @@ from stent_opt.struct_opt import design
 from stent_opt.struct_opt import construct_model
 
 
+@memory_profiler.profile()
 def patch_matrix_OK(sub_model_info: patch_manager.SubModelInfo):
     """checks if the FE mesh created by the submodel is going to be singular when we try to solve it..."""
 
@@ -33,6 +36,16 @@ def patch_matrix_OK(sub_model_info: patch_manager.SubModelInfo):
 
     if not is_ok:
         print(f"{sub_model_info.reference_elem_num} {sub_model_info.this_trial_active_state} {is_ok_text} cond={cond_num}")
+
+    # Why do I have to do this?
+    del node_mapping
+    del nodes
+    del elements
+    del mats
+    del DME
+    del IBC
+    del neq
+    del KG
 
     return is_ok
 
