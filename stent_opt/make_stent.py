@@ -351,6 +351,7 @@ new_design_trials.append((generation.produce_new_generation, "generation.produce
 
 
 @retry.retry(tries=5, delay=2,)
+@memory_profiler.profile
 def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
     """This returns a new version of the input argument, with info about the children filled in."""
 
@@ -407,7 +408,6 @@ def init(mp_lock):
     lock = mp_lock
 
 
-@memory_profiler.profile
 def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.OptimParams):
     working_dir = pathlib.Path(optim_params.working_dir)
     history_db_fn = history.make_history_db(working_dir)
