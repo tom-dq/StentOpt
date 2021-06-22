@@ -55,7 +55,7 @@ elif psutil.cpu_count(logical=False) == 8:
     base_working_dir = r"E:\Simulations\StentOpt"
     # fig_size = (1600, 800)  #  (2000, 1350)
     fig_size = (1800, 900)  #  (2000, 1350)
-    n_abaqus_parallel_solves = 2
+    n_abaqus_parallel_solves = 4
 
 elif psutil.cpu_count(logical=False) == 6:
     # Macbook - just for viewing results at the moment.

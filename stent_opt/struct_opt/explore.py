@@ -60,13 +60,13 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-125")
 
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-180")
-WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-285")
+WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-292")
 
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOptDesktop\AA-229")
 
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
-STOP_AT_INCREMENT = 1000
+STOP_AT_INCREMENT = 80
 
 
 # Just re-use this around the place so I don't need to open/close the DB all the time... is this a bad idea?
@@ -532,9 +532,9 @@ def make_dashboard(working_dir: pathlib.Path):
 
     graph_row = panel.Row(cols, controls)
 
-    holoviews.save(dmap, filename=r"c:\temp\aaa.gif", fmt='gif')
+    # holoviews.save(dmap, filename=r"c:\temp\aaa.gif", fmt='gif')
 
-    _make_animation()
+    # _make_animation()
 
     panel.panel(graph_row).show()
 
