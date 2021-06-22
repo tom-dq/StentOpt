@@ -11,6 +11,7 @@ import logging
 
 import psutil
 import retry
+import memory_profiler
 
 from stent_opt.struct_opt import design
 from stent_opt.struct_opt import construct_model
@@ -406,7 +407,7 @@ def init(mp_lock):
     lock = mp_lock
 
 
-
+@memory_profiler.profile
 def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.OptimParams):
     working_dir = pathlib.Path(optim_params.working_dir)
     history_db_fn = history.make_history_db(working_dir)
@@ -441,7 +442,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     iter_prev = main_loop_start_i - 1
     previous_max_i = iter_prev
 
-    while True:
+    while iter_prev <= 1:
         # Extract ONE from the previous generation
         one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
         if len(model_info_to_rank) != 1:

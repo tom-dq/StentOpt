@@ -10,3 +10,4 @@ networkx
 pydantic
 solidspy
 selenium
+memory_profiler

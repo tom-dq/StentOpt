@@ -14,6 +14,7 @@ import networkx
 import numpy
 import scipy.ndimage
 import matplotlib.pyplot as plt
+import memory_profiler
 
 import stent_opt.abaqus_model.step
 from stent_opt.odb_interface import datastore, db_defs
@@ -478,6 +479,7 @@ def get_candidate_elements(
     )
 
 
+@memory_profiler.profile
 def evolve_decider(optim_params: optimisation_parameters.OptimParams, design_n_min_1, sensitivity_result, run_one_args_completed: RunOneArgs) -> typing.Set[design.PolarIndex]:
     """Decides which elements are coming in and going out."""
 
@@ -938,6 +940,7 @@ def _get_change_in_overall_objective_from_patches(
     return elem_patch_deltas
 
 
+@memory_profiler.profile
 def process_completed_simulation(run_one_args: RunOneArgs
         ) -> typing.Tuple[design.StentDesign, typing.Dict[patch_manager.SubModelInfoBase, RankingResults]]:
     """Processes the results of a completed simulation and returns its design and results to produce the next iteration."""
@@ -1126,6 +1129,7 @@ T_ProdNewGen = typing.Callable[
     design.StentDesign
 ]
 
+@memory_profiler.profile
 def produce_new_generation(working_dir: pathlib.Path, design_prev: design.StentDesign, ranking_result: RankingResults, run_one_args_completed: RunOneArgs, label: str) -> design.StentDesign:
 
     iter_this = run_one_args_completed.iter_this + 1
