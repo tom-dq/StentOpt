@@ -11,7 +11,7 @@ from stent_opt.struct_opt import design
 from stent_opt.struct_opt import construct_model
 
 
-@memory_profiler.profile()
+# @memory_profiler.profile()
 def patch_matrix_OK(sub_model_info: patch_manager.SubModelInfo):
     """checks if the FE mesh created by the submodel is going to be singular when we try to solve it..."""
 

@@ -179,6 +179,10 @@ class SetBase:
     part: "part.Part"
     name_component: str
 
+    @property
+    def should_produce(self) -> bool:
+        return len(self._entity_numbers()) > 0
+
     @abc.abstractmethod
     def _entity_numbers(self) -> typing.FrozenSet[int]:
         raise NotImplementedError()
@@ -209,8 +213,14 @@ class SetBase:
         key = self.set_type.set_name_key()
         MAX_PER_LINE = 10
 
-        fully_populated_sequence = frozenset(range(min(self._entity_numbers()), max(self._entity_numbers())+1))
-        is_sequential = self._entity_numbers() == fully_populated_sequence
+        ent_nums = self._entity_numbers()
+        if not self.should_produce:
+            # Don't make an empty set - what are we going to use it for???
+            return
+
+        fully_populated_sequence = frozenset(range(min(ent_nums), max(ent_nums)+1))
+
+        is_sequential = self._entity_numbers() == fully_populated_sequence and len(fully_populated_sequence) > 2
         if is_sequential:
 
             yield f"*{key.title()}, {key.lower()}={self.get_name(set_context)}, generate"
@@ -223,6 +233,9 @@ class SetBase:
 
     def reference_part_level_set(self, instance_name: str):
         """Generate the an *Nset which references another *Nset, say."""
+        if not self.should_produce:
+            return
+
         key = self.set_type.set_name_key()
         yield f"*{key.title()}, {key.lower()}={self.get_name(SetContext.assembly)}, instance={instance_name}"
         yield self.get_name(SetContext.part)

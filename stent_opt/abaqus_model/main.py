@@ -127,10 +127,11 @@ class AbaqusModel:
             seen.add(None)
 
             for one_part in self.get_parts():
-                sec_control = one_part.common_section.enhanced_hourglass
-                if sec_control not in seen:
-                    yield sec_control
-                    seen.add(sec_control)
+                if one_part.common_section:
+                    sec_control = one_part.common_section.enhanced_hourglass
+                    if sec_control not in seen:
+                        yield sec_control
+                        seen.add(sec_control)
 
         for sec_control in gen_section_controls():
             yield from sec_control.produce_inp_lines()
@@ -153,9 +154,10 @@ class AbaqusModel:
     def _produce_inp_lines_material(self) -> typing.Iterable[str]:
         yield from base.inp_heading("MATERIALS")
         for one_part in self.get_parts():
-            maybe_material = one_part.common_section.mat
-            if maybe_material:
-                yield from maybe_material.produce_inp_lines()
+            if one_part.common_section:
+                maybe_material = one_part.common_section.mat
+                if maybe_material:
+                    yield from maybe_material.produce_inp_lines()
 
     def _produce_inp_lines_interaction_properties(self) -> typing.Iterable[str]:
         all_int_props = {one_int.int_property for one_int in self.interactions}

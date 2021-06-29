@@ -104,6 +104,12 @@ class InadmissibleRegion(BaseModelForDB):
         return history.nt_from_db_strings(cls, data)
 
 
+class _SpringRegion(BaseModelForDB):
+    min_val_k: float
+    max_val_k: float
+    target_region_k: float
+
+
 class BoundaryCond(BaseModelForDB):
     th_min: float
     th_max: float
@@ -112,7 +118,7 @@ class BoundaryCond(BaseModelForDB):
     bc_th: bool
     bc_z: bool
     load_factor_scale: float  # 0 for unscaled, -1 or 1 to reverse or forward
-    spring_at_min_max_and_overall: typing.Optional[typing.Tuple[float, float, float]]
+    spring_at_min_max_and_overall: typing.Optional[_SpringRegion]
 
     # TODO - step (expand, osc)
     # TODO - static or amplitude or whatever
@@ -120,6 +126,16 @@ class BoundaryCond(BaseModelForDB):
     @property
     def require_offset_nodes_for_spring(self) -> bool:
         return bool(self.spring_at_min_max_and_overall)
+
+    @property
+    def offset_for_spring_nodes(self) -> base.XYZ:
+        along_th = self.th_min != self.th_max
+        along_z = self.z_min != self.z_max
+
+        th_offset = -0.5 if along_z else 0.0
+        z_offset = -0.5 if along_th else 0.0
+
+        return base.XYZ(x=th_offset, y=z_offset, z=0.0)
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
@@ -185,10 +201,10 @@ class BoundaryCond(BaseModelForDB):
             is_in_bounds = lower <= this_ratio <= buffered_upper
 
         # Get the axis factor along this axis
-        how_far_along_bc = (this_ratio-lower) / (upper-lower)
+        den = 0.5 if upper == lower else upper-lower
+        how_far_along_bc = (this_ratio-lower) / den
         if self.spring_at_min_max_and_overall:
-            sp_min, sp_max, _ = self.spring_at_min_max_and_overall
-            single_axis_ratio = sp_min + (sp_max-sp_min) * how_far_along_bc
+            single_axis_ratio = self.spring_at_min_max_and_overall.min_val_k + (self.spring_at_min_max_and_overall.max_val_k - self.spring_at_min_max_and_overall.min_val_k) * how_far_along_bc
 
         else:
             single_axis_ratio = 1.0
@@ -465,22 +481,23 @@ class StentDesign(typing.NamedTuple):
         # Since the element spans z -> z+1, just take min from here...
         return min(idx.Z for idx in self.active_elements)
 
-    def get_boundary_conds_to_node_to_stiffness(self) -> typing.Dict[BoundaryCond, typing.Dict[PolarIndex, float]]:
+    def get_boundary_conds_to_node_to_stiffness(self) -> typing.Dict[BoundaryCond, typing.List[typing.Tuple[int, PolarIndex, float]]]:
         """For each boundary condition, normalised spring stiffness"""
 
         out_dict = {}
 
         all_nodes = generate_node_indices(self.stent_params.divs)
-        admissible_nodes = {node_idx: iNode for iNode, node_idx in all_nodes if self.stent_params.node_polar_index_admissible(node_idx)}
+        admissible_nodes = {iNode: node_idx for iNode, node_idx in all_nodes if self.stent_params.node_polar_index_admissible(node_idx)}
 
         spring_bcs = [bc for bc in self.stent_params.boundary_conds if bc.require_offset_nodes_for_spring]
 
         edge_theta = (0, self.stent_params.get_x_index_sym_plane())
         edge_z = (0, self.stent_params.get_y_index_sym_plane())
 
+        EPS = 1e-8
+
         for bc in spring_bcs:
-            node_idxs_in_bc_raw = dict()
-            _, _, target_overall = bc.spring_at_min_max_and_overall
+            node_idxs_in_bc_raw = list()
             for iNode, node_idx in admissible_nodes.items():
 
                 is_corner_node = node_idx.Th in edge_theta and node_idx.Z in edge_z
@@ -488,14 +505,19 @@ class StentDesign(typing.NamedTuple):
 
                 is_in_bc, spring_factor = bc.contains_polar_index_and_ratio(self.stent_params, node_idx)
                 if is_in_bc:
-                    node_idxs_in_bc_raw[node_idx] = spring_factor * edge_corner_factor
+                    node_idxs_in_bc_raw.append( (iNode, node_idx, spring_factor * edge_corner_factor) )
 
             # Normalise the contributions to the target stiffness
-            total_raw = sum(node_idxs_in_bc_raw.values())
+            just_facts = (fact for _, _, fact in node_idxs_in_bc_raw)
+            total_raw = sum(just_facts)
 
-            scaled_factors = {node_idx: target_overall * raw_factor / total_raw for node_idx, raw_factor in node_idxs_in_bc_raw.items()}
+            scaled_squeezed_factors = []
+            for iNode, node_idx, raw_factor in node_idxs_in_bc_raw:
+                scaled_fact = bc.spring_at_min_max_and_overall.target_region_k * raw_factor / total_raw
+                if scaled_fact > EPS:
+                    scaled_squeezed_factors.append((iNode, node_idx, scaled_fact))
 
-            out_dict[bc] = scaled_factors
+            out_dict[bc] = scaled_squeezed_factors
 
         return out_dict
 
@@ -1553,12 +1575,15 @@ bc_cent_bottom_20pc_A = BoundaryCond(th_min=0.0, th_max=0.1, z_min=0.0, z_max=0.
 bc_cent_bottom_20pc_B = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.2, bc_th=True, bc_z=False, load_factor_scale=0)  # Twice as much for sym
 bc_simon = (bc_cent_bottom_20pc_A, bc_cent_bottom_20pc_B, bc_cent_load_enf_disp)
 
+_spring_corner = _SpringRegion(min_val_k=1.0, max_val_k=0.0, target_region_k=50.0)
+bc_simon_spring = (bc_cent_load_enf_disp, bc_cent_bottom_20pc_A.copy_with_updates(spring_at_min_max_and_overall=_spring_corner), bc_cent_bottom_20pc_B.copy_with_updates(spring_at_min_max_and_overall=_spring_corner))
+
 dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=70,  # 20
-        Z=35,  # 80
+        Th=20,  # 20
+        Z=10,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1592,7 +1617,7 @@ dylan_r10n1_params = StentParams(
             z_max=2.25,
         )
     ],
-    boundary_conds=bc_simon,
+    boundary_conds=bc_simon_spring,
     end_connection_length_ratio=0.3,
     whole_left_side_restrained=True,
     sym_x=True,

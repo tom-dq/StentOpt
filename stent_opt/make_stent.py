@@ -356,7 +356,7 @@ def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generat
 
 
 @retry.retry(tries=5, delay=2,)
-@memory_profiler.profile
+# @memory_profiler.profile
 def _process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
     """This returns a new version of the input argument, with info about the children filled in."""
 

@@ -5,7 +5,7 @@ from stent_opt.abaqus_model import node, base, material, element, section
 
 class Part:
     name: str
-    common_section: section.SectionBase
+    common_section: typing.Optional[section.SectionBase]
     nodes: "node.Nodes"
     elements: element.Elements
     node_sets: typing.Dict[str, "node.NodeSet"]
@@ -13,7 +13,7 @@ class Part:
     transform_to_cyl: bool
     _EVERYTHING_NAME = "Everything"
 
-    def __init__(self, name: str, common_section: section.SectionBase, transform_to_cyl: bool):
+    def __init__(self, name: str, common_section: typing.Optional[section.SectionBase], transform_to_cyl: bool):
         self.name = name
         self.common_section = common_section
         self.transform_to_cyl = transform_to_cyl
@@ -103,7 +103,8 @@ class Part:
         all_elem_set = self.get_everything_set(base.SetType.element)
         all_elem_set_name = all_elem_set.get_name(set_context)
 
-        yield from self.common_section.produce_inp_lines(all_elem_set)
+        if self.common_section:
+            yield from self.common_section.produce_inp_lines(all_elem_set)
 
     def get_used_node_nums(self) -> typing.FrozenSet[int]:
         used_node_nums = set()
