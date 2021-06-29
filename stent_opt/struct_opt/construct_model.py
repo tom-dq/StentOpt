@@ -26,7 +26,8 @@ def get_boundary_node_set_2d(
         return
 
     for bc_logical in stent_params.boundary_conds:
-        if bc_logical.contains_polar_index(stent_params, node_idx):
+        contains_idx, _ = bc_logical.contains_polar_index_and_ratio(stent_params, node_idx)
+        if contains_idx:
             yield design.NodeSetName(bc_logical.bc_name)
 
     min_idx_z = reference_stent_design.get_min_idx_z()
@@ -57,7 +58,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
 
     model = main.AbaqusModel("StentModel", abaqus_history_time_interval=optim_params.get_abaqus_history_time_interval())
 
-    reference_stent_design = sub_model_infos[0].stent_design
+    reference_stent_design: design.StentDesign = sub_model_infos[0].stent_design
 
     element_dimensions = reference_stent_design.stent_params.stent_element_dimensions
     node_num_idx_pos = design.generate_nodes(reference_stent_design.stent_params)
@@ -269,6 +270,10 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
         one_instance = instance.Instance(base_part=cyl_inner_part)
 
         model.add_instance(one_instance)
+
+    def make_offset_anchors():
+        """Just some stray nodes to connect the main part to for restraints"""
+        for bc in reference_stent_design.
 
     make_stent_part()
 

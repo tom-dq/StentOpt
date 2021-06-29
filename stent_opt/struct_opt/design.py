@@ -112,8 +112,14 @@ class BoundaryCond(BaseModelForDB):
     bc_th: bool
     bc_z: bool
     load_factor_scale: float  # 0 for unscaled, -1 or 1 to reverse or forward
+    spring_at_min_max_and_overall: typing.Optional[typing.Tuple[float, float, float]]
+
     # TODO - step (expand, osc)
     # TODO - static or amplitude or whatever
+
+    @property
+    def require_offset_nodes_for_spring(self) -> bool:
+        return bool(self.spring_at_min_max_and_overall)
 
     def to_db_strings(self):
         yield from history.nt_to_db_strings(self)
@@ -163,28 +169,43 @@ class BoundaryCond(BaseModelForDB):
         if self.bc_z:
             yield 2
 
-    @staticmethod
-    def _is_in_bounds(lower: float, upper: float, this_idx: int, max_idx: int) -> bool:
+    def _is_in_bounds(self, lower: float, upper: float, this_idx: int, max_idx: int) -> typing.Tuple[bool, float]:
 
         buffered_upper = upper + 1e-4 if math.isclose(upper, 1.0) else upper
 
         this_ratio = this_idx / max_idx
 
+        is_in_bounds = None
         if math.isclose(lower, upper):
             # Special case to make suer we don't miss a 0->0 or whatever.
             if math.isclose(this_ratio, lower):
-                return True
+                is_in_bounds = True
 
-        return lower <= this_ratio <= buffered_upper
+        if is_in_bounds is None:
+            is_in_bounds = lower <= this_ratio <= buffered_upper
 
-    def contains_polar_index(self, stent_param: "StentParams", node_idx: PolarIndex) -> bool:
-        if not self._is_in_bounds(self.th_min, self.th_max, node_idx.Th, stent_param.divs.Th):
-            return False
+        # Get the axis factor along this axis
+        how_far_along_bc = (this_ratio-lower) / (upper-lower)
+        if self.spring_at_min_max_and_overall:
+            sp_min, sp_max, _ = self.spring_at_min_max_and_overall
+            single_axis_ratio = sp_min + (sp_max-sp_min) * how_far_along_bc
 
-        if not self._is_in_bounds(self.z_min, self.z_max, node_idx.Z, stent_param.divs.Z):
-            return False
+        else:
+            single_axis_ratio = 1.0
 
-        return True
+        return is_in_bounds, single_axis_ratio
+
+
+    def contains_polar_index_and_ratio(self, stent_param: "StentParams", node_idx: PolarIndex) -> typing.Tuple[bool, float]:
+        is_in_bounds_th, single_axis_ratio_th = self._is_in_bounds(self.th_min, self.th_max, node_idx.Th, stent_param.divs.Th)
+        if not is_in_bounds_th:
+            return False, 1.0
+
+        is_in_bounds_z, single_axis_ratio_z = self._is_in_bounds(self.z_min, self.z_max, node_idx.Z, stent_param.divs.Z)
+        if not is_in_bounds_z:
+            return False, 1.0
+
+        return True, single_axis_ratio_th * single_axis_ratio_z
 
 
 
@@ -443,6 +464,45 @@ class StentDesign(typing.NamedTuple):
 
         # Since the element spans z -> z+1, just take min from here...
         return min(idx.Z for idx in self.active_elements)
+
+    def get_boundary_conds_to_node_to_stiffness(self) -> typing.Dict[BoundaryCond, typing.Dict[PolarIndex, float]]:
+        """For each boundary condition, normalised spring stiffness"""
+
+        out_dict = {}
+
+        all_nodes = generate_node_indices(self.stent_params.divs)
+        admissible_nodes = {node_idx: iNode for iNode, node_idx in all_nodes if self.stent_params.node_polar_index_admissible(node_idx)}
+
+        spring_bcs = [bc for bc in self.stent_params.boundary_conds if bc.require_offset_nodes_for_spring]
+
+        edge_theta = (0, self.stent_params.get_x_index_sym_plane())
+        edge_z = (0, self.stent_params.get_y_index_sym_plane())
+
+        for bc in spring_bcs:
+            node_idxs_in_bc_raw = dict()
+            _, _, target_overall = bc.spring_at_min_max_and_overall
+            for iNode, node_idx in admissible_nodes.items():
+
+                is_corner_node = node_idx.Th in edge_theta and node_idx.Z in edge_z
+                edge_corner_factor = 0.5 if is_corner_node else 1.0
+
+                is_in_bc, spring_factor = bc.contains_polar_index_and_ratio(self.stent_params, node_idx)
+                if is_in_bc:
+                    node_idxs_in_bc_raw[node_idx] = spring_factor * edge_corner_factor
+
+            # Normalise the contributions to the target stiffness
+            total_raw = sum(node_idxs_in_bc_raw.values())
+
+            scaled_factors = {node_idx: target_overall * raw_factor / total_raw for node_idx, raw_factor in node_idxs_in_bc_raw.items()}
+
+            out_dict[bc] = scaled_factors
+
+        return out_dict
+
+
+
+
+
 
 def node_to_elem_design_space(divs: PolarIndex) -> PolarIndex:
     return PolarIndex(

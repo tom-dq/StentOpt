@@ -277,7 +277,8 @@ def get_top_n_elements_maintaining_edge_connectivity(
         for node_idx in sorted(node_working_set):
             bcs_hit_by_node = []
             for bc in bcs_not_yet_hit:
-                if bc.contains_polar_index(stent_params, node_idx):
+                contains_idx, _ = bc.contains_polar_index_and_ratio(stent_params, node_idx)
+                if contains_idx:
                     bcs_hit_by_node.append(bc)
 
             for bc in bcs_hit_by_node:
