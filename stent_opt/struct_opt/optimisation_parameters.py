@@ -318,7 +318,7 @@ def _clamp_update(old, new, max_delta):
 
 volume_ratio = VolumeTargetOpts(
     initial_ratio=0.5,
-    final_ratio=0.25,
+    final_ratio=0.195,  # Simon target
     num_iters=25,
 )
 
@@ -360,22 +360,22 @@ active = OptimParams(
         # score.get_primary_ranking_macro_deformation,
     ],
     final_target_measure_one=history.GlobalStatusType.aggregate_mean,  # Since we're working with the energy density, the mean is the average density of the part.
-    final_target_measure_two=history.GlobalStatusType.aggregate_p_norm_8,
-    gaussian_sigma=0.6,  # Was 0.3
+    final_target_measure_two=None, #history.GlobalStatusType.aggregate_p_norm_8,
+    gaussian_sigma=0.15,  # Was 0.3
     local_deformation_stencil_length=0.1,
     working_dir=r"c:\temp\ABCDE",
     use_double_precision=False,
-    abaqus_output_time_interval=0.005,  # Was 0.1
+    abaqus_output_time_interval=0.02,  # Was 0.1
     abaqus_target_increment=1e-6,  # 1e-6
-    time_expansion=0.2,  # Was 2.0
+    time_expansion=0.5,  # Was 2.0, 0.2 seems OK as well
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
-    analysis_step_type=step.StepDynamicExplicit,
+    analysis_step_type=step.StepStatic,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
     patch_hops=2,
-    nonlinear_geometry=True,
-    nonlinear_material=True,
+    nonlinear_geometry=False,
+    nonlinear_material=False,
     patched_elements=common.PatchedElements.all,
     one_elem_per_patch=False,
     filter_singular_patches=True,

@@ -14,6 +14,7 @@ import networkx
 import numpy
 import scipy.ndimage
 import matplotlib.pyplot as plt
+import memory_profiler
 
 import stent_opt.abaqus_model.step
 from stent_opt.odb_interface import datastore, db_defs
@@ -1126,6 +1127,7 @@ T_ProdNewGen = typing.Callable[
     [pathlib.Path, design.StentDesign, RankingResults, int, str],
     design.StentDesign
 ]
+
 
 def produce_new_generation(working_dir: pathlib.Path, design_prev: design.StentDesign, ranking_result: RankingResults, run_one_args_completed: RunOneArgs, label: str) -> design.StentDesign:
 

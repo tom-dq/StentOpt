@@ -11,6 +11,7 @@ import logging
 
 import psutil
 import retry
+import memory_profiler
 
 from stent_opt.struct_opt import design
 from stent_opt.struct_opt import construct_model
@@ -349,8 +350,14 @@ new_design_trials.append((generation.produce_new_generation, "generation.produce
 # print(f"Doing {len(new_design_trials)} trails each time...")
 
 
-@retry.retry(tries=5, delay=2,)
 def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
+    # Just a wrapper so we can profile this
+    return _process_pool_run_and_process(run_one_args)
+
+
+@retry.retry(tries=5, delay=2,)
+@memory_profiler.profile
+def _process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
     """This returns a new version of the input argument, with info about the children filled in."""
 
     example_stem = history.make_fn_alone_stem(run_one_args.iter_this, run_one_args.patch_suffix)
@@ -406,7 +413,6 @@ def init(mp_lock):
     lock = mp_lock
 
 
-
 def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.OptimParams):
     working_dir = pathlib.Path(optim_params.working_dir)
     history_db_fn = history.make_history_db(working_dir)
@@ -441,7 +447,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     iter_prev = main_loop_start_i - 1
     previous_max_i = iter_prev
 
-    while True:
+    while iter_prev < 1:
         # Extract ONE from the previous generation
         one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
         if len(model_info_to_rank) != 1:
