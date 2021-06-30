@@ -99,7 +99,6 @@ class AbaqusModel:
         yield from self._produce_inp_lines_assembly()
         yield from self._product_inp_lines_section_control()
         yield from self._produce_inp_lines_amplitude()
-        yield from self._produce_inp_lines_spring()
         yield from self._produce_inp_lines_material()
         yield from self._produce_inp_lines_interaction_properties()
         yield from self._produce_inp_lines_boundary()
@@ -124,6 +123,8 @@ class AbaqusModel:
 
         for one_instance in self.instances.values():
             yield from one_instance.produce_equation_inp_line()
+
+        yield from self._produce_inp_lines_spring()
 
         yield "*End Assembly"
 

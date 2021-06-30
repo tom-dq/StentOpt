@@ -39,11 +39,15 @@ class PatchManager:
         for node_pos in node_pos_rows:
             self.nodes_we_have_results_for.add(node_pos.node_num)
             simulation_time = frame_rowid_to_total_time[node_pos.frame_rowid]
-            node_initial_pos = self.node_num_to_pos[node_pos.node_num]
-            for dof, val in ( (X, node_pos.X - node_initial_pos.x), (Y, node_pos.Y - node_initial_pos.y) ):
-                key = (node_pos.node_num, dof)
-                pair = (simulation_time, val)
-                self.node_dof_to_list[key].append(pair)
+
+            # Skip the anchor nodes
+            is_real_node = node_pos.node_num in self.node_num_to_pos
+            if is_real_node:
+                node_initial_pos = self.node_num_to_pos[node_pos.node_num]
+                for dof, val in ( (X, node_pos.X - node_initial_pos.x), (Y, node_pos.Y - node_initial_pos.y) ):
+                    key = (node_pos.node_num, dof)
+                    pair = (simulation_time, val)
+                    self.node_dof_to_list[key].append(pair)
 
     def _ordered_without_dupes(self, node_num: int, dof: int) -> T_DataList:
 

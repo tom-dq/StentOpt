@@ -79,6 +79,7 @@ def _produce_nodes_with_gaps_in_numbers(sub_model_info: patch_manager.SubModelIn
 
             # Restrained if ordained by the global model
             for global_node_set in construct_model.get_boundary_node_set_2d(
+                    treat_spring_boundary_as_fixed=True,
                     submodel_boundary_nodes=sub_model_info.boundary_node_nums,
                     stent_params=sub_model_info.stent_design.stent_params,
                     reference_stent_design=sub_model_info.stent_design,

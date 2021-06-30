@@ -645,9 +645,10 @@ class GlobalNodeSetNames(enum.Enum):
     PlanarStentZMin = enum.auto()
     PlanarStentXSymPlane = enum.auto()
     PlanarStentYSymPlane = enum.auto()
+    AnchorNodes = enum.auto()
 
     def planar_x_is_constrained(self) -> bool:
-        if self in (GlobalNodeSetNames.PlanarStentTheta0, GlobalNodeSetNames.PlanarStentThetaMax, GlobalNodeSetNames.PlanarStentXSymPlane):
+        if self in (GlobalNodeSetNames.PlanarStentTheta0, GlobalNodeSetNames.PlanarStentThetaMax, GlobalNodeSetNames.PlanarStentXSymPlane, GlobalNodeSetNames.AnchorNodes):
             return True
 
         elif self in (GlobalNodeSetNames.PlanarStentZMin, GlobalNodeSetNames.PlanarStentYSymPlane):
@@ -660,7 +661,7 @@ class GlobalNodeSetNames(enum.Enum):
         if self in (GlobalNodeSetNames.PlanarStentTheta0, GlobalNodeSetNames.PlanarStentThetaMax, GlobalNodeSetNames.PlanarStentXSymPlane):
             return False
 
-        elif self in (GlobalNodeSetNames.PlanarStentZMin, GlobalNodeSetNames.PlanarStentYSymPlane):
+        elif self in (GlobalNodeSetNames.PlanarStentZMin, GlobalNodeSetNames.PlanarStentYSymPlane, GlobalNodeSetNames.AnchorNodes):
             return True
 
         else:
@@ -1582,8 +1583,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=20,  # 20
-        Z=10,  # 80
+        Th=50,  # 20
+        Z=25,  # 80
     ),
     r_min=0.65,
     r_max=0.75,

@@ -14,6 +14,7 @@ from stent_opt.struct_opt import patch_manager
 
 
 def get_boundary_node_set_2d(
+        treat_spring_boundary_as_fixed: bool, # For singularity testings purposes, treat a spring in X the same as fixed in X
         submodel_boundary_nodes: typing.Set[int],
         stent_params: StentParams,
         reference_stent_design: StentDesign,
@@ -27,9 +28,11 @@ def get_boundary_node_set_2d(
         return
 
     for bc_logical in stent_params.boundary_conds:
-        contains_idx, _ = bc_logical.contains_polar_index_and_ratio(stent_params, node_idx)
-        if contains_idx:
-            yield design.NodeSetName(bc_logical.bc_name)
+        is_fixed_boundary = not bc_logical.require_offset_nodes_for_spring
+        if is_fixed_boundary or treat_spring_boundary_as_fixed:
+            contains_idx, _ = bc_logical.contains_polar_index_and_ratio(stent_params, node_idx)
+            if contains_idx:
+                yield design.NodeSetName(bc_logical.bc_name)
 
     min_idx_z = reference_stent_design.get_min_idx_z()
 
@@ -169,10 +172,41 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
             else:
                 min_idx_z = None
 
+
+            # make_offset_anchors_and_springs - just some stray nodes to connect the main part to for restraints
+            used_nodes = stent_part.get_used_node_nums()
+
+            # Each spring boundary condition has its own part
+            bc_and_node_to_k = reference_stent_design.get_boundary_conds_to_node_to_stiffness()
+
+            anchor_nodes = set()
+
+            for sub_model_info in sub_model_infos:
+                anchor_node_gen = itertools.count(
+                    start=sub_model_info.stent_design.stent_params.divs.fully_populated_node_count() + sub_model_info.node_elem_offset + 1)
+                for bc, node_to_k in bc_and_node_to_k.items():
+                    this_offset = bc.offset_for_spring_nodes
+                    for iNode, node_idx, k in node_to_k:
+                        iNodeOffset = iNode + sub_model_info.node_elem_offset
+                        if iNode in used_nodes:
+                            # Make the anchor node
+                            iNodeAnchor = next(anchor_node_gen)
+                            orig_model_xyz = stent_part.nodes[iNodeOffset]
+                            stent_part.add_node_validated(iNodeAnchor, this_offset + orig_model_xyz, node_elem_offset=0)
+                            anchor_nodes.add(iNodeAnchor)
+                            # Make the spring
+                            one_spring = spring.SpringA(inst1=one_instance, inst2=one_instance, n1=iNodeOffset, n2=iNodeAnchor, k=k)
+                            model.add_spring(one_spring)
+
+            if anchor_nodes:
+                anchor_node_set = node.NodeSet(stent_part, GlobalNodeSetNames.AnchorNodes.name, frozenset(anchor_nodes))
+                stent_part.add_node_set(anchor_node_set)
+
             boundary_set_name_to_nodes = collections.defaultdict(set)
             for iNodeModel, (iNodeFull, idx) in node_num_patch_to_global_and_polar_index.items():
                 if iNodeModel in used_node_nums:
                     for node_set_name in get_boundary_node_set_2d(
+                            False,
                             submodel_boundary_nodes,
                             stent_params,
                             reference_stent_design,
@@ -272,33 +306,8 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
 
         model.add_instance(one_instance)
 
-    def make_offset_anchors_and_springs():
-        """Just some stray nodes to connect the main part to for restraints"""
-        stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
-        stent_part = stent_instance.base_part
-        used_nodes = stent_part.get_used_node_nums()
-
-        # Each spring boundary condition has its own part
-        bc_and_node_to_k = reference_stent_design.get_boundary_conds_to_node_to_stiffness()
-
-        for sub_model_info in sub_model_infos:
-            anchor_node_gen = itertools.count(start=sub_model_info.stent_design.stent_params.divs.fully_populated_node_count() + sub_model_info.node_elem_offset + 1)
-            for bc, node_to_k in bc_and_node_to_k.items():
-                this_offset = bc.offset_for_spring_nodes
-                for iNode, node_idx, k in node_to_k:
-                    iNodeOffset = iNode + sub_model_info.node_elem_offset
-                    if iNode in used_nodes:
-                        # Make the anchor node
-                        iNodeAnchor = next(anchor_node_gen)
-                        orig_model_xyz = stent_part.nodes[iNodeOffset]
-                        stent_part.add_node_validated(iNodeAnchor, this_offset + orig_model_xyz, node_elem_offset=0)
-
-                        # Make the spring
-                        one_spring = spring.SpringA(inst1=stent_instance, inst2=stent_instance, n1=iNodeOffset, n2=iNodeAnchor, k=k)
-                        model.add_spring(one_spring)
 
     make_stent_part()
-    make_offset_anchors_and_springs()
 
     if stent_params.actuation == Actuation.balloon:
         make_balloon_part()
@@ -571,6 +580,16 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
         sym_y_bc = _build_bound_disp_rot_if_nodes_found(stent_part, "SymY", [(GlobalNodeSetNames.PlanarStentYSymPlane, 2, 0.0)], None)
         if sym_y_bc: model.add_load_specific_steps(model.steps, sym_y_bc)
 
+    if GlobalNodeSetNames.AnchorNodes.name in stent_part.node_sets:
+        anchors = boundary_condition.BoundaryDispRot(
+            name="Anchor",
+            with_amplitude=None,
+            components=(
+                boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.AnchorNodes.name], dof=1, value=0.0),
+                boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.AnchorNodes.name], dof=2, value=0.0),
+            ),
+        )
+        model.add_load_specific_steps([model.steps[0]], anchors)
 
     if optim_params.release_stent_after_expansion:
         # Rebound pressure (kind of like the blood vessel squeezing in).
