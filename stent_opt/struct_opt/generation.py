@@ -773,7 +773,9 @@ def prepare_patch_models(working_dir: pathlib.Path, optim_params: optimisation_p
     }
 
     # Get the offsets for node and element numbers. If the max nodes are 2345, go in steps of 10000
-    delta_offset = 10 ** (len(str(stent_params.divs.fully_populated_node_count())))
+    anchor_nodes = sum(len(data) for data in design_n_min_1.get_boundary_conds_to_node_to_stiffness().values())
+    need_space_for_nodes = stent_params.divs.fully_populated_node_count() + anchor_nodes + 10
+    delta_offset = 10 ** (len(str(need_space_for_nodes)))
     offset_counter = itertools.count(delta_offset, delta_offset)
 
     graph = element_bucket.build_graph(element_bucket.GraphEdgeEntity.node, graph_fe_elems.values())

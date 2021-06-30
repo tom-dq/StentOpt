@@ -1,10 +1,12 @@
-
+import collections
+import itertools
 import typing
 
 import stent_opt.abaqus_model.base
 from stent_opt.abaqus_model import amplitude, base, step, load, instance, part
 from stent_opt.abaqus_model import surface, element, output_requests, interaction
 from stent_opt.abaqus_model import boundary_condition
+from stent_opt.abaqus_model import spring
 
 
 class AbaqusModel:
@@ -16,6 +18,7 @@ class AbaqusModel:
     boundary_conditions: typing.Set[boundary_condition.BoundaryBase]
     abaqus_output_time_interval: float
     abaqus_target_increment: float
+    springs: typing.Set[spring.SpringA]
 
     _main_sep_line: str = "** -----------------------------"
 
@@ -26,6 +29,7 @@ class AbaqusModel:
         self.step_loads = set()
         self.interactions = set()
         self.boundary_conditions = set()
+        self.springs = set()
         self.abaqus_output_time_interval = 0.1
         self.abaqus_history_time_interval = abaqus_history_time_interval
         self.abaqus_target_increment = 1e-5
@@ -57,6 +61,9 @@ class AbaqusModel:
 
             if one_step not in self.steps:
                 raise ValueError(f"Did not find {one_step} in AbaqusModel.steps")
+
+    def add_spring(self, one_spring: spring.SpringA):
+        self.springs.add(one_spring)
 
     def get_parts(self) -> typing.Iterable[ part.Part]:
         """Iterate through the parts referenced by any instance in the model."""
@@ -92,6 +99,7 @@ class AbaqusModel:
         yield from self._produce_inp_lines_assembly()
         yield from self._product_inp_lines_section_control()
         yield from self._produce_inp_lines_amplitude()
+        yield from self._produce_inp_lines_spring()
         yield from self._produce_inp_lines_material()
         yield from self._produce_inp_lines_interaction_properties()
         yield from self._produce_inp_lines_boundary()
@@ -279,6 +287,25 @@ class AbaqusModel:
 
             active_at_last_step = active_at_this_step
 
+    def _produce_inp_lines_spring(self):
+        # Use a single property for each spring stiffness
+        k_to_springs = collections.defaultdict(set)
+
+        for one_spring in self.springs:
+            k_to_springs[one_spring.k].add(one_spring)
+
+        def spring_sort(one_spring: spring.SpringA):
+            return one_spring.inst1.name, one_spring.inst2.name, one_spring.n1, one_spring.n2, one_spring.k
+
+        next_spring_counter = itertools.count(start=1)
+        for idx, (k, springs) in enumerate(sorted(k_to_springs.items())):
+            elset_name = f"Springs/Dashpots-{idx}-spring"
+            yield f"*Spring, elset={elset_name}"
+            yield ""
+            yield base.abaqus_float(k)
+            yield f"*Element, type=SpringA, elset={elset_name}"
+            for one_spring in sorted(springs, key=spring_sort):
+                yield f"{next(next_spring_counter)}, {one_spring.inst1.name}.{one_spring.n1}, {one_spring.inst2.name}.{one_spring.n2}"
 
 def make_test_model() -> AbaqusModel:
 

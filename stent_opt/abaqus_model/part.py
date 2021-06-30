@@ -31,6 +31,9 @@ class Part:
         if not isinstance(node, base.XYZ):
             raise ValueError(node)
 
+        if iNode + node_elem_offset in self.nodes:
+            raise ValueError("Overwriting node?")
+
         self.nodes[iNode + node_elem_offset] = node
 
     def add_element_validate(self, iElem: int, in_element: element.Element, node_elem_offset: int = 0):

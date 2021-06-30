@@ -1,10 +1,11 @@
 import collections
+import itertools
 import statistics
 import typing
 
 import stent_opt.struct_opt.design
 from stent_opt.abaqus_model import main, material, section, part, instance, node, element, surface, amplitude, \
-    boundary_condition, load, step, interaction_property, interaction, base
+    boundary_condition, load, step, interaction_property, interaction, base, spring
 from stent_opt.struct_opt import optimisation_parameters, design
 from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalNodeSetNames, Actuation, StentParams, \
     GlobalSurfNames
@@ -271,41 +272,33 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
 
         model.add_instance(one_instance)
 
-    def make_offset_anchors():
+    def make_offset_anchors_and_springs():
         """Just some stray nodes to connect the main part to for restraints"""
-        # TODO - make this all the same part? Or add the springs as see how that goes?
         stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
         stent_part = stent_instance.base_part
         used_nodes = stent_part.get_used_node_nums()
 
         # Each spring boundary condition has its own part
         bc_and_node_to_k = reference_stent_design.get_boundary_conds_to_node_to_stiffness()
-        bc_to_part = dict()
-        for bc in bc_and_node_to_k.keys():
-            bc_anchor_part = part.Part(
-                name=f"Part-{bc.bc_name}",
-                common_section=None,
-                transform_to_cyl=False,
-            )
-            bc_to_part[bc] = bc_anchor_part
 
         for sub_model_info in sub_model_infos:
-            for bc, node_to_k in sub_model_info.stent_design.get_boundary_conds_to_node_to_stiffness().items():
-                this_bc_part = bc_to_part[bc]
+            anchor_node_gen = itertools.count(start=sub_model_info.stent_design.stent_params.divs.fully_populated_node_count() + sub_model_info.node_elem_offset + 1)
+            for bc, node_to_k in bc_and_node_to_k.items():
                 this_offset = bc.offset_for_spring_nodes
                 for iNode, node_idx, k in node_to_k:
                     iNodeOffset = iNode + sub_model_info.node_elem_offset
                     if iNode in used_nodes:
+                        # Make the anchor node
+                        iNodeAnchor = next(anchor_node_gen)
                         orig_model_xyz = stent_part.nodes[iNodeOffset]
-                        this_bc_part.add_node_validated(iNodeOffset, this_offset + orig_model_xyz, node_elem_offset=0)
+                        stent_part.add_node_validated(iNodeAnchor, this_offset + orig_model_xyz, node_elem_offset=0)
 
-        for bc, bc_part in bc_to_part.items():
-            if bc_part.nodes:
-                bc_instance = instance.Instance(base_part=bc_part)
-                model.add_instance(bc_instance)
+                        # Make the spring
+                        one_spring = spring.SpringA(inst1=stent_instance, inst2=stent_instance, n1=iNodeOffset, n2=iNodeAnchor, k=k)
+                        model.add_spring(one_spring)
 
     make_stent_part()
-    make_offset_anchors()
+    make_offset_anchors_and_springs()
 
     if stent_params.actuation == Actuation.balloon:
         make_balloon_part()
