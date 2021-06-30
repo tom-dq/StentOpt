@@ -189,7 +189,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
                     this_offset = bc.offset_for_spring_nodes
                     for iNode, node_idx, k in node_to_k:
                         iNodeOffset = iNode + sub_model_info.node_elem_offset
-                        if iNode in used_nodes:
+                        if iNodeOffset in used_nodes:
                             # Make the anchor node
                             iNodeAnchor = next(anchor_node_gen)
                             orig_model_xyz = stent_part.nodes[iNodeOffset]
