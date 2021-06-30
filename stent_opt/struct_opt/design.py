@@ -1576,7 +1576,7 @@ bc_cent_bottom_20pc_A = BoundaryCond(th_min=0.0, th_max=0.1, z_min=0.0, z_max=0.
 bc_cent_bottom_20pc_B = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.2, bc_th=True, bc_z=False, load_factor_scale=0)  # Twice as much for sym
 bc_simon = (bc_cent_bottom_20pc_A, bc_cent_bottom_20pc_B, bc_cent_load_enf_disp)
 
-_spring_corner = _SpringRegion(min_val_k=1.0, max_val_k=0.0, target_region_k=50.0)
+_spring_corner = _SpringRegion(min_val_k=1.0, max_val_k=0.0, target_region_k=100000.0)
 bc_simon_spring = (bc_cent_load_enf_disp, bc_cent_bottom_20pc_A.copy_with_updates(spring_at_min_max_and_overall=_spring_corner), bc_cent_bottom_20pc_B.copy_with_updates(spring_at_min_max_and_overall=_spring_corner))
 
 dylan_r10n1_params = StentParams(

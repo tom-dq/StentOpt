@@ -12,6 +12,7 @@ from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalNode
 
 from stent_opt.struct_opt import patch_manager
 
+# TODO - the spring boundary condition is not working in the submodels - need to see what's causing that!!
 
 def get_boundary_node_set_2d(
         treat_spring_boundary_as_fixed: bool, # For singularity testings purposes, treat a spring in X the same as fixed in X
