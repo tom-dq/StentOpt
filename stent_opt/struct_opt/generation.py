@@ -19,7 +19,7 @@ import memory_profiler
 import stent_opt.abaqus_model.step
 from stent_opt.odb_interface import datastore, db_defs
 from stent_opt.abaqus_model import base
-from stent_opt.struct_opt import design, display, score, history, optimisation_parameters
+from stent_opt.struct_opt import design, display, score, history, optimisation_parameters, helpers
 
 from stent_opt.struct_opt import patch_manager
 from stent_opt.struct_opt import element_bucket
@@ -857,7 +857,7 @@ def produce_patch_models(working_dir: pathlib.Path, iter_prev: int) -> typing.Di
         if computer.this_computer.n_processes_unlicensed > 1:
             with multiprocessing.Pool(processes=computer.this_computer.n_processes_unlicensed) as pool:
                 sub_model_infos = [smi_pair for is_ok, smi_pair in pool.imap_unordered(_smi_pair_are_good, sub_model_infos_all) if is_ok]
-
+                helpers.print_memory_use("After _smi_pair_are_good")
         else:
             sub_model_infos = []
             for smi_pair in sub_model_infos_all:

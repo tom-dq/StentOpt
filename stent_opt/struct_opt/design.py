@@ -132,8 +132,9 @@ class BoundaryCond(BaseModelForDB):
         along_th = self.th_min != self.th_max
         along_z = self.z_min != self.z_max
 
-        th_offset = -0.5 if along_z else 0.0
-        z_offset = -0.5 if along_th else 0.0
+        # TODO This was -0.5 rather than -0.1
+        th_offset = -0.1 if along_z else 0.0
+        z_offset = -0.1 if along_th else 0.0
 
         return base.XYZ(x=th_offset, y=z_offset, z=0.0)
 
@@ -1572,8 +1573,8 @@ bcs_pull_30pc = (bc_fix_left_edge, bc_strain_right_edge, bc_fix_bottom_left)
 
 
 bc_cent_load_enf_disp = BoundaryCond(th_min=0.5, th_max=0.5, z_min=0.0, z_max=1.0, bc_th=False, bc_z=True, load_factor_scale=-1)
-bc_cent_bottom_20pc_A = BoundaryCond(th_min=0.0, th_max=0.1, z_min=0.0, z_max=0.0, bc_th=False, bc_z=True, load_factor_scale=0)
-bc_cent_bottom_20pc_B = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.2, bc_th=True, bc_z=False, load_factor_scale=0)  # Twice as much for sym
+bc_cent_bottom_20pc_A = BoundaryCond(th_min=0.0, th_max=0.4, z_min=0.0, z_max=0.0, bc_th=False, bc_z=True, load_factor_scale=0)
+bc_cent_bottom_20pc_B = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.8, bc_th=True, bc_z=False, load_factor_scale=0)  # Twice as much for sym
 bc_simon = (bc_cent_bottom_20pc_A, bc_cent_bottom_20pc_B, bc_cent_load_enf_disp)
 
 _spring_corner = _SpringRegion(min_val_k=1.0, max_val_k=0.0, target_region_k=10000.0)
@@ -1583,8 +1584,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=50,  # 20
-        Z=25,  # 80
+        Th=12,  # 20
+        Z=6,  # 80
     ),
     r_min=0.65,
     r_max=0.75,

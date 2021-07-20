@@ -370,7 +370,7 @@ active = OptimParams(
     time_expansion=0.5,  # Was 2.0, 0.2 seems OK as well
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
-    analysis_step_type=step.StepDynamicExplicit,
+    analysis_step_type=step.StepStatic,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
     patch_hops=2,
@@ -378,7 +378,7 @@ active = OptimParams(
     nonlinear_material=True,
     patched_elements=common.PatchedElements.all,
     one_elem_per_patch=False,
-    filter_singular_patches=True,
+    filter_singular_patches=False,
 )
 
 active = active._replace(region_gradient=None)

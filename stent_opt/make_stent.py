@@ -23,6 +23,8 @@ from stent_opt.struct_opt import patch_manager
 from stent_opt.struct_opt import history
 from stent_opt.struct_opt.computer import this_computer
 
+from stent_opt.struct_opt import helpers
+
 logging.basicConfig()
 
 working_dir_orig = os.getcwd()
@@ -55,7 +57,7 @@ def kill_process_id(proc_id: int):
     process.kill()
 
 
-@retry.retry(tries=10, delay=2, )
+# @retry.retry(tries=10, delay=2, )
 def _run_external_command(path, args):
 
     t_start = time.time()
@@ -315,6 +317,7 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
         with multiprocessing.Pool(processes=this_computer.n_abaqus_parallel_solves, initializer=init, initargs=(mp_lock,)) as pool:
             for out_run_one_args in pool.imap_unordered(process_pool_run_and_process, all_run_one_args_in):
                 print(f"   "+out_run_one_args.executed_feedback_text)
+                helpers.print_memory_use("After process_pool_run_and_process")
                 child_patch_run_one_args.append(out_run_one_args)
 
     else:
@@ -355,7 +358,7 @@ def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generat
     return _process_pool_run_and_process(run_one_args)
 
 
-@retry.retry(tries=5, delay=2,)
+# @retry.retry(tries=5, delay=2,)
 # @memory_profiler.profile
 def _process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
     """This returns a new version of the input argument, with info about the children filled in."""
@@ -390,6 +393,7 @@ def _process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> genera
             with multiprocessing.Pool(processes=this_computer.n_abaqus_parallel_solves, initializer=init, initargs=(mp_lock,)) as pool:
                 for out_run_one_args in pool.imap_unordered(process_pool_run_and_process, all_run_one_args_in):
                     print(f"   " + out_run_one_args.executed_feedback_text)
+                    helpers.print_memory_use("After process_pool_run_and_process")
                     child_patch_run_one_args.append(out_run_one_args)
 
         else:
@@ -447,7 +451,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     iter_prev = main_loop_start_i - 1
     previous_max_i = iter_prev
 
-    while True:
+    while iter_prev <= 1:
         # Extract ONE from the previous generation
         one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
         if len(model_info_to_rank) != 1:
@@ -501,6 +505,8 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         if done:
             break
 
+        helpers.print_memory_use(f"Iter {iter_prev}")
+
 if __name__ == "__main__":
 
     stent_params = design.basic_stent_params
@@ -517,4 +523,8 @@ if __name__ == "__main__":
     assert stent_params == stent_param_again
 
     do_opt(stent_params, optim_params)
+
+    helpers.print_memory_use("Final")
+
+
 
