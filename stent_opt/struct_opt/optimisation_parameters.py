@@ -331,7 +331,7 @@ volume_ratio_v2 = VolumeTargetOpts(
 
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
-    max_change_in_vol_ratio=0.004,  # Was 0.0025
+    max_change_in_vol_ratio=0.08,  # Was 0.0025
     volume_target_opts=volume_ratio,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(

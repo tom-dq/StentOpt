@@ -1584,8 +1584,8 @@ dylan_r10n1_params = StentParams(
     angle=60,
     divs=PolarIndex(
         R=1,
-        Th=40,  # 20
-        Z=20,  # 80
+        Th=60,  # 20
+        Z=30,  # 80
     ),
     r_min=0.65,
     r_max=0.75,
@@ -1619,7 +1619,7 @@ dylan_r10n1_params = StentParams(
             z_max=2.25,
         )
     ],
-    boundary_conds=bc_simon_spring,
+    boundary_conds=bc_simon,
     end_connection_length_ratio=0.3,
     whole_left_side_restrained=True,
     sym_x=True,
