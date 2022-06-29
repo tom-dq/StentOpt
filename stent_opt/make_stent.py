@@ -482,8 +482,8 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
             patch_suffix='',
             child_patch_run_one_args=tuple(),
             executed_feedback_text='',
-            do_run_model_TESTING=True,
-            do_run_extraction_TESTING=True,
+            do_run_model_TESTING=False,
+            do_run_extraction_TESTING=False,
         )
 
         done = optim_params.is_converged(one_design, one_new_design, iter_this)

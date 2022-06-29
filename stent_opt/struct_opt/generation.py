@@ -1271,8 +1271,8 @@ def _make_testing_run_one_args(working_dir, stent_design: design.StentDesign, op
         patch_suffix='',
         child_patch_run_one_args=tuple(),
         executed_feedback_text='',
-        do_run_model_TESTING=False,
-        do_run_extraction_TESTING=False,
+        do_run_model_TESTING=True,
+        do_run_extraction_TESTING=True,
     )
 
 
