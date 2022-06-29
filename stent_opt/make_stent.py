@@ -451,7 +451,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     iter_prev = main_loop_start_i - 1
     previous_max_i = iter_prev
 
-    while iter_prev <= 1:
+    while True:
         # Extract ONE from the previous generation
         one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
         if len(model_info_to_rank) != 1:
@@ -482,8 +482,8 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
             patch_suffix='',
             child_patch_run_one_args=tuple(),
             executed_feedback_text='',
-            do_run_model_TESTING=False,
-            do_run_extraction_TESTING=False,
+            do_run_model_TESTING=True,  # Sometimes turn these off to optimise some code path
+            do_run_extraction_TESTING=True,
         )
 
         done = optim_params.is_converged(one_design, one_new_design, iter_this)

@@ -2,6 +2,7 @@
 
 import itertools
 import sqlite3
+import logging
 
 # Hacky way of making this usable as a standalone Abaqus-Python2 module, or a Python3 subpackage.
 import sys
@@ -131,6 +132,9 @@ class Datastore:
             rows = self.connection.execute("SELECT * FROM Frame WHERE instance_name = ? ORDER BY rowid DESC LIMIT 1", (inst_name,))
             for row in rows:
                 return db_defs.Frame(*row)
+
+        # If we got to here, print a debugging message!
+        logging.warning("Did not get an instance_name of {0} in Frame table in {1}".format(inst_name, self.fn))
 
         return None  # This can happen!!
 
