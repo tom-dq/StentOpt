@@ -1594,11 +1594,12 @@ inadmissable_bottom_test = (
 )
 
 
-bc_fix_left_edge = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=1.0, bc_th=True, bc_z=False, load_factor_scale=0)
+bc_fix_left_edge_th = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=1.0, bc_th=True, bc_z=False, load_factor_scale=0)
+bc_fix_left_edge_full = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=1.0, bc_th=True, bc_z=True, load_factor_scale=0)
 bc_strain_right_edge = BoundaryCond(th_min=1.0, th_max=1.0, z_min=0.35, z_max=0.65, bc_th=True, bc_z=False, load_factor_scale=1)
 bc_fix_bottom_left = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.0, bc_th=True, bc_z=True, load_factor_scale=0)
 
-bcs_pull_30pc = (bc_fix_left_edge, bc_strain_right_edge, bc_fix_bottom_left)
+bcs_pull_30pc = (bc_fix_left_edge_th, bc_strain_right_edge, bc_fix_bottom_left)
 
 
 bc_cent_load_enf_disp = BoundaryCond(th_min=0.5, th_max=0.5, z_min=0.0, z_max=1.0, bc_th=False, bc_z=True, load_factor_scale=-1)
@@ -1610,6 +1611,7 @@ _spring_corner = _SpringRegion(min_val_k=1.0, max_val_k=0.0, target_region_k=100
 bc_simon_spring = (bc_cent_load_enf_disp, bc_cent_bottom_20pc_A.copy_with_updates(spring_at_min_max_and_overall=_spring_corner), bc_cent_bottom_20pc_B.copy_with_updates(spring_at_min_max_and_overall=_spring_corner))
 
 bc_pull_bottom = BoundaryCond(th_min=0.9, th_max=1.0, z_min=0.0, z_max=0.0, bc_th=False, bc_z=True, load_factor_scale=-1)
+bcs_two_by_one = (bc_pull_bottom, bc_fix_left_edge_full)
 
 NOMINAL_ELEMENTS = 20
 
@@ -1652,7 +1654,7 @@ two_by_one_cantilever_test = StentParams(
     cylinder=None,
     expansion_ratio=1.05,  # 2.0
     inadmissible_regions=tuple(),
-    boundary_conds=bc_simon,
+    boundary_conds=bcs_two_by_one,
     end_connection_length_ratio=0.3,
     whole_left_side_restrained=True,
     sym_x=False,
@@ -1660,7 +1662,7 @@ two_by_one_cantilever_test = StentParams(
     fix_base=False,
 )
 
-basic_stent_params = centre_sym_enf_disp
+basic_stent_params = two_by_one_cantilever_test
 
 
 if __name__ == "__main__":
