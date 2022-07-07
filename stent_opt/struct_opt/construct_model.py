@@ -35,7 +35,7 @@ def get_boundary_node_set_2d(
             if contains_idx:
                 yield design.NodeSetName(bc_logical.bc_name)
 
-    min_idx_z = reference_stent_design.get_min_idx_z()
+
 
     # Apply sum stuff for sub-model as well...
     maybe_x_sym_plane = reference_stent_design.stent_params.get_x_index_sym_plane()
@@ -47,6 +47,8 @@ def get_boundary_node_set_2d(
 
     # TODO - make "is_in_bottom_chunk" generalisable and more robust.
     return
+
+    min_idx_z = reference_stent_design.get_min_idx_z()
     if node_idx.Th == 0:
         if stent_params.node_idx_z_is_restrained(True, node_idx.Z):
             yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentTheta0.name, planar_x_is_constrained=True)
@@ -143,9 +145,17 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
                 bottom_left = get_bottom_left(sub_model_info.node_nums)
 
             this_offset = base.XYZ(off_col * offset_single.x, off_row*offset_single.y, 0.0) - bottom_left
-            for iNode, one_node_polar in node_pos.items():
-                stent_part.add_node_validated(iNode,this_offset + one_node_polar.to_xyz(), node_elem_offset=sub_model_info.node_elem_offset)
-                node_num_patch_to_global_and_polar_index[sub_model_info.real_to_model_node(iNode)] = iNode, node_num_to_polar_index[iNode]
+
+            # Do this in a vector / comprehension way so see if it's faster
+            node_elem_offset_nodes = {iNode+sub_model_info.node_elem_offset: this_offset.plus_xyz(one_node_polar.to_xyz()) for iNode, one_node_polar in node_pos.items()}
+            stent_part.add_nodes_validated(node_elem_offset_nodes)
+            this_submod_global_to_polar = {sub_model_info.real_to_model_node(iNode): (iNode, node_num_to_polar_index[iNode]) for iNode in node_pos}
+            node_num_patch_to_global_and_polar_index.update(this_submod_global_to_polar)
+
+            # Old, non-vector way:
+            # for iNode, one_node_polar in node_pos.items():
+            #     stent_part.add_node_validated(iNode, this_offset.plus_xyz(one_node_polar.to_xyz()), node_elem_offset=sub_model_info.node_elem_offset)
+            #     node_num_patch_to_global_and_polar_index[sub_model_info.real_to_model_node(iNode)] = iNode, node_num_to_polar_index[iNode]
 
             for iBoundNode in sub_model_info.boundary_node_nums:
                 submodel_boundary_nodes.add( sub_model_info.real_to_model_node(iBoundNode) )

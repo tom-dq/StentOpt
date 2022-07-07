@@ -36,6 +36,16 @@ class Part:
 
         self.nodes[iNode + node_elem_offset] = node
 
+    def add_nodes_validated(self, node_elem_offset_nodes: typing.Dict[int, base.XYZ]):
+        """Make this go a little bit faster since it's on the hot path"""
+
+        already_existing = node_elem_offset_nodes.keys() & self.nodes.keys()
+        if already_existing:
+            raise ValueError(f"Already had these nodes in the model: {already_existing}")
+
+        self.nodes.update(node_elem_offset_nodes)
+
+
     def add_element_validate(self, iElem: int, in_element: element.Element, node_elem_offset: int = 0):
         """Adds an element and makes sure all the nodes it references exist."""
 

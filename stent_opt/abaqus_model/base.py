@@ -94,6 +94,9 @@ class XYZ(typing.NamedTuple):
             z=self.y,
         )
 
+    def plus_xyz(self, other: "XYZ"):
+        """Special method for hot path"""
+        return XYZ(x=self.x+other.x, y=self.y+other.y, z=self.z+other.z)
 
     def __add__(self, other):
         return _operator_dot(operator.add, self, other)

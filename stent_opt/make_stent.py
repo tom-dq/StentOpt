@@ -451,7 +451,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     iter_prev = main_loop_start_i - 1
     previous_max_i = iter_prev
 
-#     while True:
+    # while True:
     while iter_prev < 1:
         # Extract ONE from the previous generation
         one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
@@ -509,7 +509,7 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         helpers.print_memory_use(f"Iter {iter_prev}")
 
     # Last results processing
-    one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
+    # one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
 
 
 if __name__ == "__main__":

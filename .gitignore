@@ -11,4 +11,5 @@ py-39/
 py-310/
 py-311/
 .vscode/settings.json
+*.prof  # cProfile outputs
 

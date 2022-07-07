@@ -1616,7 +1616,7 @@ bc_simon_spring = (bc_cent_load_enf_disp, bc_cent_bottom_20pc_A.copy_with_update
 
 bc_pull_bottom = BoundaryCond(th_min=0.9, th_max=1.0, z_min=0.0, z_max=0.0, bc_th=False, bc_z=True, load_factor_scale=-1)
 bc_canti = (bc_cent_bottom_20pc_A, bc_cent_bottom_20pc_B, bc_pull_bottom)
-NOMINAL_ELEMENTS = 20
+NOMINAL_ELEMENTS = 70
 
 
 centre_sym_enf_disp = StentParams(

@@ -19,7 +19,7 @@ if SAVE_IMAGES:
     import abaqus
 
 
-EXTRACT_ALL_STEPS = False  # If False, only get the last frame of each step.
+EXTRACT_ALL_STEPS = True  # If False, only get the last frame of each step.
 
 STEP_IDX_EXPAND = 0
 STEP_IDX_RELEASE_OSCILLATE = 1
