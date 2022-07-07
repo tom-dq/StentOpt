@@ -30,7 +30,7 @@ class AbaqusModel:
         self.interactions = set()
         self.boundary_conditions = set()
         self.springs = set()
-        self.abaqus_output_time_interval = 0.1
+        self.abaqus_output_time_interval = -123.4  # This is overridden later
         self.abaqus_history_time_interval = abaqus_history_time_interval
         self.abaqus_target_increment = 1e-5
 

@@ -1593,6 +1593,11 @@ inadmissable_bottom_test = (
     InadmissibleRegion(theta_min=0, theta_max=45, z_min=0.165, z_max=2*0.165),
 )
 
+# Simple shear test
+_bc_fix_left = BoundaryCond(th_min=0.0, th_max=0.25, z_min=0.0, z_max=1.0, bc_th=True, bc_z=True, load_factor_scale=0)
+_bc_shear_right = BoundaryCond(th_min=0.75, th_max=1.0, z_min=0.0, z_max=1.0, bc_th=False, bc_z=True, load_factor_scale=1.0)
+
+bc_shear = (_bc_fix_left, _bc_shear_right)
 
 bc_fix_left_edge = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=1.0, bc_th=True, bc_z=False, load_factor_scale=0)
 bc_strain_right_edge = BoundaryCond(th_min=1.0, th_max=1.0, z_min=0.35, z_max=0.65, bc_th=True, bc_z=False, load_factor_scale=1)
@@ -1602,15 +1607,15 @@ bcs_pull_30pc = (bc_fix_left_edge, bc_strain_right_edge, bc_fix_bottom_left)
 
 
 bc_cent_load_enf_disp = BoundaryCond(th_min=0.5, th_max=0.5, z_min=0.0, z_max=1.0, bc_th=False, bc_z=True, load_factor_scale=-1)
-bc_cent_bottom_20pc_A = BoundaryCond(th_min=0.0, th_max=0.4, z_min=0.0, z_max=0.0, bc_th=False, bc_z=True, load_factor_scale=0)
-bc_cent_bottom_20pc_B = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.8, bc_th=True, bc_z=False, load_factor_scale=0)  # Twice as much for sym
+bc_cent_bottom_20pc_A = BoundaryCond(th_min=0.0, th_max=0.2, z_min=0.0, z_max=0.0, bc_th=False, bc_z=True, load_factor_scale=0)
+bc_cent_bottom_20pc_B = BoundaryCond(th_min=0.0, th_max=0.0, z_min=0.0, z_max=0.2, bc_th=True, bc_z=False, load_factor_scale=0)  # Twice as much for sym
 bc_simon = (bc_cent_bottom_20pc_A, bc_cent_bottom_20pc_B, bc_cent_load_enf_disp)
 
 _spring_corner = _SpringRegion(min_val_k=1.0, max_val_k=0.0, target_region_k=10000.0)
 bc_simon_spring = (bc_cent_load_enf_disp, bc_cent_bottom_20pc_A.copy_with_updates(spring_at_min_max_and_overall=_spring_corner), bc_cent_bottom_20pc_B.copy_with_updates(spring_at_min_max_and_overall=_spring_corner))
 
 bc_pull_bottom = BoundaryCond(th_min=0.9, th_max=1.0, z_min=0.0, z_max=0.0, bc_th=False, bc_z=True, load_factor_scale=-1)
-
+bc_canti = (bc_cent_bottom_20pc_A, bc_cent_bottom_20pc_B, bc_pull_bottom)
 NOMINAL_ELEMENTS = 20
 
 
@@ -1652,7 +1657,7 @@ two_by_one_cantilever_test = StentParams(
     cylinder=None,
     expansion_ratio=1.05,  # 2.0
     inadmissible_regions=tuple(),
-    boundary_conds=bc_simon,
+    boundary_conds=bc_canti,
     end_connection_length_ratio=0.3,
     whole_left_side_restrained=True,
     sym_x=False,
@@ -1660,7 +1665,30 @@ two_by_one_cantilever_test = StentParams(
     fix_base=False,
 )
 
-basic_stent_params = centre_sym_enf_disp
+simple_shear_test = StentParams(
+    angle=30,
+    divs=PolarIndex(
+        R=1,
+        Th=NOMINAL_ELEMENTS,
+        Z=NOMINAL_ELEMENTS,
+    ),
+    r_min=0.65,
+    r_max=0.75,
+    length=1.65 / 4,  # Was 11.0
+    stent_element_type=element.ElemType.CPS4R,
+    balloon=None,
+    cylinder=None,
+    expansion_ratio=1.05,  # 2.0
+    inadmissible_regions=tuple(),
+    boundary_conds=bc_shear,
+    end_connection_length_ratio=0.3,
+    whole_left_side_restrained=False,
+    sym_x=False,
+    sym_y=False,
+    fix_base=False,
+)
+
+basic_stent_params = simple_shear_test
 
 
 if __name__ == "__main__":

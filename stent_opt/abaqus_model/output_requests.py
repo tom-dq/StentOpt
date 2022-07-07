@@ -5,6 +5,7 @@ from stent_opt.abaqus_model import base
 
 from stent_opt.odb_interface.db_defs import expected_history_results
 
+
 class NodeOutputs(enum.Enum):
     RF = "Reaction Force & Moment Components"
     U = "Displacement Components"
@@ -45,6 +46,7 @@ def produce_inp_lines(
         output_components: typing.Iterable[T_OutputRequest],
         abaqus_history_time_interval: float,
         output_history: typing.Iterable[T_HistoryRequest]) -> typing.Iterable[str]:
+
     # Output requests
     yield from base.inp_heading("OUTPUT REQUESTS")
     yield "*Restart, write, overlay, number interval=1, time marks=YES"

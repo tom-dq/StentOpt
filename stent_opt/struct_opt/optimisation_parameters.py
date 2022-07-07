@@ -267,6 +267,17 @@ class OptimParams(typing.NamedTuple):
         else:
             return self.abaqus_output_time_interval
 
+    def get_abaqus_output_time_interval(self) -> float:
+        is_linear = (not self.nonlinear_geometry) and (not self.nonlinear_material)
+        if self.analysis_step_type == step.StepStatic:
+            if is_linear:
+                # No need for all the steps if it's linear!
+                return self.time_expansion
+
+        return self.abaqus_output_time_interval
+
+
+
 
 # Functions which set a target volume ratio. These are idealised.
 def vol_reduce_then_flat(vol_target_opts: VolumeTargetOpts, iter_num: int) -> float:
@@ -370,13 +381,13 @@ active = OptimParams(
     time_expansion=0.5,  # Was 0.5 then 2.0, 0.2 seems OK as well
     time_released=None,
     post_expansion_behaviour=PostExpansionBehaviour.oscillate,
-    analysis_step_type=step.StepDynamicExplicit,
+    analysis_step_type=step.StepStatic,
     nodes_shared_with_old_design_to_expand=2,
     nodes_shared_with_old_design_to_contract=2,
     patch_hops=2,
-    nonlinear_geometry=True,
-    nonlinear_material=True,
-    patched_elements=common.PatchedElements.boundary,
+    nonlinear_geometry=False,
+    nonlinear_material=False,
+    patched_elements=common.PatchedElements.all,
     one_elem_per_patch=False,
     filter_singular_patches=False,
 )

@@ -91,6 +91,9 @@ def _make_nt_and_table_create(table_name, result_entity, field_names, index_crea
 
     NT_type.get_last_value = get_last_value
 
+    # The names of all the fields which are "odb value data" - for where that needs to be populated with fallback.
+    NT_type.odb_value_field_names = field_names
+
     create_table_fields = ["{0} REAL".format(f_name) for f_name in field_names]
 
     create_table_string = """CREATE TABLE IF NOT EXISTS {0}(

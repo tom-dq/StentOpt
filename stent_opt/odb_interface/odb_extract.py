@@ -19,7 +19,7 @@ if SAVE_IMAGES:
     import abaqus
 
 
-EXTRACT_ALL_STEPS = True  # If False, only get the last frame of each step.
+EXTRACT_ALL_STEPS = False  # If False, only get the last frame of each step.
 
 STEP_IDX_EXPAND = 0
 STEP_IDX_RELEASE_OSCILLATE = 1
@@ -208,16 +208,44 @@ def get_stresses_one_frame(extraction_meta):
             von_mises=one_value.mises,
         )
 
+def _get_element_fallback_field(extraction_meta, NT_type):
+    """In case something which is meant to be there isn't in the results."""
 
-def get_strain_results_PEEQ_one_frame(extraction_meta):
-    relevant_peeq_field = (
+    fallback_field = (
         extraction_meta
             .frame
-            .fieldOutputs['PEEQ']
+            .fieldOutputs['S']
             .getSubset(position=abaqusConstants.CENTROID)
             .getSubset(region=extraction_meta.odb_instance)
     )
 
+    working_dict = {fn: 0.0 for fn in NT_type.odb_value_field_names}
+
+    for one_value in fallback_field.values:
+        working_dict["frame_rowid"] = None
+        working_dict["elem_num"] = one_value.elementLabel
+
+        yield NT_type(**working_dict)
+
+def get_strain_results_PEEQ_one_frame(extraction_meta):
+
+    try:
+        relevant_peeq_field = (
+            extraction_meta
+                .frame
+                .fieldOutputs['PEEQ']
+                .getSubset(position=abaqusConstants.CENTROID)
+                .getSubset(region=extraction_meta.odb_instance)
+        )
+
+    except KeyError:
+        # No PEEQ in Aba 2021
+        for elem_peeq in _get_element_fallback_field(extraction_meta, ElementPEEQ):
+            yield elem_peeq
+
+        raise StopIteration()
+
+    # If we got here there are good results.
     for one_value in relevant_peeq_field.values:
         yield ElementPEEQ(
             frame_rowid=None,

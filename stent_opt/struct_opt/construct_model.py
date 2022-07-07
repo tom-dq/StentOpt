@@ -69,7 +69,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
     node_num_idx_pos = design.generate_nodes(reference_stent_design.stent_params)
     node_pos = {iNode: xyz for iNode, _, xyz in node_num_idx_pos}
     node_num_to_polar_index = {iNode: polar_index for iNode, polar_index, _ in node_num_idx_pos}
-    model.abaqus_output_time_interval = optim_params.abaqus_output_time_interval
+    model.abaqus_output_time_interval = optim_params.get_abaqus_output_time_interval()
     model.abaqus_target_increment = optim_params.abaqus_target_increment
 
     # Potentially modify the parameters if it's 2D
