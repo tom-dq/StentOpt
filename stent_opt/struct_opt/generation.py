@@ -220,7 +220,8 @@ def _evolve_decider_sorted_data(data: T_index_to_val, tail: Tail, n_elems: int):
     rev = True if tail == Tail.top else False
     sorted_data = sorted(data.items(), key=sort_key, reverse=rev)
 
-    return sorted_data
+    return StackWithQuickMembership(sorted_data)
+
 
 def get_top_n_elements(data: T_index_to_val, tail: Tail, n_elems: int) -> typing.Set[design.PolarIndex]:
     """Gets the top however many elements"""
@@ -229,6 +230,65 @@ def get_top_n_elements(data: T_index_to_val, tail: Tail, n_elems: int) -> typing
     top_n = {idx for idx, val in sorted_data[0:n_elems]}
 
     return top_n
+
+
+class StackWithQuickMembership(list):
+    """Basically a list but with a quick membership check."""
+
+    _contents: set = None
+
+    def _add_key(self, value):
+        i1 = value[0]
+        if i1 in self._contents:
+            raise ValueError(f"Tried to add {value} but the key, {i1}, was already in here.")
+
+        self._contents.add(i1)
+
+    def _remove_key(self, value):
+        i1 = value[0]
+        self._contents.remove(i1)
+
+    def __init__(self, *args, **kwargs):
+
+        self._contents = set()
+
+        super(StackWithQuickMembership, self).__init__(*args, **kwargs)
+
+        for item in self:
+            self._add_key(item)
+
+    def __setitem__(self, key, value):
+
+        # Get the existing value and remove it
+        old_value = super(StackWithQuickMembership, self).__getitem__(key)
+        self._remove_key(old_value)
+
+        # And put in the new one
+        self._add_key(value)
+
+        return super(StackWithQuickMembership, self).__setitem__(key, value)
+
+    def append(self, value):
+
+        self._add_key(value)
+
+        return super(StackWithQuickMembership, self).append(value)
+
+    def pop(self, __index: typing.SupportsIndex = ...):
+
+        if __index is ...:
+            popped_val = super(StackWithQuickMembership, self).pop()
+
+        else:
+            popped_val = super(StackWithQuickMembership, self).pop(__index)
+
+        self._remove_key(popped_val)
+
+        return popped_val
+
+
+    def contains_item0(self, value):
+        return value in self._contents
 
 
 def get_top_n_elements_maintaining_edge_connectivity(
@@ -249,7 +309,7 @@ def get_top_n_elements_maintaining_edge_connectivity(
         for elemIdx in all_in_elements}
     graph_all_in = element_bucket.build_graph(element_bucket.GraphEdgeEntity.fe_elem_edge, graph_element_pool_all.values())
 
-    sorted_data = _evolve_decider_sorted_data(data, tail, n_elems)
+    sorted_data: StackWithQuickMembership = _evolve_decider_sorted_data(data, tail, n_elems)
 
     top_n = set()
 
@@ -378,8 +438,12 @@ def get_top_n_elements_maintaining_edge_connectivity(
             back_on_stack_elems = back_on_stack_after_change[elemIdxCandidate]
             # Put stuff back on the stack - do it in reverse order so the top ranked one ends up on top.
             for reactivated_idx, reactivated_value in reversed(_evolve_decider_sorted_data(back_on_stack_elems, tail, len(back_on_stack_elems))):
-                print(f"  [Conn] reactivating {reactivated_idx}={reactivated_value}.")
-                sorted_data.append((reactivated_idx, reactivated_value))
+                if sorted_data.contains_item0(reactivated_idx):
+                    print(f"  [Conn] would reactivate {reactivated_idx}={reactivated_value} but it was already in the working set.")
+
+                else:
+                    print(f"  [Conn] reactivating {reactivated_idx}={reactivated_value}.")
+                    sorted_data.append((reactivated_idx, reactivated_value))
 
         else:
             print(f"  [Conn] {elemIdxCandidate} = {obj_fun_val} not going to  {DEBUG_verb} {elemIdxCandidate} - would create disconnection.")
@@ -1287,10 +1351,11 @@ def _make_testing_run_one_args(working_dir, stent_design: design.StentDesign, op
 def evolve_decider_test():
     from stent_opt.make_stent import process_pool_run_and_process
 
+    # TODO - fix this infinite loop!
     iter_n_min_1 = 0
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-338\history.db")
+    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-344\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -1305,7 +1370,7 @@ def evolve_decider_test():
             label=snapshot_n_min_1.label,
         )
 
-    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-338"), design_n_min_1, optim_params, iter_n_min_1)
+    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-344"), design_n_min_1, optim_params, iter_n_min_1)
     run_one_args_completed = process_pool_run_and_process(run_one_args_input)
     with history.History(history_db) as hist:
 
