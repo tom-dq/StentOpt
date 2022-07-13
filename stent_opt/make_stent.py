@@ -307,8 +307,8 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
             patch_suffix=patch_suffix,
             child_patch_run_one_args=tuple(),
             executed_feedback_text="",
-            do_run_model_TESTING=False,  # TODO - turn back on!
-            do_run_extraction_TESTING=False,  # TODO - turn back on!
+            do_run_model_TESTING=True,
+            do_run_extraction_TESTING=True,
         )
         all_run_one_args_in.append(run_args_patch)
 

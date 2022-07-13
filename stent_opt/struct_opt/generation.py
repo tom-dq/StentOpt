@@ -185,7 +185,6 @@ def gaussian_smooth(optim_params: optimisation_parameters.OptimParams, stent_par
         if is_nonzero:
             out_dict[out_idx] = smoothed_val
 
-
     if len(out_dict) < len(unsmoothed):
         logging.warning(f"Smoothing started with {len(out_dict)} but ended up with {len(unsmoothed)}. Sounds like a mistake!")
 
