@@ -438,8 +438,13 @@ def get_top_n_elements_maintaining_edge_connectivity(
             back_on_stack_elems = back_on_stack_after_change[elemIdxCandidate]
             # Put stuff back on the stack - do it in reverse order so the top ranked one ends up on top.
             for reactivated_idx, reactivated_value in reversed(_evolve_decider_sorted_data(back_on_stack_elems, tail, len(back_on_stack_elems))):
+                print(reactivated_idx)
                 if sorted_data.contains_item0(reactivated_idx):
-                    print(f"  [Conn] would reactivate {reactivated_idx}={reactivated_value} but it was already in the working set.")
+                    print(f"  [Conn] would reactivate {reactivated_idx}={reactivated_value} but it was already in the queue.")
+
+                elif reactivated_idx in top_n:
+                    print(
+                        f"  [Conn] would reactivate {reactivated_idx}={reactivated_value} but it was already in output.")
 
                 else:
                     print(f"  [Conn] reactivating {reactivated_idx}={reactivated_value}.")
