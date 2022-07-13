@@ -339,11 +339,17 @@ volume_ratio_v2 = VolumeTargetOpts(
     num_iters=50,
 )
 
+volume_ratio_hell_for_leather = VolumeTargetOpts(
+    initial_ratio=0.1,
+    final_ratio=0.1,
+    num_iters=2,
+)
+
 
 active = OptimParams(
     # TODO - next time I make changes to this, migrate it over to pydantic first.
-    max_change_in_vol_ratio=0.01,  # Was 0.0025
-    volume_target_opts=volume_ratio,
+    max_change_in_vol_ratio=0.05,  # Was 0.0025
+    volume_target_opts=volume_ratio_hell_for_leather,
     volume_target_func=vol_reduce_then_flat,
     region_gradient=RegionGradient(
         component=db_defs.ElementEnergyElastic,  # TODO - make the code respect all these settings rather than whatever's littered around the place.

@@ -333,7 +333,9 @@ def get_top_n_elements_maintaining_edge_connectivity(
 
     # If we make a change to an element and it was attached to some other elements which were skipped, they can go back on the stack to be checked.
     # If they were skipped in the first place, they must be a higher priority so they can go on top.
-    back_on_stack_after_change = collections.defaultdict(dict)
+
+    T_stack_dict = typing.DefaultDict[design.PolarIndex, list]
+    back_on_stack_after_change: T_stack_dict = collections.defaultdict(dict)
 
     halfway = len(sorted_data) // 2
     while num_changed_elements() < n_elems and len(sorted_data) > halfway:
@@ -383,7 +385,7 @@ def get_top_n_elements_maintaining_edge_connectivity(
             print(f"  [Conn] {elemIdxCandidate} = {obj_fun_val} not going to  {DEBUG_verb} {elemIdxCandidate} - would create disconnection.")
             for element_i_am_attached_to in connected_to_candidate:
                 print(f"  [Conn] stacking {elemIdxCandidate} to be reactivated if {element_i_am_attached_to} changes state.")
-                back_on_stack_after_change[element_i_am_attached_to][elemIdxCandidate] = obj_fun_val
+                back_on_stack_after_change[element_i_am_attached_to.num][elemIdxCandidate] = obj_fun_val
 
     return top_n, dirty_elems
 
@@ -1285,10 +1287,10 @@ def _make_testing_run_one_args(working_dir, stent_design: design.StentDesign, op
 def evolve_decider_test():
     from stent_opt.make_stent import process_pool_run_and_process
 
-    iter_n_min_1 = 1
+    iter_n_min_1 = 0
     iter_n = iter_n_min_1 + 1
 
-    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-109\history.db")
+    history_db = pathlib.Path(r"C:\Simulations\StentOpt\AA-338\history.db")
 
     with history.History(history_db) as hist:
         stent_params = hist.get_stent_params()
@@ -1303,7 +1305,7 @@ def evolve_decider_test():
             label=snapshot_n_min_1.label,
         )
 
-    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-109"), design_n_min_1, optim_params, iter_n_min_1)
+    run_one_args_input = _make_testing_run_one_args(pathlib.Path(r"C:\Simulations\StentOpt\AA-338"), design_n_min_1, optim_params, iter_n_min_1)
     run_one_args_completed = process_pool_run_and_process(run_one_args_input)
     with history.History(history_db) as hist:
 
@@ -1377,7 +1379,7 @@ def spot_check_smoothing():
 
 if __name__ == '__main__':
 
-    spot_check_smoothing()
+    evolve_decider_test()
 
     # run_test_process_completed_simulation()
 

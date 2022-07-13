@@ -59,7 +59,7 @@ def _get_most_recent_working_dir() -> pathlib.Path:
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-51")
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-125")
 
-WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-331")
+WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-339")
 # WORKING_DIR_TEMP = pathlib.Path(r"E:\Simulations\StentOpt\AA-315")
 
 # WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOptDesktop\AA-229")
@@ -67,6 +67,8 @@ WORKING_DIR_TEMP = pathlib.Path(r"C:\Simulations\StentOpt\AA-331")
 
 UNLIMITED = 1_000_000_000_000  # Should be enough
 STOP_AT_INCREMENT = 80
+
+USE_GLOBAL_LIMITS = True
 
 
 # Just re-use this around the place so I don't need to open/close the DB all the time... is this a bad idea?
@@ -239,8 +241,12 @@ def _build_contour_view_data(
 
     for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(inc_gt, inc_lte, good_metric_names), make_contour_view):
         min_all_frames, max_all_frames = hist.get_min_max_status_check(contour_view.metric_name)
-        # contour_view_with_limits = contour_view._replace(min_val=min_all_frames, max_val=max_all_frames)
-        contour_view_with_limits = contour_view._replace(min_val=-5, max_val=5)
+        if USE_GLOBAL_LIMITS:
+            contour_view_with_limits = contour_view._replace(min_val=min_all_frames, max_val=max_all_frames)
+
+        else:
+            contour_view_with_limits = contour_view
+
         elem_vals = {status_check.elem_num: status_check.metric_val for status_check in sub_iter}
         yield contour_view_with_limits, elem_vals
 
