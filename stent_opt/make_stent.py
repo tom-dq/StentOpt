@@ -307,8 +307,8 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
             patch_suffix=patch_suffix,
             child_patch_run_one_args=tuple(),
             executed_feedback_text="",
-            do_run_model_TESTING=True,
-            do_run_extraction_TESTING=True,
+            do_run_model_TESTING=False,  # TODO - turn back on!
+            do_run_extraction_TESTING=False,  # TODO - turn back on!
         )
         all_run_one_args_in.append(run_args_patch)
 
@@ -369,7 +369,10 @@ def _process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> genera
         fn_inp = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".inp", run_one_args.iter_this, run_one_args.patch_suffix)
 
         is_sub_model = not run_one_args.is_full_model
-        if run_one_args.do_run_model_TESTING: run_model(run_one_args.optim_params, fn_inp, force_single_core=is_sub_model)
+        if run_one_args.do_run_model_TESTING:
+            run_model(run_one_args.optim_params, fn_inp, force_single_core=is_sub_model)
+        else:
+            logging.warning(f"*** Skipping run_model(...) because do_run_model_TESTING is False!! Turn it back on!")
 
         fn_db_current = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".db", run_one_args.iter_this, run_one_args.patch_suffix)
         fn_odb = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".odb", run_one_args.iter_this, run_one_args.patch_suffix)
@@ -377,6 +380,9 @@ def _process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> genera
         if run_one_args.do_run_extraction_TESTING:
             # with mp_lock:
                 perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract, run_one_args.optim_params.add_initial_node_pos)
+
+        else:
+            logging.warning(f"*** Skipping perform_extraction(...) because do_run_extraction_TESTING is turned off. Put it back when you're done!")
 
     # Sensitivity analysis with the "finite difference method"
     child_patch_run_one_args = []

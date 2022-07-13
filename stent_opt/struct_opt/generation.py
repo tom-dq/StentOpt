@@ -1,6 +1,7 @@
 import collections
 import functools
 import itertools
+import logging
 import math
 import multiprocessing
 import pathlib
@@ -172,15 +173,21 @@ def gaussian_smooth(optim_params: optimisation_parameters.OptimParams, stent_par
     # Put it back and return
     #out_nd_array = step3
 
+
+    # If any were in the original dataset but didn't make it through, make sure they're in there!
+    out_dict = {idx: 0.0 for idx in unsmoothed}
+
     non_zero_inds = numpy.nonzero(out_nd_array)
-    out_dict = {}
     for r, th, z in zip(*non_zero_inds):
         out_idx = design.PolarIndex(R=r, Th=th, Z=z)
         smoothed_val = float(out_nd_array[(r, th, z)])
-        was_in_old_design = out_idx in unsmoothed
         is_nonzero = bool(smoothed_val)
-        if was_in_old_design or is_nonzero:
+        if is_nonzero:
             out_dict[out_idx] = smoothed_val
+
+
+    if len(out_dict) < len(unsmoothed):
+        logging.warning(f"Smoothing started with {len(out_dict)} but ended up with {len(unsmoothed)}. Sounds like a mistake!")
 
     return out_dict
 
@@ -1271,8 +1278,8 @@ def _make_testing_run_one_args(working_dir, stent_design: design.StentDesign, op
         patch_suffix='',
         child_patch_run_one_args=tuple(),
         executed_feedback_text='',
-        do_run_model_TESTING=True,
-        do_run_extraction_TESTING=True,
+        do_run_model_TESTING=False,
+        do_run_extraction_TESTING=False,
     )
 
 
@@ -1320,7 +1327,7 @@ def run_test_process_completed_simulation():
     from stent_opt.make_stent import process_pool_run_and_process
 
     # ssd_working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-49")
-    working_dir = pathlib.Path(r"E:\Simulations\StentOpt\AA-243")
+    working_dir = pathlib.Path(r"C:\Simulations\StentOpt\AA-331 - Copy")
 
     history_db = working_dir / "history.db"
 
@@ -1328,7 +1335,7 @@ def run_test_process_completed_simulation():
     with history.History(history_db) as hist:
         old_design = hist.get_most_recent_design()
 
-    testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir, old_design, iter_this=0)
+    testing_run_one_args_skeleton = _make_testing_run_one_args(working_dir, old_design, iter_this=17)
 
     testing_run_one_args_completed = process_pool_run_and_process(testing_run_one_args_skeleton)
     one_design, model_info_to_rank = process_completed_simulation(testing_run_one_args_completed)
@@ -1341,13 +1348,43 @@ def run_test_process_completed_simulation():
     one_new_design = produce_new_generation(working_dir, one_design, one_ranking, testing_run_one_args_completed, "TESTING")
 
 
+def spot_check_smoothing():
+    # Debug an annoying Gaussian smoothing issue.
+
+    fn = r"C:\Simulations\StentOpt\AA-331 - Copy\History.db"
+    iter_num = 18
+    with history.History(fn) as hist:
+        # Get the unsmoothed results to examine
+        res_all = hist.get_status_checks(iter_num, iter_num)
+        res_unsmoothed = [sc for sc in res_all if sc.stage == history.StatusCheckStage.secondary]
+
+        # Make sure we got the right one, and there's only one.
+        res_check_names = {sc.metric_name for sc in res_unsmoothed}
+        if len(res_check_names) != 1:
+            raise ValueError(f"Meant to get one single metric for this check - got {res_check_names}")
+
+        # Get the elem_num to three-tuple-idx lookup
+        stent_params = hist.get_stent_params()
+        elem_num_to_idx = {iElem: idx for iElem, idx in design.generate_elem_indices(stent_params.divs)}
+
+        optim_params = hist.get_opt_params()
+
+    unsmoothed = {elem_num_to_idx[sc.elem_num]: sc.metric_val for sc in res_unsmoothed}
+    smoothed = gaussian_smooth(optim_params, stent_params, unsmoothed)
+
+    print(f"Iteration {iter_num}.")
+    print(f"Unsmoothed: {len(unsmoothed)}")
+    print(f"Smoothed: {len(smoothed)}")
+
 if __name__ == '__main__':
-    run_test_process_completed_simulation()
+
+    spot_check_smoothing()
 
     # run_test_process_completed_simulation()
 
 
 if False:
+
 
 
     for sub_inp in extra_inp_pool:

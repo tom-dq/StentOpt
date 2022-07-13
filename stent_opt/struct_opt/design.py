@@ -46,8 +46,8 @@ class PolarIndex(BaseModelForDB):
     def fully_populated_node_count(self) -> int:
         return self.R * self.Th * self.Z
 
-    def to_tuple(self) -> typing.Tuple[int]:
-        return (self.R, self.Th, self.Z)
+    def to_tuple(self) -> typing.Tuple[int, int, int]:
+        return self.R, self.Th, self.Z
 
     def __lt__(self, other):
         return self.to_tuple() < other.to_tuple()

@@ -239,7 +239,8 @@ def _build_contour_view_data(
 
     for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(inc_gt, inc_lte, good_metric_names), make_contour_view):
         min_all_frames, max_all_frames = hist.get_min_max_status_check(contour_view.metric_name)
-        contour_view_with_limits = contour_view._replace(min_val=min_all_frames, max_val=max_all_frames)
+        # contour_view_with_limits = contour_view._replace(min_val=min_all_frames, max_val=max_all_frames)
+        contour_view_with_limits = contour_view._replace(min_val=-5, max_val=5)
         elem_vals = {status_check.elem_num: status_check.metric_val for status_check in sub_iter}
         yield contour_view_with_limits, elem_vals
 
