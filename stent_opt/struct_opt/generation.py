@@ -1039,8 +1039,13 @@ def process_completed_simulation(run_one_args: RunOneArgs
         data.prepare_indices_for_extraction(db_defs.IndexCreateStage.primary_extract)
         one_frame = data.get_maybe_last_frame_of_instance("STENT-1")
         abaqus_created_primary_rows = list(data.get_all_rows_at_all_frames_any_element_type())
-        composite_primary_rows_one = score.compute_composite_ranking_component_one(optim_params, abaqus_created_primary_rows)
-        composite_primary_rows_two = score.compute_composite_ranking_component_two(optim_params, abaqus_created_primary_rows)
+        try:
+            composite_primary_rows_one = score.compute_composite_ranking_component_one(optim_params, abaqus_created_primary_rows)
+            composite_primary_rows_two = score.compute_composite_ranking_component_two(optim_params, abaqus_created_primary_rows)
+        except KeyError as e:
+            logging.error(f"Error creating composite ranking component in {db_fn_prev}")
+            raise e
+
         data.add_results_on_existing_frame(one_frame, composite_primary_rows_one)
         data.add_results_on_existing_frame(one_frame, composite_primary_rows_two)
         data.prepare_indices_for_extraction(db_defs.IndexCreateStage.composite)

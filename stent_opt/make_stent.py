@@ -537,5 +537,5 @@ if __name__ == "__main__":
 
     helpers.print_memory_use("Final")
 
-
+    # TODO - Make the disconnection check look for the boundary conditions, not the edges.
 
