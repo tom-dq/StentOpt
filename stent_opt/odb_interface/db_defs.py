@@ -125,70 +125,19 @@ frame_rowid REFERENCES Frame(rowid),
     return NT_type
 
 
-NodePos = _make_nt_and_table_create(
-    "NodePos", ResultEntity.node_num, ("X", "Y", "Z"), IndexCreateStage.primary_extract
-)
-NodeReact = _make_nt_and_table_create(
-    "NodeReact",
-    ResultEntity.node_num,
-    ("X", "Y", "Z"),
-    IndexCreateStage.primary_extract,
-)
-ElementStress = _make_nt_and_table_create(
-    "ElementStress",
-    ResultEntity.elem_num,
-    ("SP1", "SP2", "SP3", "von_mises"),
-    IndexCreateStage.primary_extract,
-)
-ElementPEEQ = _make_nt_and_table_create(
-    "ElementPEEQ", ResultEntity.elem_num, ("PEEQ",), IndexCreateStage.primary_extract
-)
-ElementEnergyElastic = _make_nt_and_table_create(
-    "ElementEnergyElastic",
-    ResultEntity.elem_num,
-    ("ESEDEN",),
-    IndexCreateStage.primary_extract,
-)
-ElementEnergyPlastic = _make_nt_and_table_create(
-    "ElementEnergyPlastic",
-    ResultEntity.elem_num,
-    ("EPDDEN",),
-    IndexCreateStage.primary_extract,
-)
-ElementFatigueResult = _make_nt_and_table_create(
-    "ElementFatigueResult",
-    ResultEntity.elem_num,
-    (
-        "SAmp",
-        "SMean",
-        "LGoodman",
-    ),
-    IndexCreateStage.primary_extract,
-)
-ElementNodeForces = _make_nt_and_table_create(
-    "ElementNodeForces",
-    ResultEntity.elem_num,
-    ("N1X", "N1Y", "N2X", "N2Y", "N3X", "N3Y", "N4X", "N4Y", "overall_norm"),
-    IndexCreateStage.primary_extract,
-)
-ElementGlobalPatchSensitivity = _make_nt_and_table_create(
-    "ElementGlobalPatchSensitivity",
-    ResultEntity.elem_num,
-    ("gradient_from_patch",),
-    IndexCreateStage.patch,
-)
-ElementCustomCompositeOne = _make_nt_and_table_create(
-    "ElementCustomCompositeOne",
-    ResultEntity.elem_num,
-    ("comp_val",),
-    IndexCreateStage.composite,
-)
-ElementCustomCompositeTwo = _make_nt_and_table_create(
-    "ElementCustomCompositeTwo",
-    ResultEntity.elem_num,
-    ("comp_val",),
-    IndexCreateStage.composite,
-)
+# fmt:off
+NodePos = _make_nt_and_table_create("NodePos", ResultEntity.node_num, ("X", "Y", "Z"), IndexCreateStage.primary_extract)
+NodeReact = _make_nt_and_table_create("NodeReact", ResultEntity.node_num, ("X", "Y", "Z"), IndexCreateStage.primary_extract)
+ElementStress = _make_nt_and_table_create("ElementStress", ResultEntity.elem_num, ("SP1", "SP2", "SP3", "von_mises"), IndexCreateStage.primary_extract)
+ElementPEEQ = _make_nt_and_table_create("ElementPEEQ", ResultEntity.elem_num, ("PEEQ", ), IndexCreateStage.primary_extract)
+ElementEnergyElastic = _make_nt_and_table_create("ElementEnergyElastic", ResultEntity.elem_num, ("ESEDEN", ), IndexCreateStage.primary_extract)
+ElementEnergyPlastic = _make_nt_and_table_create("ElementEnergyPlastic", ResultEntity.elem_num, ("EPDDEN",), IndexCreateStage.primary_extract)
+ElementFatigueResult = _make_nt_and_table_create("ElementFatigueResult", ResultEntity.elem_num, ("SAmp", "SMean", "LGoodman",), IndexCreateStage.primary_extract)
+ElementNodeForces = _make_nt_and_table_create("ElementNodeForces", ResultEntity.elem_num, ("N1X", "N1Y", "N2X", "N2Y", "N3X", "N3Y", "N4X", "N4Y", "overall_norm"), IndexCreateStage.primary_extract)
+ElementGlobalPatchSensitivity = _make_nt_and_table_create("ElementGlobalPatchSensitivity", ResultEntity.elem_num, ("gradient_from_patch",), IndexCreateStage.patch)
+ElementCustomCompositeOne = _make_nt_and_table_create("ElementCustomCompositeOne", ResultEntity.elem_num, ("comp_val",), IndexCreateStage.composite)
+ElementCustomCompositeTwo = _make_nt_and_table_create("ElementCustomCompositeTwo", ResultEntity.elem_num, ("comp_val",), IndexCreateStage.composite)
+# fmt:on
 
 expected_history_results = ["ALLSE", "ALLPD", "ALLKE", "ALLWK"]
 
