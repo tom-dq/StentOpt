@@ -18,6 +18,7 @@ from stent_opt.struct_opt import construct_model
 from stent_opt.struct_opt.design import StentParams
 from stent_opt.struct_opt import generation, optimisation_parameters
 from stent_opt.struct_opt import patch_manager
+
 # from stent_opt.struct_opt import generation_FORCE, chains
 
 from stent_opt.struct_opt import history
@@ -32,7 +33,7 @@ working_dir_extract = os.path.join(working_dir_orig, "odb_interface")
 
 # This seems to be required to get
 try:
-    os.environ.pop('PYTHONIOENCODING')
+    os.environ.pop("PYTHONIOENCODING")
 except KeyError:
     pass
 
@@ -45,7 +46,9 @@ if multiprocessing.parent_process() is None:
 # - Rasterise and build (offline) the images of each step.
 
 
-def make_full_model_list(stent_design: design.StentDesign) -> typing.List[patch_manager.FullModelInfo]:
+def make_full_model_list(
+    stent_design: design.StentDesign,
+) -> typing.List[patch_manager.FullModelInfo]:
     return [patch_manager.FullModelInfo(stent_design=stent_design)]
 
 
@@ -76,7 +79,7 @@ def _run_external_command(path, args):
         ret_code = proc.returncode
 
     except subprocess.TimeoutExpired:
-        ret_code = 'TimeoutExpired on {0}'.format(args)
+        ret_code = "TimeoutExpired on {0}".format(args)
 
         try:
             kill_process_id(proc.pid)
@@ -100,9 +103,9 @@ def _run_external_command(path, args):
 
 def _run_external_command_tempdir(path, args):
     """Runs the job in a temporary directory. This has a few advantages:
-       1. My temporary directory is on the c: drive so it's heaps faster for swapping, etc.
-       2. The only files left over are the .odb files so it doesn't take up as much space.
-       3. The .odb files only exist when they are finished. So it's always safe to post-process them."""
+    1. My temporary directory is on the c: drive so it's heaps faster for swapping, etc.
+    2. The only files left over are the .odb files so it doesn't take up as much space.
+    3. The .odb files only exist when they are finished. So it's always safe to post-process them."""
 
     # Set up temp dir on the c: drive. Can't use the context manager since we need to be able to clean it up explicitly
     temp_dir_obj = tempfile.TemporaryDirectory()
@@ -114,7 +117,9 @@ def _run_external_command_tempdir(path, args):
 
     # If there's a user subroutine, copy that too...
     if job_info.UserSub:
-        orig_fortran_file = os.path.join(os.path.split(job_info.FnInp)[0], job_info.UserSub)
+        orig_fortran_file = os.path.join(
+            os.path.split(job_info.FnInp)[0], job_info.UserSub
+        )
         local_fortran_file = os.path.join(temp_dir, os.path.split(job_info.UserSub)[1])
         _ = shutil.copy2(orig_fortran_file, local_fortran_file)
 
@@ -149,36 +154,53 @@ def _run_external_command_tempdir(path, args):
 
     return result
 
+
 def run_model(optim_params, inp_fn, force_single_core: bool):
 
     path, fn = os.path.split(inp_fn)
     fn_solo = os.path.splitext(fn)[0]
-    #print(multiprocessing.current_process().name, fn_solo)
+    # print(multiprocessing.current_process().name, fn_solo)
     if force_single_core:
         n_cpus = 1
     else:
-        n_cpus = this_computer.n_cpus_abaqus_explicit if optim_params.is_explicit else this_computer.n_cpus_abaqus_implicit
+        n_cpus = (
+            this_computer.n_cpus_abaqus_explicit
+            if optim_params.is_explicit
+            else this_computer.n_cpus_abaqus_implicit
+        )
 
-    args = ['abaqus.bat', f'cpus={n_cpus}', f'job={fn_solo}']
+    args = ["abaqus.bat", f"cpus={n_cpus}", f"job={fn_solo}"]
 
     # This seems to need to come right after "job" in the argument list
     if optim_params.use_double_precision:
-        args.append('double')
+        args.append("double")
 
-    args.extend(["ask_delete=OFF", 'interactive'])
+    args.extend(["ask_delete=OFF", "interactive"])
 
     _run_external_command(path, args)
 
 
-def perform_extraction(odb_fn, out_db_fn, override_z_val, working_dir_extract, add_initial_node_pos):
+def perform_extraction(
+    odb_fn, out_db_fn, override_z_val, working_dir_extract, add_initial_node_pos
+):
 
-    args = ["abaqus.bat", "cae", "noGui=odb_extract.py", "--", str(odb_fn), str(out_db_fn), str(override_z_val), str(add_initial_node_pos)]
+    args = [
+        "abaqus.bat",
+        "cae",
+        "noGui=odb_extract.py",
+        "--",
+        str(odb_fn),
+        str(out_db_fn),
+        str(override_z_val),
+        str(add_initial_node_pos),
+    ]
 
     _run_external_command(working_dir_extract, args)
 
 
 class TempDirWrapper:
     """Acts does all the stuff in a temporary directory (Abaqus runs faster on an SSD)"""
+
     use_temp_dir: bool
     global_working_dir: pathlib.Path
     ssd_working_dir: pathlib.Path
@@ -205,21 +227,28 @@ class TempDirWrapper:
 
         # Copy the useful files back again
         _return_extensions_lower_case_ = {
-            '.inp',
-            '.odb',
-            '.msg',
-            '.sta',
-            '.dat',
-            '.db',
+            ".inp",
+            ".odb",
+            ".msg",
+            ".sta",
+            ".dat",
+            ".db",
         }
         if any(ext != ext.lower() for ext in _return_extensions_lower_case_):
-            raise ValueError('All the extensions in _return_extensions_lower_case_ need to be lower case.')
+            raise ValueError(
+                "All the extensions in _return_extensions_lower_case_ need to be lower case."
+            )
 
         moved_files = 0
         for ret_file_extension in _return_extensions_lower_case_:
             # Copy just the .odb file back.
-            created_file = self.ssd_working_dir / f'{self.example_file_stem}{ret_file_extension}'
-            original_file = self.global_working_dir / f'{self.example_file_stem}{ret_file_extension}'
+            created_file = (
+                self.ssd_working_dir / f"{self.example_file_stem}{ret_file_extension}"
+            )
+            original_file = (
+                self.global_working_dir
+                / f"{self.example_file_stem}{ret_file_extension}"
+            )
 
             try:
                 _ = shutil.copy2(created_file, original_file)
@@ -249,8 +278,8 @@ class TempDirWrapper:
         if not self.use_temp_dir:
             return
 
-        original_inp = self.global_working_dir / f'{self.example_file_stem}.inp'
-        created_inp = self.ssd_working_dir / f'{self.example_file_stem}.inp'
+        original_inp = self.global_working_dir / f"{self.example_file_stem}.inp"
+        created_inp = self.ssd_working_dir / f"{self.example_file_stem}.inp"
         _ = shutil.copy2(original_inp, created_inp)
 
 
@@ -265,11 +294,17 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
     # Do the initial setup from a first model.
     starting_i = 0
 
-    with TempDirWrapper(this_computer.working_dir, history.make_fn_alone_stem(starting_i), this_computer.should_use_temp_dir) as ssd_dir:
+    with TempDirWrapper(
+        this_computer.working_dir,
+        history.make_fn_alone_stem(starting_i),
+        this_computer.should_use_temp_dir,
+    ) as ssd_dir:
 
         fn_inp = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".inp", starting_i)
         current_design = design.make_initial_design(stent_params)
-        construct_model.make_stent_model(optim_params, current_design, make_full_model_list(current_design), fn_inp)
+        construct_model.make_stent_model(
+            optim_params, current_design, make_full_model_list(current_design), fn_inp
+        )
 
         run_model(optim_params, fn_inp, force_single_core=False)
         perform_extraction(
@@ -281,8 +316,12 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
         )
 
     with history.History(history_db_fn) as hist:
-        elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
-        active_elem_nums = (elem_indices_to_num[idx] for idx in current_design.active_elements)
+        elem_indices_to_num = {
+            idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)
+        }
+        active_elem_nums = (
+            elem_indices_to_num[idx] for idx in current_design.active_elements
+        )
         snapshot = history.Snapshot(
             iteration_num=starting_i,
             label=f"First Iteration {starting_i}",
@@ -314,9 +353,15 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
 
     # Can fork a pool here if needs be...
     if this_computer.n_abaqus_parallel_solves > 1:
-        with multiprocessing.Pool(processes=this_computer.n_abaqus_parallel_solves, initializer=init, initargs=(mp_lock,)) as pool:
-            for out_run_one_args in pool.imap_unordered(process_pool_run_and_process, all_run_one_args_in):
-                print(f"   "+out_run_one_args.executed_feedback_text)
+        with multiprocessing.Pool(
+            processes=this_computer.n_abaqus_parallel_solves,
+            initializer=init,
+            initargs=(mp_lock,),
+        ) as pool:
+            for out_run_one_args in pool.imap_unordered(
+                process_pool_run_and_process, all_run_one_args_in
+            ):
+                print(f"   " + out_run_one_args.executed_feedback_text)
                 helpers.print_memory_use("After process_pool_run_and_process")
                 child_patch_run_one_args.append(out_run_one_args)
 
@@ -324,7 +369,7 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
         init(mp_lock)
         for run_args_patch in all_run_one_args_in:
             out_run_one_args = process_pool_run_and_process(run_args_patch)
-            print(f"   "+out_run_one_args.executed_feedback_text)
+            print(f"   " + out_run_one_args.executed_feedback_text)
             child_patch_run_one_args.append(out_run_one_args)
 
     return generation.RunOneArgs(
@@ -334,70 +379,116 @@ def _from_scract_setup(working_dir, mp_lock) -> generation.RunOneArgs:
         nodal_z_override_in_odb=stent_params.nodal_z_override_in_odb,
         working_dir_extract=working_dir_extract,
         model_infos=make_full_model_list(current_design),
-        patch_suffix='',
+        patch_suffix="",
         child_patch_run_one_args=tuple(child_patch_run_one_args),
         executed_feedback_text=f"{multiprocessing.current_process().name} Finished Initial Setup",
         do_run_model_TESTING=True,
         do_run_extraction_TESTING=True,
     )
 
+
 # TEMP! This is for trialing new designs
 new_design_trials: typing.List[typing.Tuple[generation.T_ProdNewGen, str]] = []
 
-#for one_chain in chains.make_single_sided_chains(8):
+# for one_chain in chains.make_single_sided_chains(8):
 #    one_forced_func = functools.partial(generation_FORCE.compel_new_generation, one_chain)
-    # new_design_trials.append((one_forced_func, str(one_chain)))
+# new_design_trials.append((one_forced_func, str(one_chain)))
 
 
-new_design_trials.append((generation.produce_new_generation, "generation.produce_new_generation"))
+new_design_trials.append(
+    (generation.produce_new_generation, "generation.produce_new_generation")
+)
 # print(f"Doing {len(new_design_trials)} trails each time...")
 
 
-def process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
+def process_pool_run_and_process(
+    run_one_args: generation.RunOneArgs,
+) -> generation.RunOneArgs:
     # Just a wrapper so we can profile this
     return _process_pool_run_and_process(run_one_args)
 
 
 # @retry.retry(tries=5, delay=2,)
 # @memory_profiler.profile
-def _process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> generation.RunOneArgs:
+def _process_pool_run_and_process(
+    run_one_args: generation.RunOneArgs,
+) -> generation.RunOneArgs:
     """This returns a new version of the input argument, with info about the children filled in."""
 
-    example_stem = history.make_fn_alone_stem(run_one_args.iter_this, run_one_args.patch_suffix)
-    with TempDirWrapper(run_one_args.working_dir, example_stem, this_computer.should_use_temp_dir) as ssd_dir:
+    example_stem = history.make_fn_alone_stem(
+        run_one_args.iter_this, run_one_args.patch_suffix
+    )
+    with TempDirWrapper(
+        run_one_args.working_dir, example_stem, this_computer.should_use_temp_dir
+    ) as ssd_dir:
         ssd_dir.copy_in_inp()
-        fn_inp = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".inp", run_one_args.iter_this, run_one_args.patch_suffix)
+        fn_inp = history.make_fn_in_dir(
+            ssd_dir.ssd_working_dir,
+            ".inp",
+            run_one_args.iter_this,
+            run_one_args.patch_suffix,
+        )
 
         is_sub_model = not run_one_args.is_full_model
         if run_one_args.do_run_model_TESTING:
             run_model(run_one_args.optim_params, fn_inp, force_single_core=is_sub_model)
         else:
-            logging.warning(f"*** Skipping run_model(...) because do_run_model_TESTING is False!! Turn it back on!")
+            logging.warning(
+                f"*** Skipping run_model(...) because do_run_model_TESTING is False!! Turn it back on!"
+            )
 
-        fn_db_current = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".db", run_one_args.iter_this, run_one_args.patch_suffix)
-        fn_odb = history.make_fn_in_dir(ssd_dir.ssd_working_dir, ".odb", run_one_args.iter_this, run_one_args.patch_suffix)
+        fn_db_current = history.make_fn_in_dir(
+            ssd_dir.ssd_working_dir,
+            ".db",
+            run_one_args.iter_this,
+            run_one_args.patch_suffix,
+        )
+        fn_odb = history.make_fn_in_dir(
+            ssd_dir.ssd_working_dir,
+            ".odb",
+            run_one_args.iter_this,
+            run_one_args.patch_suffix,
+        )
 
         if run_one_args.do_run_extraction_TESTING:
             # with mp_lock:
-                perform_extraction(fn_odb, fn_db_current, run_one_args.nodal_z_override_in_odb, run_one_args.working_dir_extract, run_one_args.optim_params.add_initial_node_pos)
+            perform_extraction(
+                fn_odb,
+                fn_db_current,
+                run_one_args.nodal_z_override_in_odb,
+                run_one_args.working_dir_extract,
+                run_one_args.optim_params.add_initial_node_pos,
+            )
 
         else:
-            logging.warning(f"*** Skipping perform_extraction(...) because do_run_extraction_TESTING is turned off. Put it back when you're done!")
+            logging.warning(
+                f"*** Skipping perform_extraction(...) because do_run_extraction_TESTING is turned off. Put it back when you're done!"
+            )
 
     # Sensitivity analysis with the "finite difference method"
     child_patch_run_one_args = []
     if run_one_args.is_full_model:
 
-        patch_suffix_to_submod_infos = generation.produce_patch_models(run_one_args.working_dir, run_one_args.iter_this)
+        patch_suffix_to_submod_infos = generation.produce_patch_models(
+            run_one_args.working_dir, run_one_args.iter_this
+        )
         all_run_one_args_in = []
         for patch_suffix, model_infos in patch_suffix_to_submod_infos.items():
-            run_args_patch = run_one_args._replace(model_infos=model_infos, patch_suffix=patch_suffix)
+            run_args_patch = run_one_args._replace(
+                model_infos=model_infos, patch_suffix=patch_suffix
+            )
             all_run_one_args_in.append(run_args_patch)
 
         # Recursive but only one layer deep! And fan out at this point to multi-core...
         if this_computer.n_abaqus_parallel_solves > 1:
-            with multiprocessing.Pool(processes=this_computer.n_abaqus_parallel_solves, initializer=init, initargs=(mp_lock,)) as pool:
-                for out_run_one_args in pool.imap_unordered(process_pool_run_and_process, all_run_one_args_in):
+            with multiprocessing.Pool(
+                processes=this_computer.n_abaqus_parallel_solves,
+                initializer=init,
+                initargs=(mp_lock,),
+            ) as pool:
+                for out_run_one_args in pool.imap_unordered(
+                    process_pool_run_and_process, all_run_one_args_in
+                ):
                     print(f"   " + out_run_one_args.executed_feedback_text)
                     helpers.print_memory_use("After process_pool_run_and_process")
                     child_patch_run_one_args.append(out_run_one_args)
@@ -414,7 +505,7 @@ def _process_pool_run_and_process(run_one_args: generation.RunOneArgs) -> genera
 
     return run_one_args._replace(
         child_patch_run_one_args=tuple(child_patch_run_one_args),
-        executed_feedback_text=f"{multiprocessing.current_process().name} Finished {run_one_args.fn_inp}"
+        executed_feedback_text=f"{multiprocessing.current_process().name} Finished {run_one_args.fn_inp}",
     )
 
 
@@ -423,7 +514,9 @@ def init(mp_lock):
     lock = mp_lock
 
 
-def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.OptimParams):
+def do_opt(
+    stent_params: StentParams, optim_params: optimisation_parameters.OptimParams
+):
     working_dir = pathlib.Path(optim_params.working_dir)
     history_db_fn = history.make_history_db(working_dir)
 
@@ -441,7 +534,9 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         else:
             old_stent_params = hist.get_stent_params()
             if stent_params != old_stent_params:
-                raise ValueError(r"Something changed with the stent params - can't use this one!")
+                raise ValueError(
+                    r"Something changed with the stent params - can't use this one!"
+                )
 
     if start_from_scratch:
         run_one_args_completed = _from_scract_setup(working_dir, mp_lock)
@@ -458,9 +553,11 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
     previous_max_i = iter_prev
 
     while True:
-    # while iter_prev < 1:
+        # while iter_prev < 1:
         # Extract ONE from the previous generation
-        one_design, model_info_to_rank = generation.process_completed_simulation(run_one_args_completed)
+        one_design, model_info_to_rank = generation.process_completed_simulation(
+            run_one_args_completed
+        )
         if len(model_info_to_rank) != 1:
             raise ValueError("What?")
 
@@ -469,15 +566,21 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
         # for iter_this, (new_gen_func, new_gen_descip) in enumerate(new_design_trials, start=previous_max_i+1):
         iter_this = iter_prev + 1
         new_gen_descip = f"{optim_params.working_dir} {iter_this} {optim_params}"
-        one_new_design = generation.produce_new_generation(working_dir, one_design, one_ranking, run_one_args_completed, new_gen_descip)
+        one_new_design = generation.produce_new_generation(
+            working_dir, one_design, one_ranking, run_one_args_completed, new_gen_descip
+        )
 
         new_elements = one_new_design.active_elements - one_design.active_elements
         removed_elements = one_design.active_elements - one_new_design.active_elements
-        print(f"[{iter_prev} -> {iter_this}]\t{new_gen_descip}\tAdded: {len(new_elements)}\tRemoved: {len(removed_elements)}.")
+        print(
+            f"[{iter_prev} -> {iter_this}]\t{new_gen_descip}\tAdded: {len(new_elements)}\tRemoved: {len(removed_elements)}."
+        )
 
         fn_inp = history.make_fn_in_dir(working_dir, ".inp", iter_this)
 
-        construct_model.make_stent_model(optim_params, one_new_design, make_full_model_list(one_new_design), fn_inp)
+        construct_model.make_stent_model(
+            optim_params, one_new_design, make_full_model_list(one_new_design), fn_inp
+        )
 
         run_one_args_input = generation.RunOneArgs(
             working_dir=working_dir,
@@ -486,9 +589,9 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
             nodal_z_override_in_odb=one_design.stent_params.nodal_z_override_in_odb,
             working_dir_extract=working_dir_extract,
             model_infos=[patch_manager.FullModelInfo(one_new_design)],
-            patch_suffix='',
+            patch_suffix="",
             child_patch_run_one_args=tuple(),
-            executed_feedback_text='',
+            executed_feedback_text="",
             do_run_model_TESTING=True,  # Sometimes turn these off to optimise some code path
             do_run_extraction_TESTING=True,
         )
@@ -497,9 +600,13 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 
         MULTI_PROCESS_POOL = False
         if MULTI_PROCESS_POOL:
-            with multiprocessing.Pool(processes=4, initializer=init, initargs=(mp_lock,)) as pool:
+            with multiprocessing.Pool(
+                processes=4, initializer=init, initargs=(mp_lock,)
+            ) as pool:
 
-                for run_one_args_completed in pool.imap_unordered(process_pool_run_and_process, [run_one_args_input]):
+                for run_one_args_completed in pool.imap_unordered(
+                    process_pool_run_and_process, [run_one_args_input]
+                ):
                     print(run_one_args_completed.executed_feedback_text)
 
         else:
@@ -521,12 +628,16 @@ def do_opt(stent_params: StentParams, optim_params: optimisation_parameters.Opti
 if __name__ == "__main__":
 
     stent_params = design.basic_stent_params
-    optim_params = optimisation_parameters.active._replace(working_dir=str(this_computer.working_dir))
+    optim_params = optimisation_parameters.active._replace(
+        working_dir=str(this_computer.working_dir)
+    )
     # optim_params = optimisation_parameters.active._replace(ssd_working_dir=r"E:\Simulations\StentOpt\AA-256")
 
     # Check the serialisation
     optim_param_data = list(optim_params.to_db_strings())
-    optim_param_data_again = optimisation_parameters.OptimParams.from_db_strings(optim_param_data)
+    optim_param_data_again = optimisation_parameters.OptimParams.from_db_strings(
+        optim_param_data
+    )
     assert optim_params == optim_param_data_again
 
     stent_param_data = stent_params.json(indent=2)
@@ -538,4 +649,3 @@ if __name__ == "__main__":
     helpers.print_memory_use("Final")
 
     # TODO - Make the disconnection check look for the boundary conditions, not the edges.
-

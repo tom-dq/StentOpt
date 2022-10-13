@@ -53,7 +53,9 @@ def make_test_load_point(node_set: node.NodeSet) -> ConcentratedLoad:
     return cload
 
 
-def make_test_pressure(on_surface: surface.Surface, with_amplitude: typing.Optional[amplitude.Amplitude]) -> PressureLoad:
+def make_test_pressure(
+    on_surface: surface.Surface, with_amplitude: typing.Optional[amplitude.Amplitude]
+) -> PressureLoad:
     pload = PressureLoad(
         name="Test Pressure Load",
         with_amplitude=with_amplitude,
@@ -61,6 +63,7 @@ def make_test_pressure(on_surface: surface.Surface, with_amplitude: typing.Optio
         value=345.678,
     )
     return pload
+
 
 if __name__ == "__main__":
 
@@ -75,5 +78,3 @@ if __name__ == "__main__":
             print(l)
 
         print()
-
-

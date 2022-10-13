@@ -1,4 +1,3 @@
-
 import typing
 
 from stent_opt.abaqus_model import node, base, part, surface
@@ -46,8 +45,9 @@ class Instance:
         for surf_name, surf in self.surfaces.items():
             yield from surf.produce_inp_lines()
 
-
-    def _one_equation(self, one_couple: node.NodeCouple, dof: int) -> typing.Iterable[str]:
+    def _one_equation(
+        self, one_couple: node.NodeCouple, dof: int
+    ) -> typing.Iterable[str]:
 
         node2_factor = "1." if one_couple.negated else "-1."
 
@@ -57,7 +57,6 @@ class Instance:
         yield f"{self.name}.{one_couple.n1}, {dof}, 1."
         yield f"{self.name}.{one_couple.n2}, {dof}, {node2_factor}"
 
-
     def produce_equation_inp_line(self) -> typing.Iterable[str]:
         """Produce the constraint equations. These end up in the assembly part of the .inp
         so they need to be namespaced."""
@@ -66,11 +65,8 @@ class Instance:
             for dof in base.DOFs:
                 yield from self._one_equation(one_couple, dof)
 
-
     def add_node_couple(self, n1: int, n2: int, negated: bool):
-        self.node_couples.add(
-            node.NodeCouple(n1=n1, n2=n2, negated=negated)
-        )
+        self.node_couples.add(node.NodeCouple(n1=n1, n2=n2, negated=negated))
 
     def add_surface(self, surf: surface.Surface):
         for one_set, one_face in surf.sets_and_faces:

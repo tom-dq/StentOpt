@@ -43,18 +43,24 @@ class AbaqusModel:
     def add_step(self, one_step: step.StepBase):
         self.steps.append(one_step)
 
-    def add_load_starting_from(self, starting_step: step.StepBase, one_load: base.LoadBoundaryBase):
+    def add_load_starting_from(
+        self, starting_step: step.StepBase, one_load: base.LoadBoundaryBase
+    ):
         """Add a load at a step, and for all the following steps."""
         on_this_one = False
         for one_step in self.steps:
             on_this_one = on_this_one or one_step == starting_step
             if on_this_one:
-                self.step_loads.add( (one_step, one_load))
+                self.step_loads.add((one_step, one_load))
 
         if not on_this_one:
             raise ValueError(f"Did not find {starting_step} in AbaqusModel.steps")
 
-    def add_load_specific_steps(self, active_steps: typing.Iterable[step.StepBase], one_load: base.LoadBoundaryBase):
+    def add_load_specific_steps(
+        self,
+        active_steps: typing.Iterable[step.StepBase],
+        one_load: base.LoadBoundaryBase,
+    ):
         """Add a load but only at particular steps (so you can turn it off after a while)."""
         for one_step in active_steps:
             self.step_loads.add((one_step, one_load))
@@ -65,7 +71,7 @@ class AbaqusModel:
     def add_spring(self, one_spring: spring.SpringA):
         self.springs.add(one_spring)
 
-    def get_parts(self) -> typing.Iterable[ part.Part]:
+    def get_parts(self) -> typing.Iterable[part.Part]:
         """Iterate through the parts referenced by any instance in the model."""
         seen = set()
         for one_instance in self.instances.values():
@@ -83,7 +89,11 @@ class AbaqusModel:
         return list(self.instances.values())[0]
 
     def get_only_instance_base_part_name(self, base_part_name: str):
-        relevant_instances = [inst for inst in self.instances.values() if inst.base_part.name == base_part_name]
+        relevant_instances = [
+            inst
+            for inst in self.instances.values()
+            if inst.base_part.name == base_part_name
+        ]
 
         if len(relevant_instances) != 1:
             raise ValueError(f"Expected a single instance, got {len(self.instances)}.")
@@ -104,7 +114,6 @@ class AbaqusModel:
         yield from self._produce_inp_lines_boundary()
         yield from self._produce_inp_lines_interactions(step_dependent=False)
         yield from self._produce_inp_lines_steps()
-
 
     def _produce_inp_lines_header(self) -> typing.Iterable[str]:
         yield "*Heading"
@@ -128,7 +137,6 @@ class AbaqusModel:
 
         yield "*End Assembly"
 
-
     def _product_inp_lines_section_control(self) -> typing.Iterable[str]:
         def gen_section_controls():
             seen = set()
@@ -145,7 +153,6 @@ class AbaqusModel:
         for sec_control in gen_section_controls():
             yield from sec_control.produce_inp_lines()
 
-
     def _produce_inp_lines_amplitude(self) -> typing.Iterable[str]:
         def generate_referenced_amplitudes():
             seen = set()
@@ -158,7 +165,6 @@ class AbaqusModel:
 
         for amp in generate_referenced_amplitudes():
             yield from amp.make_inp_lines()
-
 
     def _produce_inp_lines_material(self) -> typing.Iterable[str]:
         yield from base.inp_heading("MATERIALS")
@@ -183,7 +189,9 @@ class AbaqusModel:
             for one_bc in self.boundary_conditions:
                 yield from one_bc.produce_inp_lines(base.Action.create_first_step)
 
-    def _produce_inp_lines_interactions(self, step_dependent: bool) -> typing.Iterable[str]:
+    def _produce_inp_lines_interactions(
+        self, step_dependent: bool
+    ) -> typing.Iterable[str]:
         """Interaction properties can either be step dependent, or global. This does both."""
         maybe_ints = self._some_interaction_sorted(step_dependent)
         if maybe_ints:
@@ -200,8 +208,14 @@ class AbaqusModel:
 
         return sorted(all_loads, key=sort_key)
 
-    def _some_interaction_sorted(self, step_dependent: bool) -> typing.List[interaction.InteractionBase]:
-        rel_ones = [one_int for one_int in self.interactions if one_int.is_step_dependent == step_dependent]
+    def _some_interaction_sorted(
+        self, step_dependent: bool
+    ) -> typing.List[interaction.InteractionBase]:
+        rel_ones = [
+            one_int
+            for one_int in self.interactions
+            if one_int.is_step_dependent == step_dependent
+        ]
 
         def sort_key(one_load: base.LoadBoundaryBase):
             return one_load.sortable()
@@ -209,7 +223,7 @@ class AbaqusModel:
         rel_ones.sort(key=sort_key)
         return rel_ones
 
-    def _produce_inp_lines_steps(self) ->  typing.Iterable[str]:
+    def _produce_inp_lines_steps(self) -> typing.Iterable[str]:
         yield self._main_sep_line
 
         is_explicit = step.analysis_is_explicit(self.steps)
@@ -229,7 +243,9 @@ class AbaqusModel:
 
             for one_load in self._get_sorted_loads():
                 all_load_events = self._step_load_actions(one_load)
-                relevant_load_events = [action for a_step, action in all_load_events if a_step == one_step]
+                relevant_load_events = [
+                    action for a_step, action in all_load_events if a_step == one_step
+                ]
                 if len(relevant_load_events) == 0:
                     pass
 
@@ -238,7 +254,9 @@ class AbaqusModel:
                     yield from one_load.produce_inp_lines(action)
 
                 else:
-                    raise ValueError(f"Got more than one thing to do with {one_load} and {one_step}... {relevant_load_events}")
+                    raise ValueError(
+                        f"Got more than one thing to do with {one_load} and {one_step}... {relevant_load_events}"
+                    )
 
             yield from self._produce_inp_lines_interactions(step_dependent=True)
 
@@ -260,7 +278,6 @@ class AbaqusModel:
             # abaqus.bat job=job-12 interactive     >>> Run
             # abaqus.bat job=job-12 convert=select  >>> Make .fil from .sel
             # abaqus.bat ascfil job=job-12          >>> Make asciii .fin from .fil
-
 
             yield "*End Step"
 
@@ -296,7 +313,13 @@ class AbaqusModel:
             k_to_springs[one_spring.k].add(one_spring)
 
         def spring_sort(one_spring: spring.SpringA):
-            return one_spring.inst1.name, one_spring.inst2.name, one_spring.n1, one_spring.n2, one_spring.k
+            return (
+                one_spring.inst1.name,
+                one_spring.inst2.name,
+                one_spring.n1,
+                one_spring.n2,
+                one_spring.k,
+            )
 
         next_spring_counter = itertools.count(start=1)
         for idx, (k, springs) in enumerate(sorted(k_to_springs.items())):
@@ -307,6 +330,7 @@ class AbaqusModel:
             yield f"*Element, type=SpringA, elset={elset_name}"
             for one_spring in sorted(springs, key=spring_sort):
                 yield f"{next(next_spring_counter)}, {one_spring.inst1.name}.{one_spring.n1}, {one_spring.inst2.name}.{one_spring.n2}"
+
 
 def make_test_model() -> AbaqusModel:
 
@@ -322,10 +346,11 @@ def make_test_model() -> AbaqusModel:
 
     # Make a surface
     one_elem_set = one_instance.base_part.element_sets["OneElem"]
-    surf_data = [ (one_elem_set, surface.SurfaceFace.S2) , ]
+    surf_data = [
+        (one_elem_set, surface.SurfaceFace.S2),
+    ]
     one_surface = surface.Surface(name="TestSurface", sets_and_faces=surf_data)
     one_instance.add_surface(one_surface)
-
 
     # Add the loads
     one_amplitude = amplitude.make_test_amplitude()
@@ -337,6 +362,7 @@ def make_test_model() -> AbaqusModel:
 
     return model
 
+
 if __name__ == "__main__":
     model = make_test_model()
     with open(r"C:\temp\aba_out222.inp", "w") as fOut:
@@ -346,11 +372,3 @@ if __name__ == "__main__":
 
 
 # Export
-
-
-
-
-
-
-
-

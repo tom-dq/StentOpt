@@ -7,6 +7,7 @@ import networkx
 
 from stent_opt.struct_opt import design
 
+
 class _Entity(enum.Enum):
     node = enum.auto()
     elem = enum.auto()
@@ -22,24 +23,29 @@ def element_idx_to_elems_within(distance: float, stent_design: "design.StentDesi
     return _element_idx_to_something_within(_Entity.elem, distance, stent_design)
 
 
-
 def _get_elem_idx_to_nodes(stent_design: "design.StentDesign"):
     elem_idx_to_nodes = {
-        elem_idx: elem.connection for elem_idx, elem_num, elem in
-        design.generate_stent_part_elements(stent_design.stent_params) if
-        elem_idx in stent_design.active_elements
+        elem_idx: elem.connection
+        for elem_idx, elem_num, elem in design.generate_stent_part_elements(
+            stent_design.stent_params
+        )
+        if elem_idx in stent_design.active_elements
     }
 
     return elem_idx_to_nodes
 
+
 def _get_elem_num_to_nodes(stent_design: "design.StentDesign"):
     elem_num_to_nodes = {
-        elem_num: elem.connection for elem_idx, elem_num, elem in
-        design.generate_stent_part_elements(stent_design.stent_params) if
-        elem_idx in stent_design.active_elements
+        elem_num: elem.connection
+        for elem_idx, elem_num, elem in design.generate_stent_part_elements(
+            stent_design.stent_params
+        )
+        if elem_idx in stent_design.active_elements
     }
 
     return elem_num_to_nodes
+
 
 def _get_active_nodes(elem_idx_to_nodes):
     active_nodes = set()
@@ -79,13 +85,17 @@ def _build_graph_from_design(stent_design: "design.StentDesign") -> networkx.Gra
 
     return graph
 
-def _element_idx_to_something_within(entity: _Entity, distance: float, stent_design: "design.StentDesign"):
+
+def _element_idx_to_something_within(
+    entity: _Entity, distance: float, stent_design: "design.StentDesign"
+):
     # TODO - do this a different way, with meshgrid and indices, for example.
 
     elem_num_to_idx = {
-        iElem: idx for iElem, idx in
-        design.generate_elem_indices(stent_design.stent_params.divs) if
-        idx in stent_design.active_elements}
+        iElem: idx
+        for iElem, idx in design.generate_elem_indices(stent_design.stent_params.divs)
+        if idx in stent_design.active_elements
+    }
 
     # Get the hop distance between individual nodes.
     elem_idx_to_nodes = _get_elem_idx_to_nodes(stent_design)
@@ -100,11 +110,15 @@ def _element_idx_to_something_within(entity: _Entity, distance: float, stent_des
     node_to_nodes_within_radius = dict()
     if OPT == 0:
         for iNode in active_nodes:
-            node_to_dist = networkx.single_source_dijkstra_path_length(graph, iNode, cutoff=distance)
+            node_to_dist = networkx.single_source_dijkstra_path_length(
+                graph, iNode, cutoff=distance
+            )
             node_to_nodes_within_radius[iNode] = set(node_to_dist.keys())
 
     elif OPT == 1:
-        for iSourceNode, iTargetNodes in networkx.all_pairs_dijkstra_path_length(graph, cutoff=distance):
+        for iSourceNode, iTargetNodes in networkx.all_pairs_dijkstra_path_length(
+            graph, cutoff=distance
+        ):
             node_to_nodes_within_radius[iSourceNode] = set(iTargetNodes)
 
     elif OPT == 2:
@@ -117,7 +131,9 @@ def _element_idx_to_something_within(entity: _Entity, distance: float, stent_des
     # Get the nodes within the range.
     elem_idx_to_nodes_in_range = {}
     for elem_idx, node_connection in elem_idx_to_nodes.items():
-        all_sets_of_nodes = [node_to_nodes_within_radius[iNode] for iNode in node_connection]
+        all_sets_of_nodes = [
+            node_to_nodes_within_radius[iNode] for iNode in node_connection
+        ]
         all_nodes_in_range = set.union(*all_sets_of_nodes)
         elem_idx_to_nodes_in_range[elem_idx] = all_nodes_in_range
 
@@ -149,9 +165,12 @@ def get_elems_in_centre(stent_design: "design.StentDesign"):
 
     nodes_in_cent = set(networkx.center(graph))
 
-    elems_in_cent = {elem for elem, nodes in elem_idx_to_nodes.items() if any(x in nodes_in_cent for x in nodes)}
+    elems_in_cent = {
+        elem
+        for elem, nodes in elem_idx_to_nodes.items()
+        if any(x in nodes_in_cent for x in nodes)
+    }
     return elems_in_cent
-
 
 
 def make_hole_away_from_boundary(stent_design: "design.StentDesign"):
@@ -164,10 +183,6 @@ if __name__ == "__main__":
 
     aaa = get_elems_in_centre(stent_design)
 
-
     aaa = element_idx_to_nodes_within(0.2, stent_design)
     for k, v in aaa.items():
         print(k, v)
-
-
-

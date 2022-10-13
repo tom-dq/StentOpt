@@ -4,23 +4,46 @@ import statistics
 import typing
 
 import stent_opt.struct_opt.design
-from stent_opt.abaqus_model import main, material, section, part, instance, node, element, surface, amplitude, \
-    boundary_condition, load, step, interaction_property, interaction, base, spring
+from stent_opt.abaqus_model import (
+    main,
+    material,
+    section,
+    part,
+    instance,
+    node,
+    element,
+    surface,
+    amplitude,
+    boundary_condition,
+    load,
+    step,
+    interaction_property,
+    interaction,
+    base,
+    spring,
+)
 from stent_opt.struct_opt import optimisation_parameters, design
-from stent_opt.struct_opt.design import StentDesign, GlobalPartNames, GlobalNodeSetNames, Actuation, StentParams, \
-    GlobalSurfNames
+from stent_opt.struct_opt.design import (
+    StentDesign,
+    GlobalPartNames,
+    GlobalNodeSetNames,
+    Actuation,
+    StentParams,
+    GlobalSurfNames,
+)
 
 from stent_opt.struct_opt import patch_manager
 
 # TODO - the spring boundary condition is not working in the submodels - need to see what's causing that!!
 
+
 def get_boundary_node_set_2d(
-        treat_spring_boundary_as_fixed: bool, # For singularity testings purposes, treat a spring in X the same as fixed in X
-        submodel_boundary_nodes: typing.Set[int],
-        stent_params: StentParams,
-        reference_stent_design: StentDesign,
-        iNodeModel: int,
-        node_idx: design.PolarIndex
+    treat_spring_boundary_as_fixed: bool,  # For singularity testings purposes, treat a spring in X the same as fixed in X
+    submodel_boundary_nodes: typing.Set[int],
+    stent_params: StentParams,
+    reference_stent_design: StentDesign,
+    iNodeModel: int,
+    node_idx: design.PolarIndex,
 ) -> typing.Iterable[design.NodeSetName]:
     # print("get_boundary_node_set", iNodeModel, node_idx)
     # If this node is on the sub-model boundary interface, don't add it to any sets (it is fully definied
@@ -31,19 +54,27 @@ def get_boundary_node_set_2d(
     for bc_logical in stent_params.boundary_conds:
         is_fixed_boundary = not bc_logical.require_offset_nodes_for_spring
         if is_fixed_boundary or treat_spring_boundary_as_fixed:
-            contains_idx, _ = bc_logical.contains_polar_index_and_ratio(stent_params, node_idx)
+            contains_idx, _ = bc_logical.contains_polar_index_and_ratio(
+                stent_params, node_idx
+            )
             if contains_idx:
                 yield design.NodeSetName(bc_logical.bc_name)
-
-
 
     # Apply sum stuff for sub-model as well...
     maybe_x_sym_plane = reference_stent_design.stent_params.get_x_index_sym_plane()
     maybe_y_sym_plane = reference_stent_design.stent_params.get_y_index_sym_plane()
 
     # Sub model or full model
-    if node_idx.Th == maybe_x_sym_plane: yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentXSymPlane.name, planar_x_is_constrained=True)
-    if node_idx.Z == maybe_y_sym_plane: yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentYSymPlane.name, planar_y_is_constrained=True)
+    if node_idx.Th == maybe_x_sym_plane:
+        yield design.NodeSetName(
+            design.GlobalNodeSetNames.PlanarStentXSymPlane.name,
+            planar_x_is_constrained=True,
+        )
+    if node_idx.Z == maybe_y_sym_plane:
+        yield design.NodeSetName(
+            design.GlobalNodeSetNames.PlanarStentYSymPlane.name,
+            planar_y_is_constrained=True,
+        )
 
     # TODO - make "is_in_bottom_chunk" generalisable and more robust.
     return
@@ -51,26 +82,45 @@ def get_boundary_node_set_2d(
     min_idx_z = reference_stent_design.get_min_idx_z()
     if node_idx.Th == 0:
         if stent_params.node_idx_z_is_restrained(True, node_idx.Z):
-            yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentTheta0.name, planar_x_is_constrained=True)
+            yield design.NodeSetName(
+                design.GlobalNodeSetNames.PlanarStentTheta0.name,
+                planar_x_is_constrained=True,
+            )
 
     if node_idx.Th == stent_params.divs.Th - 1:
         if stent_params.node_idx_z_is_restrained(False, node_idx.Z):
-            yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentThetaMax.name, planar_x_is_constrained=True)
+            yield design.NodeSetName(
+                design.GlobalNodeSetNames.PlanarStentThetaMax.name,
+                planar_x_is_constrained=True,
+            )
 
     if reference_stent_design.stent_params.fix_base:
-        if node_idx.Z == min_idx_z: yield design.NodeSetName(design.GlobalNodeSetNames.PlanarStentZMin.name, planar_y_is_constrained=True)
+        if node_idx.Z == min_idx_z:
+            yield design.NodeSetName(
+                design.GlobalNodeSetNames.PlanarStentZMin.name,
+                planar_y_is_constrained=True,
+            )
 
 
-def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: bool, sub_model_infos: typing.List[patch_manager.SubModelInfoBase]):
+def make_a_stent(
+    optim_params: optimisation_parameters.OptimParams,
+    full_model: bool,
+    sub_model_infos: typing.List[patch_manager.SubModelInfoBase],
+):
 
-    model = main.AbaqusModel("StentModel", abaqus_history_time_interval=optim_params.get_abaqus_history_time_interval())
+    model = main.AbaqusModel(
+        "StentModel",
+        abaqus_history_time_interval=optim_params.get_abaqus_history_time_interval(),
+    )
 
     reference_stent_design: design.StentDesign = sub_model_infos[0].stent_design
 
     element_dimensions = reference_stent_design.stent_params.stent_element_dimensions
     node_num_idx_pos = design.generate_nodes(reference_stent_design.stent_params)
     node_pos = {iNode: xyz for iNode, _, xyz in node_num_idx_pos}
-    node_num_to_polar_index = {iNode: polar_index for iNode, polar_index, _ in node_num_idx_pos}
+    node_num_to_polar_index = {
+        iNode: polar_index for iNode, polar_index, _ in node_num_idx_pos
+    }
     model.abaqus_output_time_interval = optim_params.get_abaqus_output_time_interval()
     model.abaqus_target_increment = optim_params.abaqus_target_increment
 
@@ -82,7 +132,9 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
 
     elif element_dimensions == 2:
         sp_divs = reference_stent_design.stent_params.divs.copy_with_updates(R=1)
-        stent_params = reference_stent_design.stent_params.copy_with_updates(divs=sp_divs)
+        stent_params = reference_stent_design.stent_params.copy_with_updates(
+            divs=sp_divs
+        )
 
         section_thickness = stent_params.radial_thickness
         transform_to_cyl = False
@@ -93,8 +145,8 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
     def make_stent_part():
 
         stress_strain_table = (
-            material.Point(stress=205., strain=0.0),
-            material.Point(stress=515., strain=0.6),
+            material.Point(stress=205.0, strain=0.0),
+            material.Point(stress=515.0, strain=0.6),
         )
         steel = material.MaterialElasticPlastic(
             name="Steel",
@@ -118,11 +170,15 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
         )
 
         # Node offsets
-        node_idx_to_pos = {node_idx: one_node_pos for _, node_idx, one_node_pos in node_num_idx_pos}
+        node_idx_to_pos = {
+            node_idx: one_node_pos for _, node_idx, one_node_pos in node_num_idx_pos
+        }
         node_idx_single = design.PolarIndex(R=0, Th=1, Z=1)
-        offset_single = optim_params.elem_span_for_patch_buffered * node_idx_to_pos[node_idx_single]
+        offset_single = (
+            optim_params.elem_span_for_patch_buffered * node_idx_to_pos[node_idx_single]
+        )
 
-        n_offset_rows = int(1.8 * len(sub_model_infos)**0.5)
+        n_offset_rows = int(1.8 * len(sub_model_infos) ** 0.5)
 
         # Make the nodes.
         def get_bottom_left(node_nums):
@@ -144,12 +200,27 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
             else:
                 bottom_left = get_bottom_left(sub_model_info.node_nums)
 
-            this_offset = base.XYZ(off_col * offset_single.x, off_row*offset_single.y, 0.0) - bottom_left
+            this_offset = (
+                base.XYZ(off_col * offset_single.x, off_row * offset_single.y, 0.0)
+                - bottom_left
+            )
 
             # Do this in a vector / comprehension way so see if it's faster
-            node_elem_offset_nodes = {iNode+sub_model_info.node_elem_offset: this_offset.plus_xyz(one_node_polar.to_xyz()) for iNode, one_node_polar in node_pos.items()}
+            node_elem_offset_nodes = {
+                iNode
+                + sub_model_info.node_elem_offset: this_offset.plus_xyz(
+                    one_node_polar.to_xyz()
+                )
+                for iNode, one_node_polar in node_pos.items()
+            }
             stent_part.add_nodes_validated(node_elem_offset_nodes)
-            this_submod_global_to_polar = {sub_model_info.real_to_model_node(iNode): (iNode, node_num_to_polar_index[iNode]) for iNode in node_pos}
+            this_submod_global_to_polar = {
+                sub_model_info.real_to_model_node(iNode): (
+                    iNode,
+                    node_num_to_polar_index[iNode],
+                )
+                for iNode in node_pos
+            }
             node_num_patch_to_global_and_polar_index.update(this_submod_global_to_polar)
 
             # Old, non-vector way:
@@ -158,13 +229,24 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
             #     node_num_patch_to_global_and_polar_index[sub_model_info.real_to_model_node(iNode)] = iNode, node_num_to_polar_index[iNode]
 
             for iBoundNode in sub_model_info.boundary_node_nums:
-                submodel_boundary_nodes.add( sub_model_info.real_to_model_node(iBoundNode) )
+                submodel_boundary_nodes.add(
+                    sub_model_info.real_to_model_node(iBoundNode)
+                )
 
         # Make the elements.
         for sub_model_info in sub_model_infos:
-            for idx, elem_num, one_elem in design.generate_stent_part_elements(stent_params):
-                if idx in sub_model_info.stent_design.active_elements and sub_model_info.elem_in_submodel(elem_num):
-                    stent_part.add_element_validate(elem_num, one_elem, node_elem_offset=sub_model_info.node_elem_offset)
+            for idx, elem_num, one_elem in design.generate_stent_part_elements(
+                stent_params
+            ):
+                if (
+                    idx in sub_model_info.stent_design.active_elements
+                    and sub_model_info.elem_in_submodel(elem_num)
+                ):
+                    stent_part.add_element_validate(
+                        elem_num,
+                        one_elem,
+                        node_elem_offset=sub_model_info.node_elem_offset,
+                    )
 
         # Remove any nodes which are not used
         stent_part.squeeze_unused_nodes()
@@ -174,7 +256,11 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
         if element_dimensions == 2:
             # Create the node sets on the boundary
             used_node_nums = stent_part.get_used_node_nums()
-            iNode_to_idx_active = {iNode: idx for iNode, idx, _ in node_num_idx_pos if iNode in used_node_nums}
+            iNode_to_idx_active = {
+                iNode: idx
+                for iNode, idx, _ in node_num_idx_pos
+                if iNode in used_node_nums
+            }
 
             # Z may not span the whole thing...
             if full_model:
@@ -183,18 +269,22 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
             else:
                 min_idx_z = None
 
-
             # make_offset_anchors_and_springs - just some stray nodes to connect the main part to for restraints
             used_nodes = stent_part.get_used_node_nums()
 
             # Each spring boundary condition has its own part
-            bc_and_node_to_k = reference_stent_design.get_boundary_conds_to_node_to_stiffness()
+            bc_and_node_to_k = (
+                reference_stent_design.get_boundary_conds_to_node_to_stiffness()
+            )
 
             anchor_nodes = set()
 
             for sub_model_info in sub_model_infos:
                 anchor_node_gen = itertools.count(
-                    start=sub_model_info.stent_design.stent_params.divs.fully_populated_node_count() + sub_model_info.node_elem_offset + 1)
+                    start=sub_model_info.stent_design.stent_params.divs.fully_populated_node_count()
+                    + sub_model_info.node_elem_offset
+                    + 1
+                )
                 for bc, node_to_k in bc_and_node_to_k.items():
                     this_offset = bc.offset_for_spring_nodes
                     for iNode, node_idx, k in node_to_k:
@@ -203,30 +293,50 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
                             # Make the anchor node
                             iNodeAnchor = next(anchor_node_gen)
                             orig_model_xyz = stent_part.nodes[iNodeOffset]
-                            stent_part.add_node_validated(iNodeAnchor, this_offset + orig_model_xyz, node_elem_offset=0)
+                            stent_part.add_node_validated(
+                                iNodeAnchor,
+                                this_offset + orig_model_xyz,
+                                node_elem_offset=0,
+                            )
                             anchor_nodes.add(iNodeAnchor)
                             # Make the spring
-                            one_spring = spring.SpringA(inst1=one_instance, inst2=one_instance, n1=iNodeOffset, n2=iNodeAnchor, k=k)
+                            one_spring = spring.SpringA(
+                                inst1=one_instance,
+                                inst2=one_instance,
+                                n1=iNodeOffset,
+                                n2=iNodeAnchor,
+                                k=k,
+                            )
                             model.add_spring(one_spring)
 
             if anchor_nodes:
-                anchor_node_set = node.NodeSet(stent_part, GlobalNodeSetNames.AnchorNodes.name, frozenset(anchor_nodes))
+                anchor_node_set = node.NodeSet(
+                    stent_part,
+                    GlobalNodeSetNames.AnchorNodes.name,
+                    frozenset(anchor_nodes),
+                )
                 stent_part.add_node_set(anchor_node_set)
 
             boundary_set_name_to_nodes = collections.defaultdict(set)
-            for iNodeModel, (iNodeFull, idx) in node_num_patch_to_global_and_polar_index.items():
+            for iNodeModel, (
+                iNodeFull,
+                idx,
+            ) in node_num_patch_to_global_and_polar_index.items():
                 if iNodeModel in used_node_nums:
                     for node_set_name in get_boundary_node_set_2d(
-                            False,
-                            submodel_boundary_nodes,
-                            stent_params,
-                            reference_stent_design,
-                            iNodeModel,
-                            idx):
+                        False,
+                        submodel_boundary_nodes,
+                        stent_params,
+                        reference_stent_design,
+                        iNodeModel,
+                        idx,
+                    ):
                         boundary_set_name_to_nodes[node_set_name].add(iNodeModel)
 
             for node_set_name, nodes in boundary_set_name_to_nodes.items():
-                one_node_set = node.NodeSet(stent_part, node_set_name.name, frozenset(nodes))
+                one_node_set = node.NodeSet(
+                    stent_part, node_set_name.name, frozenset(nodes)
+                )
                 stent_part.add_node_set(one_node_set)
 
         model.add_instance(one_instance)
@@ -235,7 +345,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
         # Material properties are from Dylan's model.
         rubber = material.MaterialElasticPlastic(
             name="Rubber",
-            density=1.1E-009,
+            density=1.1e-009,
             elast_mod=920.0,
             elast_possion=0.4,
             plastic=None,
@@ -257,7 +367,9 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
         # Make the nodes and keep track of the leading/trailing edges.
         nodes_polar = {}
         boundary_set_name_to_nodes = collections.defaultdict(set)
-        for iNode, (n_p, boundary_sets) in enumerate(design.generate_nodes_balloon_polar(stent_params=stent_params), start=1):
+        for iNode, (n_p, boundary_sets) in enumerate(
+            design.generate_nodes_balloon_polar(stent_params=stent_params), start=1
+        ):
             nodes_polar[iNode] = n_p
             for boundary_set in boundary_sets:
                 boundary_set_name_to_nodes[boundary_set.name].add(iNode)
@@ -266,7 +378,12 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
             one_node_set = node.NodeSet(balloon_part, node_set_name, frozenset(nodes))
             balloon_part.add_node_set(one_node_set)
 
-        elems_all = {iElem: e for idx, iElem, e in design.generate_plate_elements_all(divs=stent_params.balloon.divs, elem_type=element.ElemType.M3D4R)}
+        elems_all = {
+            iElem: e
+            for idx, iElem, e in design.generate_plate_elements_all(
+                divs=stent_params.balloon.divs, elem_type=element.ElemType.M3D4R
+            )
+        }
 
         for iNode, one_node_polar in nodes_polar.items():
             balloon_part.add_node_validated(iNode, one_node_polar.to_xyz())
@@ -280,7 +397,7 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
     def make_cyl_part():
         cyl_mat = material.MaterialElasticPlastic(
             name="Cyl",
-            density=1.1E-007,
+            density=1.1e-007,
             elast_mod=1e3,
             elast_possion=0.4,
             plastic=None,
@@ -301,7 +418,12 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
 
         nodes_polar = design.generate_nodes_inner_cyl(stent_params=stent_params)
 
-        elems_all = {iElem: e for idx, iElem, e in design.generate_plate_elements_all(divs=stent_params.cylinder.divs, elem_type=element.ElemType.SFM3D4R)}
+        elems_all = {
+            iElem: e
+            for idx, iElem, e in design.generate_plate_elements_all(
+                divs=stent_params.cylinder.divs, elem_type=element.ElemType.SFM3D4R
+            )
+        }
 
         for iNode, one_node_polar in nodes_polar.items():
             cyl_inner_part.add_node_validated(iNode, one_node_polar.to_xyz())
@@ -310,13 +432,16 @@ def make_a_stent(optim_params: optimisation_parameters.OptimParams, full_model: 
             cyl_inner_part.add_element_validate(iElem, one_elem)
 
         # All the nodes go in the boundary set.
-        all_node_set = node.NodeSet(cyl_inner_part, GlobalNodeSetNames.RigidCyl.name, frozenset(nodes_polar.keys()))
+        all_node_set = node.NodeSet(
+            cyl_inner_part,
+            GlobalNodeSetNames.RigidCyl.name,
+            frozenset(nodes_polar.keys()),
+        )
         cyl_inner_part.add_node_set(all_node_set)
 
         one_instance = instance.Instance(base_part=cyl_inner_part)
 
         model.add_instance(one_instance)
-
 
     make_stent_part()
 
@@ -335,17 +460,25 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
     stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
     stent_part = stent_instance.base_part
 
-    elem_indexes_all = {iElem: i for iElem, i in design.generate_elem_indices(divs=stent_params.divs)}
-    elem_indexes = {iElem: i for iElem, i in elem_indexes_all.items() if iElem in stent_part.elements}
+    elem_indexes_all = {
+        iElem: i for iElem, i in design.generate_elem_indices(divs=stent_params.divs)
+    }
+    elem_indexes = {
+        iElem: i
+        for iElem, i in elem_indexes_all.items()
+        if iElem in stent_part.elements
+    }
 
-    def create_elem_surface(one_instance: instance.Instance, elem_nums, name, one_surf: surface.SurfaceFace):
+    def create_elem_surface(
+        one_instance: instance.Instance, elem_nums, name, one_surf: surface.SurfaceFace
+    ):
         one_part = one_instance.base_part
         elem_set_name = f"ElemSet_{name}"
         the_elements_raw = {iElem: one_part.elements[iElem] for iElem in elem_nums}
-        elem_set = element.ElementSet(one_part, elem_set_name, element.Elements(the_elements_raw))
-        data = [
-            (elem_set, one_surf)
-        ]
+        elem_set = element.ElementSet(
+            one_part, elem_set_name, element.Elements(the_elements_raw)
+        )
+        data = [(elem_set, one_surf)]
         the_surface = surface.Surface(name, data)
 
         one_part.add_element_set(elem_set)
@@ -354,8 +487,15 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
     if stent_params.stent_element_dimensions == 2:
         # Just have to make the leading edge
         max_theta = max(i.Th for i in elem_indexes.values())
-        max_theta_elems = {iElem for iElem, i in elem_indexes.items() if i.Th == max_theta}
-        create_elem_surface(stent_instance, max_theta_elems, GlobalSurfNames.PLANAR_LEADING_EDGE, surface.SurfaceFace.S2)
+        max_theta_elems = {
+            iElem for iElem, i in elem_indexes.items() if i.Th == max_theta
+        }
+        create_elem_surface(
+            stent_instance,
+            max_theta_elems,
+            GlobalSurfNames.PLANAR_LEADING_EDGE,
+            surface.SurfaceFace.S2,
+        )
 
     elif stent_params.stent_element_dimensions == 3:
         # Have to make a few surfaces
@@ -372,7 +512,7 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
         all_elems_through_thickness = collections.defaultdict(set)
         for iElem, i in elem_indexes.items():
             key = (i.Th, i.Z)
-            all_elems_through_thickness[key].add( (i.R, iElem) )
+            all_elems_through_thickness[key].add((i.R, iElem))
 
         min_elem_through_thickness = set()
         for _, elems in all_elems_through_thickness.items():
@@ -380,7 +520,9 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
             min_r, min_elem = min_r_and_elem[:]
             min_elem_through_thickness.add(min_elem)
 
-        create_elem_surface_S1(min_elem_through_thickness, GlobalSurfNames.INNER_SURFACE)
+        create_elem_surface_S1(
+            min_elem_through_thickness, GlobalSurfNames.INNER_SURFACE
+        )
 
         # Minimum R, as long as the R in on the inner half.
         all_r = [i.R for i in elem_indexes.values()]
@@ -395,22 +537,36 @@ def create_surfaces(stent_params: StentParams, model: main.AbaqusModel):
         create_elem_surface_S1(min_bottom_half, GlobalSurfNames.INNER_BOTTOM_HALF)
 
         if stent_params.actuation == Actuation.balloon:
-            instance_balloon = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON)
+            instance_balloon = model.get_only_instance_base_part_name(
+                GlobalPartNames.BALLOON
+            )
             all_balloon_elems = instance_balloon.base_part.elements.keys()
-            create_elem_surface(instance_balloon, all_balloon_elems, GlobalSurfNames.BALLOON_INNER, surface.SurfaceFace.SNEG)
+            create_elem_surface(
+                instance_balloon,
+                all_balloon_elems,
+                GlobalSurfNames.BALLOON_INNER,
+                surface.SurfaceFace.SNEG,
+            )
 
         elif stent_params.actuation == Actuation.rigid_cylinder:
-            instance_cyl = model.get_only_instance_base_part_name(GlobalPartNames.CYL_INNER)
+            instance_cyl = model.get_only_instance_base_part_name(
+                GlobalPartNames.CYL_INNER
+            )
             all_cyl_elements = instance_cyl.base_part.elements.keys()
-            create_elem_surface(instance_cyl, all_cyl_elements, GlobalSurfNames.CYL_INNER, surface.SurfaceFace.SNEG)
+            create_elem_surface(
+                instance_cyl,
+                all_cyl_elements,
+                GlobalSurfNames.CYL_INNER,
+                surface.SurfaceFace.SNEG,
+            )
 
 
 def apply_loads(
-        optim_params: optimisation_parameters.OptimParams,
-        stent_params: StentParams,
-        full_model: bool,
-        sub_model_infos: typing.Iterable[patch_manager.SubModelInfoBase],
-        model: main.AbaqusModel
+    optim_params: optimisation_parameters.OptimParams,
+    stent_params: StentParams,
+    full_model: bool,
+    sub_model_infos: typing.Iterable[patch_manager.SubModelInfoBase],
+    model: main.AbaqusModel,
 ):
     _create_steps(optim_params, model)
 
@@ -418,19 +574,27 @@ def apply_loads(
     _apply_loads_full(optim_params, stent_params, model)
 
 
-
-
-def _apply_boundary_conds_submodel(sub_model_infos: typing.Iterable[patch_manager.SubModelInfoBase], model: main.AbaqusModel):
+def _apply_boundary_conds_submodel(
+    sub_model_infos: typing.Iterable[patch_manager.SubModelInfoBase],
+    model: main.AbaqusModel,
+):
     stent_instance = model.get_only_instance_base_part_name(GlobalPartNames.STENT)
     stent_part = stent_instance.base_part
 
     used_node_nums = stent_part.get_used_node_nums()
 
     for sub_model_info in sub_model_infos:
-        for node_num, dof_to_amp in sub_model_info.boundary_node_enforced_displacements():
+        for (
+            node_num,
+            dof_to_amp,
+        ) in sub_model_info.boundary_node_enforced_displacements():
             node_num_offset = node_num + sub_model_info.node_elem_offset
             if node_num_offset in used_node_nums:
-                one_bound_node_set = node.NodeSet(stent_part, f"Nodeset-N{node_num_offset}", frozenset({node_num_offset}))
+                one_bound_node_set = node.NodeSet(
+                    stent_part,
+                    f"Nodeset-N{node_num_offset}",
+                    frozenset({node_num_offset}),
+                )
                 stent_part.add_node_set(one_bound_node_set)
 
                 for dof, amp in dof_to_amp.items():
@@ -438,14 +602,20 @@ def _apply_boundary_conds_submodel(sub_model_infos: typing.Iterable[patch_manage
                         name=f"Bound-{node_num_offset}-{dof}",
                         with_amplitude=amp,
                         components=(
-                            boundary_condition.DispRotBoundComponent(node_set=one_bound_node_set, dof=dof, value=1.0),
+                            boundary_condition.DispRotBoundComponent(
+                                node_set=one_bound_node_set, dof=dof, value=1.0
+                            ),
                         ),
                     )
 
                     model.add_load_specific_steps(model.steps, patch_bound_disp)
 
 
-def _apply_loads_full(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
+def _apply_loads_full(
+    optim_params: optimisation_parameters.OptimParams,
+    stent_params: StentParams,
+    model: main.AbaqusModel,
+):
     if stent_params.actuation == Actuation.rigid_cylinder:
         _apply_loads_enforced_disp_rigid_cyl(optim_params, stent_params, model)
 
@@ -456,7 +626,9 @@ def _apply_loads_full(optim_params: optimisation_parameters.OptimParams, stent_p
         _apply_loads_pressure(optim_params, stent_params, model)
 
 
-def _create_steps(optim_params: optimisation_parameters.OptimParams, model: main.AbaqusModel):
+def _create_steps(
+    optim_params: optimisation_parameters.OptimParams, model: main.AbaqusModel
+):
     step_expand = optim_params.analysis_step_type(
         name=f"ExpandHold",
         step_time=optim_params.time_expansion,
@@ -465,10 +637,16 @@ def _create_steps(optim_params: optimisation_parameters.OptimParams, model: main
     model.add_step(step_expand)
 
     if optim_params.simulation_has_second_step:
-        if optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.release:
+        if (
+            optim_params.post_expansion_behaviour
+            == optimisation_parameters.PostExpansionBehaviour.release
+        ):
             step2_name = "Release"
 
-        elif optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.oscillate:
+        elif (
+            optim_params.post_expansion_behaviour
+            == optimisation_parameters.PostExpansionBehaviour.oscillate
+        ):
             step2_name = "Oscillate"
 
         else:
@@ -483,11 +661,13 @@ def _create_steps(optim_params: optimisation_parameters.OptimParams, model: main
 
 
 T_GlobalNSMOrBCName = typing.Union[GlobalNodeSetNames, str]
+
+
 def _build_bound_disp_rot_if_nodes_found(
-        stent_part: part.Part,
-        name: str,
-        global_nsm_to_val: typing.Iterable[typing.Tuple[T_GlobalNSMOrBCName, int, float]],
-        amp: typing.Optional[amplitude.Amplitude],
+    stent_part: part.Part,
+    name: str,
+    global_nsm_to_val: typing.Iterable[typing.Tuple[T_GlobalNSMOrBCName, int, float]],
+    amp: typing.Optional[amplitude.Amplitude],
 ) -> typing.Optional[boundary_condition.BoundaryDispRot]:
 
     comps = []
@@ -499,7 +679,11 @@ def _build_bound_disp_rot_if_nodes_found(
             global_nsm_name = global_nsm.name
 
         if global_nsm_name in stent_part.node_sets:
-            comps.append(boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[global_nsm_name], dof=dof, value=value))
+            comps.append(
+                boundary_condition.DispRotBoundComponent(
+                    node_set=stent_part.node_sets[global_nsm_name], dof=dof, value=value
+                )
+            )
 
     if comps:
         return boundary_condition.BoundaryDispRot(
@@ -512,14 +696,20 @@ def _build_bound_disp_rot_if_nodes_found(
         return None
 
 
-def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
+def _apply_loads_enforced_disp_2d_planar(
+    optim_params: optimisation_parameters.OptimParams,
+    stent_params: StentParams,
+    model: main.AbaqusModel,
+):
 
     # Maximum displacement
-    max_displacement = stent_params.theta_arc_initial * (stent_params.expansion_ratio - 1.0)
+    max_displacement = stent_params.theta_arc_initial * (
+        stent_params.expansion_ratio - 1.0
+    )
 
     amp_data = (
         amplitude.XY(0.0, 0.0),
-        amplitude.XY(0.8*optim_params.time_expansion, 1.0),
+        amplitude.XY(0.8 * optim_params.time_expansion, 1.0),
         amplitude.XY(optim_params.time_expansion, 1.0),
     )
     amp = amplitude.Amplitude("Amp-1", amp_data, amplitude.TimeReference.step_time)
@@ -531,30 +721,45 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
     for logical_bc in stent_params.boundary_conds:
         for dof in logical_bc.get_dofs():
             bc_val = logical_bc.load_factor_scale * max_displacement
-            global_nsm_to_val.append(
-                (logical_bc.bc_name, dof, bc_val)
-            )
+            global_nsm_to_val.append((logical_bc.bc_name, dof, bc_val))
 
     # global_nsm_to_val = [ (GlobalNodeSetNames.PlanarStentTheta0, 1, 0.0), (GlobalNodeSetNames.PlanarStentThetaMax, 1, max_displacement),]
 
-    expand_disp = _build_bound_disp_rot_if_nodes_found(stent_part, "ExpandDisp", global_nsm_to_val, amp)
+    expand_disp = _build_bound_disp_rot_if_nodes_found(
+        stent_part, "ExpandDisp", global_nsm_to_val, amp
+    )
 
-    if optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.release:
-        step_two_disp = _build_bound_disp_rot_if_nodes_found(stent_part, "ReleaseDisp", [(GlobalNodeSetNames.PlanarStentTheta0, 1, 0.0)], None)
+    if (
+        optim_params.post_expansion_behaviour
+        == optimisation_parameters.PostExpansionBehaviour.release
+    ):
+        step_two_disp = _build_bound_disp_rot_if_nodes_found(
+            stent_part,
+            "ReleaseDisp",
+            [(GlobalNodeSetNames.PlanarStentTheta0, 1, 0.0)],
+            None,
+        )
 
-    elif optim_params.post_expansion_behaviour == optimisation_parameters.PostExpansionBehaviour.oscillate:
+    elif (
+        optim_params.post_expansion_behaviour
+        == optimisation_parameters.PostExpansionBehaviour.oscillate
+    ):
         HEART_RATE_HZ = 1.2
         HEART_RATE_TESTING = 20.0
         OSC_AMP = 0.05  # For now, just 5% of the initial arc length
 
-        amp_osc = amplitude.AmplitudePeriodic("Amp-Osc", HEART_RATE_TESTING, 0.0, 1.0, OSC_AMP)
+        amp_osc = amplitude.AmplitudePeriodic(
+            "Amp-Osc", HEART_RATE_TESTING, 0.0, 1.0, OSC_AMP
+        )
 
         osc_comps = [
             (GlobalNodeSetNames.PlanarStentTheta0, 1, 0.0),
             (GlobalNodeSetNames.PlanarStentThetaMax, 1, max_displacement),
         ]
 
-        step_two_disp = _build_bound_disp_rot_if_nodes_found(stent_part, "OscillateDisp", osc_comps, amp_osc)
+        step_two_disp = _build_bound_disp_rot_if_nodes_found(
+            stent_part, "OscillateDisp", osc_comps, amp_osc
+        )
 
     if GlobalNodeSetNames.PlanarStentZMin.name in stent_part.node_sets:
 
@@ -562,7 +767,13 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
             name="HoldBaseA",
             with_amplitude=None,
             components=(
-                boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentZMin.name], dof=2, value=0.0),
+                boundary_condition.DispRotBoundComponent(
+                    node_set=stent_part.node_sets[
+                        GlobalNodeSetNames.PlanarStentZMin.name
+                    ],
+                    dof=2,
+                    value=0.0,
+                ),
             ),
         )
 
@@ -570,7 +781,13 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
             name="HoldBaseB",
             with_amplitude=None,
             components=(
-                boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.PlanarStentZMin.name], dof=2, value=0.0),
+                boundary_condition.DispRotBoundComponent(
+                    node_set=stent_part.node_sets[
+                        GlobalNodeSetNames.PlanarStentZMin.name
+                    ],
+                    dof=2,
+                    value=0.0,
+                ),
             ),
         )
 
@@ -578,26 +795,50 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
         hold_base1 = None
         hold_base2 = None
 
-    if expand_disp: model.add_load_specific_steps([model.steps[0]], expand_disp)
-    if optim_params.simulation_has_second_step and step_two_disp: model.add_load_specific_steps([model.steps[1]], step_two_disp)
-    if hold_base1: model.add_load_specific_steps([model.steps[0]], hold_base1)
-    if optim_params.simulation_has_second_step and hold_base2: model.add_load_specific_steps([model.steps[1]], hold_base2)
+    if expand_disp:
+        model.add_load_specific_steps([model.steps[0]], expand_disp)
+    if optim_params.simulation_has_second_step and step_two_disp:
+        model.add_load_specific_steps([model.steps[1]], step_two_disp)
+    if hold_base1:
+        model.add_load_specific_steps([model.steps[0]], hold_base1)
+    if optim_params.simulation_has_second_step and hold_base2:
+        model.add_load_specific_steps([model.steps[1]], hold_base2)
 
     if stent_params.sym_x:
-        sym_x_bc = _build_bound_disp_rot_if_nodes_found(stent_part, "SymX", [(GlobalNodeSetNames.PlanarStentXSymPlane, 1, 0.0)], None)
-        if sym_x_bc: model.add_load_specific_steps(model.steps, sym_x_bc)
+        sym_x_bc = _build_bound_disp_rot_if_nodes_found(
+            stent_part,
+            "SymX",
+            [(GlobalNodeSetNames.PlanarStentXSymPlane, 1, 0.0)],
+            None,
+        )
+        if sym_x_bc:
+            model.add_load_specific_steps(model.steps, sym_x_bc)
 
     if stent_params.sym_y:
-        sym_y_bc = _build_bound_disp_rot_if_nodes_found(stent_part, "SymY", [(GlobalNodeSetNames.PlanarStentYSymPlane, 2, 0.0)], None)
-        if sym_y_bc: model.add_load_specific_steps(model.steps, sym_y_bc)
+        sym_y_bc = _build_bound_disp_rot_if_nodes_found(
+            stent_part,
+            "SymY",
+            [(GlobalNodeSetNames.PlanarStentYSymPlane, 2, 0.0)],
+            None,
+        )
+        if sym_y_bc:
+            model.add_load_specific_steps(model.steps, sym_y_bc)
 
     if GlobalNodeSetNames.AnchorNodes.name in stent_part.node_sets:
         anchors = boundary_condition.BoundaryDispRot(
             name="Anchor",
             with_amplitude=None,
             components=(
-                boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.AnchorNodes.name], dof=1, value=0.0),
-                boundary_condition.DispRotBoundComponent(node_set=stent_part.node_sets[GlobalNodeSetNames.AnchorNodes.name], dof=2, value=0.0),
+                boundary_condition.DispRotBoundComponent(
+                    node_set=stent_part.node_sets[GlobalNodeSetNames.AnchorNodes.name],
+                    dof=1,
+                    value=0.0,
+                ),
+                boundary_condition.DispRotBoundComponent(
+                    node_set=stent_part.node_sets[GlobalNodeSetNames.AnchorNodes.name],
+                    dof=2,
+                    value=0.0,
+                ),
             ),
         )
         model.add_load_specific_steps([model.steps[0]], anchors)
@@ -605,7 +846,9 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
     if optim_params.release_stent_after_expansion:
         # Rebound pressure (kind of like the blood vessel squeezing in).
         leading_edge = stent_instance.surfaces[GlobalSurfNames.PLANAR_LEADING_EDGE]
-        actuated_line_length = leading_edge.num_elem() * stent_params.single_element_z_span
+        actuated_line_length = (
+            leading_edge.num_elem() * stent_params.single_element_z_span
+        )
         pressure_load = 0.2 / actuated_line_length
 
         amp_data = (
@@ -615,7 +858,9 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
             amplitude.XY(optim_params.time_released, pressure_load),
         )
 
-        amp_pressure = amplitude.Amplitude("Amp-Press", amp_data, amplitude.TimeReference.step_time)
+        amp_pressure = amplitude.Amplitude(
+            "Amp-Press", amp_data, amplitude.TimeReference.step_time
+        )
 
         inner_pressure = load.PressureLoad(
             name="Pressure",
@@ -627,11 +872,14 @@ def _apply_loads_enforced_disp_2d_planar(optim_params: optimisation_parameters.O
         model.add_load_specific_steps([model.steps[1]], inner_pressure)
 
 
-def _apply_loads_enforced_disp_rigid_cyl(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
+def _apply_loads_enforced_disp_rigid_cyl(
+    optim_params: optimisation_parameters.OptimParams,
+    stent_params: StentParams,
+    model: main.AbaqusModel,
+):
     init_radius = stent_params.actuation_surface_ratio
     final_radius = stent_params.r_min * stent_params.expansion_ratio
     dr = final_radius - init_radius
-
 
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
@@ -658,25 +906,39 @@ def _apply_loads_enforced_disp_rigid_cyl(optim_params: optimisation_parameters.O
         name="ExpRad",
         with_amplitude=amp,
         components=(
-            boundary_condition.DispRotBoundComponent(node_set=node_set, dof=1, value=1.0),
-            boundary_condition.DispRotBoundComponent(node_set=node_set, dof=2, value=0.0),
-            boundary_condition.DispRotBoundComponent(node_set=node_set, dof=3, value=0.0),
+            boundary_condition.DispRotBoundComponent(
+                node_set=node_set, dof=1, value=1.0
+            ),
+            boundary_condition.DispRotBoundComponent(
+                node_set=node_set, dof=2, value=0.0
+            ),
+            boundary_condition.DispRotBoundComponent(
+                node_set=node_set, dof=3, value=0.0
+            ),
         ),
     )
 
     model.add_load_specific_steps([one_step], enf_disp)
 
 
-def _apply_loads_pressure(optim_params: optimisation_parameters.OptimParams, stent_params: StentParams, model: main.AbaqusModel):
+def _apply_loads_pressure(
+    optim_params: optimisation_parameters.OptimParams,
+    stent_params: StentParams,
+    model: main.AbaqusModel,
+):
     # Some nominal amplitude from Dylan's model.
 
     if stent_params.balloon:
         max_pressure = 2.0
-        surf = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).surfaces[GlobalSurfNames.BALLOON_INNER]
+        surf = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).surfaces[
+            GlobalSurfNames.BALLOON_INNER
+        ]
 
     else:
         max_pressure = 0.2
-        surf = model.get_only_instance_base_part_name(GlobalPartNames.STENT).surfaces[GlobalSurfNames.INNER_BOTTOM_HALF]
+        surf = model.get_only_instance_base_part_name(GlobalPartNames.STENT).surfaces[
+            GlobalSurfNames.INNER_BOTTOM_HALF
+        ]
 
     one_step = step.StepDynamicExplicit(
         name=f"Expand",
@@ -690,10 +952,10 @@ def _apply_loads_pressure(optim_params: optimisation_parameters.OptimParams, ste
 
     amp_data = (
         amplitude.XY(0.0, 0.0),
-        amplitude.XY(0.65*optim_params.time_expansion, 0.16*max_pressure),
-        amplitude.XY(0.75*optim_params.time_expansion, 0.5*max_pressure),
-        amplitude.XY(0.9*optim_params.time_expansion, max_pressure),
-        amplitude.XY(optim_params.time_expansion, 0.05*max_pressure),
+        amplitude.XY(0.65 * optim_params.time_expansion, 0.16 * max_pressure),
+        amplitude.XY(0.75 * optim_params.time_expansion, 0.5 * max_pressure),
+        amplitude.XY(0.9 * optim_params.time_expansion, max_pressure),
+        amplitude.XY(optim_params.time_expansion, 0.05 * max_pressure),
     )
 
     amp = amplitude.Amplitude("Amp-1", amp_data, amplitude.TimeReference.step_time)
@@ -715,19 +977,21 @@ def add_interaction(stent_params: StentParams, model: main.AbaqusModel):
     if stent_params.actuation not in NO_INTERACTION:
 
         if stent_params.actuation == Actuation.balloon:
-            inner_surf = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).surfaces[
-                GlobalSurfNames.BALLOON_INNER]
+            inner_surf = model.get_only_instance_base_part_name(
+                GlobalPartNames.BALLOON
+            ).surfaces[GlobalSurfNames.BALLOON_INNER]
 
         elif stent_params.actuation == Actuation.rigid_cylinder:
-            inner_surf = model.get_only_instance_base_part_name(GlobalPartNames.CYL_INNER).surfaces[
-                GlobalSurfNames.CYL_INNER]
+            inner_surf = model.get_only_instance_base_part_name(
+                GlobalPartNames.CYL_INNER
+            ).surfaces[GlobalSurfNames.CYL_INNER]
 
         else:
             raise ValueError(stent_params.actuation)
 
-        outer_surf = model.get_only_instance_base_part_name(GlobalPartNames.STENT).surfaces[
-            GlobalSurfNames.INNER_SURFACE]
-
+        outer_surf = model.get_only_instance_base_part_name(
+            GlobalPartNames.STENT
+        ).surfaces[GlobalSurfNames.INNER_SURFACE]
 
         int_prop = interaction_property.SurfaceInteraction(
             name="FrictionlessContact",
@@ -737,9 +1001,7 @@ def add_interaction(stent_params: StentParams, model: main.AbaqusModel):
         one_int_general = interaction.GeneralContact(
             name="Interaction",
             int_property=int_prop,
-            included_surface_pairs=(
-                (inner_surf, outer_surf),
-            )
+            included_surface_pairs=((inner_surf, outer_surf),),
         )
 
         one_int_specified = interaction.ContactPair(
@@ -785,11 +1047,17 @@ def _apply_boundaries_3d(stent_params: StentParams, model: main.AbaqusModel):
 
     # Fix a single node in Theta and Z to stop rigid body rotation
     arbitrary_uncoupled_node = min(uncoupled_nodes_in_part)
-    rigid_node_set = node.NodeSet(stent_part, "RigidRest", frozenset( [arbitrary_uncoupled_node] ))
+    rigid_node_set = node.NodeSet(
+        stent_part, "RigidRest", frozenset([arbitrary_uncoupled_node])
+    )
     stent_part.add_node_set(rigid_node_set)
     bc_components = (
-        boundary_condition.DispRotBoundComponent(node_set=rigid_node_set, dof=2, value=0.0),
-        boundary_condition.DispRotBoundComponent(node_set=rigid_node_set, dof=3, value=0.0),
+        boundary_condition.DispRotBoundComponent(
+            node_set=rigid_node_set, dof=2, value=0.0
+        ),
+        boundary_condition.DispRotBoundComponent(
+            node_set=rigid_node_set, dof=3, value=0.0
+        ),
     )
     rigid_bc = boundary_condition.BoundaryDispRot(
         name="RigidRestraint",
@@ -800,14 +1068,16 @@ def _apply_boundaries_3d(stent_params: StentParams, model: main.AbaqusModel):
 
     # Balloon has sym boundaries.
     sym_conds = {
-        GlobalNodeSetNames.BalloonTheta0: boundary_condition.BoundaryType.YSYMM,    # YSYMM fixes DoF 2 (i.e., Theta)
+        GlobalNodeSetNames.BalloonTheta0: boundary_condition.BoundaryType.YSYMM,  # YSYMM fixes DoF 2 (i.e., Theta)
         GlobalNodeSetNames.BalloonThetaMax: boundary_condition.BoundaryType.YSYMM,
-        GlobalNodeSetNames.BalloonZ0: boundary_condition.BoundaryType.ZSYMM,        # ZSYMM fixes DoF 3 (i.e., Z)
+        GlobalNodeSetNames.BalloonZ0: boundary_condition.BoundaryType.ZSYMM,  # ZSYMM fixes DoF 3 (i.e., Z)
         GlobalNodeSetNames.BalloonZMax: boundary_condition.BoundaryType.ZSYMM,
     }
 
     if stent_params.actuation == Actuation.balloon:
-        balloon_part = model.get_only_instance_base_part_name(GlobalPartNames.BALLOON).base_part
+        balloon_part = model.get_only_instance_base_part_name(
+            GlobalPartNames.BALLOON
+        ).base_part
 
         for sym_name, boundary_type in sym_conds.items():
             relevant_set = balloon_part.node_sets[sym_name.name]
@@ -828,10 +1098,11 @@ def write_model(model: main.AbaqusModel, fn_inp):
 
 
 def make_stent_model(
-        optim_params: optimisation_parameters.OptimParams,
-        stent_design: StentDesign,
-        sub_model_infos: typing.List[patch_manager.SubModelInfoBase],
-        fn_inp: str):
+    optim_params: optimisation_parameters.OptimParams,
+    stent_design: StentDesign,
+    sub_model_infos: typing.List[patch_manager.SubModelInfoBase],
+    fn_inp: str,
+):
 
     if all(sub_model_info.is_sub_model for sub_model_info in sub_model_infos):
         full_model = False
@@ -850,10 +1121,12 @@ def make_stent_model(
     model = make_a_stent(optim_params, full_model, sub_model_infos)
     if full_model:
         create_surfaces(stent_design.stent_params, model)
-    apply_loads(optim_params, stent_design.stent_params, full_model, sub_model_infos, model)
+    apply_loads(
+        optim_params, stent_design.stent_params, full_model, sub_model_infos, model
+    )
     if full_model:
         add_interaction(stent_design.stent_params, model)
         apply_boundaries(stent_design.stent_params, model)
 
-    print(fn_inp, f"Volume Ratio={stent_design.volume_ratio()}", sep='\t')
+    print(fn_inp, f"Volume Ratio={stent_design.volume_ratio()}", sep="\t")
     write_model(model, fn_inp)

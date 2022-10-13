@@ -30,8 +30,19 @@ TEMP_SIGMA_UTS = 540.0
 TEMP_SIGMA_ENDURANCE = 270.0
 
 from datastore import Datastore
-from db_defs import Frame, NodePos, NodeReact, ElementStress, ElementPEEQ, ElementEnergyElastic, ElementEnergyPlastic, \
-    ElementFatigueResult, ElementNodeForces, HistoryResult, expected_history_results
+from db_defs import (
+    Frame,
+    NodePos,
+    NodeReact,
+    ElementStress,
+    ElementPEEQ,
+    ElementEnergyElastic,
+    ElementEnergyPlastic,
+    ElementFatigueResult,
+    ElementNodeForces,
+    HistoryResult,
+    expected_history_results,
+)
 
 # Get the command line option (should be last!).
 fn_odb = sys.argv[-4]
@@ -58,21 +69,26 @@ else:
     override_z_val = float(_override_z_val_str)
 
 
-#fn_odb = r"C:\TEMP\aba\stent-36.odb"
-#db_fn = r"C:\TEMP\aba\db-9.db"
+# fn_odb = r"C:\TEMP\aba\stent-36.odb"
+# db_fn = r"C:\TEMP\aba\db-9.db"
 
-ExtractionMeta = collections.namedtuple("ExtractionMeta", (
-    "frame",
-    "node_labels",
-    "elem_labels",
-    "node_init_pos",
-    "odb_instance",
-    "nodes_enforced_displacement",
-))
+ExtractionMeta = collections.namedtuple(
+    "ExtractionMeta",
+    (
+        "frame",
+        "node_labels",
+        "elem_labels",
+        "node_init_pos",
+        "odb_instance",
+        "nodes_enforced_displacement",
+    ),
+)
+
 
 def print_in_term(x):
     # Old Python Syntax!
     print >> sys.__stdout__, x
+
 
 def _get_nodes_theta_max(this_odb):
     def produce_node_numbers():
@@ -85,7 +101,10 @@ def _get_nodes_theta_max(this_odb):
 
     return set(produce_node_numbers())
 
-def _get_nodes_on_elements(elements, ):
+
+def _get_nodes_on_elements(
+    elements,
+):
     all_nodes = set()
     for elem in elements:
         all_nodes.update(elem.connectivity)
@@ -159,7 +178,7 @@ def walk_file_frames(extract_all_steps, this_odb, override_z_val):
 
             for frame_id, frame in enumerate(one_step.frames):
                 is_last_step = frame_id == last_frame_id_of_step
-                should_yield = (extract_all_steps or is_last_step)
+                should_yield = extract_all_steps or is_last_step
                 if should_yield:
                     yield (
                         Frame(
@@ -179,23 +198,23 @@ def walk_file_frames(extract_all_steps, this_odb, override_z_val):
                             node_init_pos=this_part_node_initial_pos,
                             odb_instance=instance,
                             nodes_enforced_displacement=nodes_enforced_displacement,
-                        )
+                        ),
                     )
 
                 if is_last_step and SAVE_IMAGES:
                     # Print to file?
-                    fn = r"c:\temp\aba\Mod-{0}-{1}-{2}.png".format(one_instance_name, step_name, frame_id)
+                    fn = r"c:\temp\aba\Mod-{0}-{1}-{2}.png".format(
+                        one_instance_name, step_name, frame_id
+                    )
                     abaqus.session.printOptions.setValues(vpBackground=True)
                     abaqus.session.printToFile(fn, format=abaqusConstants.PNG)
 
 
 def get_stresses_one_frame(extraction_meta):
     relevant_stress_field = (
-        extraction_meta
-            .frame
-            .fieldOutputs['S']
-            .getSubset(position=abaqusConstants.CENTROID)
-            .getSubset(region=extraction_meta.odb_instance)
+        extraction_meta.frame.fieldOutputs["S"]
+        .getSubset(position=abaqusConstants.CENTROID)
+        .getSubset(region=extraction_meta.odb_instance)
     )
 
     for one_value in relevant_stress_field.values:
@@ -208,15 +227,14 @@ def get_stresses_one_frame(extraction_meta):
             von_mises=one_value.mises,
         )
 
+
 def _get_element_fallback_field(extraction_meta, NT_type):
     """In case something which is meant to be there isn't in the results."""
 
     fallback_field = (
-        extraction_meta
-            .frame
-            .fieldOutputs['S']
-            .getSubset(position=abaqusConstants.CENTROID)
-            .getSubset(region=extraction_meta.odb_instance)
+        extraction_meta.frame.fieldOutputs["S"]
+        .getSubset(position=abaqusConstants.CENTROID)
+        .getSubset(region=extraction_meta.odb_instance)
     )
 
     working_dict = {fn: 0.0 for fn in NT_type.odb_value_field_names}
@@ -227,15 +245,14 @@ def _get_element_fallback_field(extraction_meta, NT_type):
 
         yield NT_type(**working_dict)
 
+
 def get_strain_results_PEEQ_one_frame(extraction_meta):
 
     try:
         relevant_peeq_field = (
-            extraction_meta
-                .frame
-                .fieldOutputs['PEEQ']
-                .getSubset(position=abaqusConstants.CENTROID)
-                .getSubset(region=extraction_meta.odb_instance)
+            extraction_meta.frame.fieldOutputs["PEEQ"]
+            .getSubset(position=abaqusConstants.CENTROID)
+            .getSubset(region=extraction_meta.odb_instance)
         )
 
     except KeyError:
@@ -253,13 +270,12 @@ def get_strain_results_PEEQ_one_frame(extraction_meta):
             PEEQ=one_value.data,
         )
 
+
 def get_strain_results_ESEDEN_one_frame(extraction_meta):
     relevant_peeq_field = (
-        extraction_meta
-            .frame
-            .fieldOutputs['ESEDEN']
-            .getSubset(position=abaqusConstants.WHOLE_ELEMENT)
-            .getSubset(region=extraction_meta.odb_instance)
+        extraction_meta.frame.fieldOutputs["ESEDEN"]
+        .getSubset(position=abaqusConstants.WHOLE_ELEMENT)
+        .getSubset(region=extraction_meta.odb_instance)
     )
 
     for one_value in relevant_peeq_field.values:
@@ -269,13 +285,12 @@ def get_strain_results_ESEDEN_one_frame(extraction_meta):
             ESEDEN=one_value.data,
         )
 
+
 def get_strain_results_EPDDEN_one_frame(extraction_meta):
     relevant_peeq_field = (
-        extraction_meta
-            .frame
-            .fieldOutputs['EPDDEN']
-            .getSubset(position=abaqusConstants.WHOLE_ELEMENT)
-            .getSubset(region=extraction_meta.odb_instance)
+        extraction_meta.frame.fieldOutputs["EPDDEN"]
+        .getSubset(position=abaqusConstants.WHOLE_ELEMENT)
+        .getSubset(region=extraction_meta.odb_instance)
     )
 
     for one_value in relevant_peeq_field.values:
@@ -288,13 +303,12 @@ def get_strain_results_EPDDEN_one_frame(extraction_meta):
 
 def get_element_node_force_one_frame(extraction_meta):
     """Have to grab the results from a few places... annoying!"""
+
     def get_one_direction_values(field_key):
         relevant_nforce_field = (
-            extraction_meta
-                .frame
-                .fieldOutputs[field_key]
-                .getSubset(position=abaqusConstants.ELEMENT_NODAL)
-                .getSubset(region=extraction_meta.odb_instance)
+            extraction_meta.frame.fieldOutputs[field_key]
+            .getSubset(position=abaqusConstants.ELEMENT_NODAL)
+            .getSubset(region=extraction_meta.odb_instance)
         )
 
         for one_value in relevant_nforce_field.values:
@@ -302,11 +316,17 @@ def get_element_node_force_one_frame(extraction_meta):
 
     elem_to_nodes_in_order = collections.defaultdict(list)
 
-    for elem_id, node_id, _ in get_one_direction_values('NFORC1'):
+    for elem_id, node_id, _ in get_one_direction_values("NFORC1"):
         elem_to_nodes_in_order[elem_id].append(node_id)
 
-    nforc1 = {(elem_id, node_id): value for elem_id, node_id, value in get_one_direction_values('NFORC1')}
-    nforc2 = {(elem_id, node_id): value for elem_id, node_id, value in get_one_direction_values('NFORC2')}
+    nforc1 = {
+        (elem_id, node_id): value
+        for elem_id, node_id, value in get_one_direction_values("NFORC1")
+    }
+    nforc2 = {
+        (elem_id, node_id): value
+        for elem_id, node_id, value in get_one_direction_values("NFORC2")
+    }
 
     for elem_id, node_list in elem_to_nodes_in_order.items():
         nf1 = [nforc1[(elem_id, node_id)] for node_id in node_list]
@@ -344,8 +364,8 @@ class StressResultAggregator:
             this_val = elem_stress.von_mises
 
             for min_max_dict, min_max_func in (
-                    (self.working_min, min),
-                    (self.working_max, max),
+                (self.working_min, min),
+                (self.working_max, max),
             ):
                 if elem_num in min_max_dict:
                     new_val = min_max_func(min_max_dict[elem_num], this_val)
@@ -389,37 +409,34 @@ def _add_with_zero_pad(a, b):
     max_len = max(a_shape[0], b_shape[0])
 
     working = numpy.zeros(shape=(max_len,))
-    working[:a_shape[0]] = a
-    working[:b_shape[0]] += b
+    working[: a_shape[0]] = a
+    working[: b_shape[0]] += b
     return working
 
 
 def get_node_position_one_frame(extraction_meta):
-    relevant_disp_field = (
-        extraction_meta
-            .frame
-            .fieldOutputs['U']
-            .getSubset(region=extraction_meta.odb_instance)
+    relevant_disp_field = extraction_meta.frame.fieldOutputs["U"].getSubset(
+        region=extraction_meta.odb_instance
     )
 
     for one_value in relevant_disp_field.values:
-        overall_pos = _add_with_zero_pad(_get_data_array_as_double(one_value), extraction_meta.node_init_pos[one_value.nodeLabel])
+        overall_pos = _add_with_zero_pad(
+            _get_data_array_as_double(one_value),
+            extraction_meta.node_init_pos[one_value.nodeLabel],
+        )
 
         yield NodePos(
             frame_rowid=None,
             node_num=one_value.nodeLabel,
             X=overall_pos[0],
             Y=overall_pos[1],
-            Z=overall_pos[2]
+            Z=overall_pos[2],
         )
 
 
 def get_node_reaction_one_frame(extraction_meta):
-    relevant_disp_field = (
-        extraction_meta
-            .frame
-            .fieldOutputs['RF']
-            .getSubset(region=extraction_meta.odb_instance)
+    relevant_disp_field = extraction_meta.frame.fieldOutputs["RF"].getSubset(
+        region=extraction_meta.odb_instance
     )
     zero = numpy.array([0.0, 0.0, 0.0])
     for one_value in relevant_disp_field.values:
@@ -430,10 +447,8 @@ def get_node_reaction_one_frame(extraction_meta):
                 node_num=one_value.nodeLabel,
                 X=overall_pos[0],
                 Y=overall_pos[1],
-                Z=overall_pos[2]
+                Z=overall_pos[2],
             )
-
-
 
 
 def get_results_one_frame(extraction_meta):
@@ -454,9 +469,13 @@ def get_results_one_frame(extraction_meta):
 def extract_file_results(fn_odb):
     this_odb = odbAccess.openOdb(fn_odb)
 
-    with Datastore(fn=db_fn) as datastore, StressResultAggregator() as stress_results_aggregator:
+    with Datastore(
+        fn=db_fn
+    ) as datastore, StressResultAggregator() as stress_results_aggregator:
         last_frame_db = None
-        for frame_db, extraction_meta in walk_file_frames(EXTRACT_ALL_STEPS, this_odb, override_z_val):
+        for frame_db, extraction_meta in walk_file_frames(
+            EXTRACT_ALL_STEPS, this_odb, override_z_val
+        ):
             print_in_term(frame_db)
             last_frame_db = frame_db
             all_results = get_results_one_frame(extraction_meta)
@@ -464,22 +483,23 @@ def extract_file_results(fn_odb):
             datastore.add_frame_and_results(frame_db, all_results)
 
         # The goodman results need to be extracted from stresses at all frames on the last step.
-        for frame_db, extraction_meta in walk_file_frames(True, this_odb, override_z_val):
+        for frame_db, extraction_meta in walk_file_frames(
+            True, this_odb, override_z_val
+        ):
 
             is_release_oscillate_step = frame_db.step_num == STEP_IDX_RELEASE_OSCILLATE
             if is_release_oscillate_step:
                 stress_result = get_stresses_one_frame(extraction_meta)
                 stress_results_aggregator.update_frame_results(stress_result)
 
-        datastore.add_results_on_existing_frame(last_frame_db, stress_results_aggregator.make_goodman_results())
+        datastore.add_results_on_existing_frame(
+            last_frame_db, stress_results_aggregator.make_goodman_results()
+        )
 
-
-        datastore.add_many_history_results( get_history_results(this_odb) )
+        datastore.add_many_history_results(get_history_results(this_odb))
 
     this_odb.close()
 
 
 if __name__ == "__main__":
     extract_file_results(fn_odb)
-
-

@@ -6,6 +6,7 @@ from stent_opt.abaqus_model import base, interaction_property, surface
 
 T_SurfacePair = typing.Tuple[surface.Surface, surface.Surface]
 
+
 class MechanicalConstraint(enum.Enum):
     Kinematic = "KINEMATIC"
     Penalty = "PENALTY"
@@ -27,6 +28,7 @@ class InteractionBase(base.SortableDataclass):
 @dataclasses.dataclass(frozen=True)
 class GeneralContact(InteractionBase):
     """Either general all exterior (with included_surface_pairs Falsey) or pairs of surfaces."""
+
     name: str
     int_property: interaction_property.SurfaceInteraction
     included_surface_pairs: typing.Optional[typing.Tuple[T_SurfacePair]]
@@ -49,13 +51,13 @@ class GeneralContact(InteractionBase):
     def is_step_dependent(self) -> bool:
         return False
 
+
 @dataclasses.dataclass(frozen=True)
 class ContactPair(InteractionBase):
     name: str
     int_property: interaction_property.SurfaceInteraction
     mechanical_constraint: MechanicalConstraint
     surface_pair: T_SurfacePair
-
 
     def produce_inp_lines(self) -> typing.Iterable[str]:
         master_surf, slave_surf = self.surface_pair
@@ -68,14 +70,15 @@ class ContactPair(InteractionBase):
     def is_step_dependent(self) -> bool:
         return True
 
+
 def make_test_all_interaction() -> GeneralContact:
     return GeneralContact(
         name="IntAAA",
         int_property=interaction_property.make_test_int_prop(),
     )
 
+
 if __name__ == "__main__":
     one_int = make_test_all_interaction()
     for l in one_int.produce_inp_lines():
         print(l)
-

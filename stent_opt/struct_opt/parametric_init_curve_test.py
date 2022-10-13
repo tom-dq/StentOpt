@@ -16,8 +16,9 @@ def func_eg(t):
 
 
 def func_a(t):
-    t1 = math.pi*2*t
-    return P(t + math.sin(2*t1) / math.pi / 2, 0.5 * (1 - math.cos(t1)))
+    t1 = math.pi * 2 * t
+    return P(t + math.sin(2 * t1) / math.pi / 2, 0.5 * (1 - math.cos(t1)))
+
 
 def plot_curve(f):
     t_range = numpy.linspace(0, 1, 200)

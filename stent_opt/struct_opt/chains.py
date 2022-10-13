@@ -34,7 +34,9 @@ class Chains:
     # Try to make this a Monoid - hopefully I've done it right!
     _chains: typing.Sequence[ChainComponent]
 
-    def _aggregate_components(self, chain_components: typing.List[ChainComponent]) -> typing.List[ChainComponent]:
+    def _aggregate_components(
+        self, chain_components: typing.List[ChainComponent]
+    ) -> typing.List[ChainComponent]:
 
         temp_list = sorted(chain_components)
 
@@ -102,14 +104,14 @@ def make_chains(actions: typing.List[Action], n: int):
 
     # Could be add, remove or both
 
-    for span_flags in itertools.product(single_span_flags, repeat=n*len(actions)):
+    for span_flags in itertools.product(single_span_flags, repeat=n * len(actions)):
         all_chain_components = []
 
         for global_idx, one_flag in enumerate(span_flags):
             action_idx, idx = divmod(global_idx, n)
             action = actions[action_idx]
             start = idx * one_span
-            end = (idx+1) * one_span
+            end = (idx + 1) * one_span
             if math.isclose(end, 1.0):
                 end = 1.0
 
@@ -123,7 +125,7 @@ def make_chains(actions: typing.List[Action], n: int):
 
 
 def make_single_sided_chains(n: int):
-    """ Make chains which only add or remove at a time"""
+    """Make chains which only add or remove at a time"""
 
     for action in Action:
         yield from make_chains([action], n)
@@ -137,7 +139,10 @@ def test_chains():
     add1to5 = ChainComponent(Action.add, 1.0, 5.0)
 
     for should_combine, delta, action in (
-            (True, -0.1, Action.add), (True, 0.0, Action.add), (False, 0.1, Action.add), (False, -0.1, Action.remove)
+        (True, -0.1, Action.add),
+        (True, 0.0, Action.add),
+        (False, 0.1, Action.add),
+        (False, -0.1, Action.remove),
     ):
         add_next = ChainComponent(action, 5.0 + delta, 8.0)
 
@@ -154,9 +159,6 @@ def test_chains():
 
         print(chains)
         print(c_comb)
-
-
-
 
 
 if __name__ == "__main__":

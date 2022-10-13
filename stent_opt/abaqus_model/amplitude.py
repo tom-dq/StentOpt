@@ -4,6 +4,7 @@ import typing
 
 from stent_opt.abaqus_model import base
 
+
 class XY(typing.NamedTuple):
     x: float
     y: float
@@ -21,10 +22,10 @@ def _eight_or_fewer_per_line(in_data: typing.Iterable[float]) -> typing.Iterable
 
         if len(one_row) < 8:
             for one_pair in base.groups_of(one_row, 2):
-                yield ', '.join(one_pair)
+                yield ", ".join(one_pair)
 
         else:
-            yield ', '.join(one_row)
+            yield ", ".join(one_row)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -39,7 +40,9 @@ class Amplitude(AmplitudeBase):
     time_ref: TimeReference
 
     def make_inp_lines(self) -> typing.Iterable[str]:
-        time_ref_suffix = ", time=TOTAL TIME" if self.time_ref == TimeReference.total_time else ''
+        time_ref_suffix = (
+            ", time=TOTAL TIME" if self.time_ref == TimeReference.total_time else ""
+        )
         yield f"*Amplitude, name={base.quoted_if_necessary(self.name)}{time_ref_suffix}"
 
         def generate_single_points() -> typing.Iterable[float]:
@@ -67,9 +70,7 @@ class AmplitudePeriodic(AmplitudeBase):
         yield f"*Amplitude, name={base.quoted_if_necessary(self.name)}, definition=PERIODIC"
 
         offset_0 = 0.0
-        periodic_components = (
-            (offset_0, self.osc_amp),
-        )
+        periodic_components = ((offset_0, self.osc_amp),)
 
         yield f"{len(periodic_components)}, {base.abaqus_float(self.circ_freq)}, {base.abaqus_float(self.start_time_step)}, {base.abaqus_float(self.init_amp)}"
 
@@ -101,6 +102,3 @@ if __name__ == "__main__":
     amp = make_test_amplitude()
     for l in amp.make_inp_lines():
         print(l)
-
-
-

@@ -27,7 +27,7 @@ def patch_matrix_OK(sub_model_info: patch_manager.SubModelInfo):
 
     cond_num = numpy.linalg.cond(KG)
 
-    MAX_CONDITION_NUM = 1/sys.float_info.epsilon
+    MAX_CONDITION_NUM = 1 / sys.float_info.epsilon
     VERY_BIG_COND_NUM = 0.001 * MAX_CONDITION_NUM
 
     is_ok = cond_num < VERY_BIG_COND_NUM
@@ -35,7 +35,9 @@ def patch_matrix_OK(sub_model_info: patch_manager.SubModelInfo):
     is_ok_text = "ok" if is_ok else "SINGULAR"
 
     if not is_ok:
-        print(f"{sub_model_info.reference_elem_num} {sub_model_info.this_trial_active_state} {is_ok_text} cond={cond_num}")
+        print(
+            f"{sub_model_info.reference_elem_num} {sub_model_info.this_trial_active_state} {is_ok_text} cond={cond_num}"
+        )
 
     # Why do I have to do this?
     del node_mapping
@@ -55,9 +57,16 @@ def _build_elems_array(sub_model_info: patch_manager.SubModelInfo, node_mapping)
     elems = []
     QUAD4 = 1
     MAT0 = 0
-    for congi_idx, (idx, elem_num, one_elem) in enumerate(design.generate_stent_part_elements(sub_model_info.stent_design.stent_params)):
-        if idx in sub_model_info.stent_design.active_elements and sub_model_info.elem_in_submodel(elem_num):
-            elem_row = [congi_idx, QUAD4, MAT0] + [node_mapping[iNodeFull] for iNodeFull in one_elem.connection]
+    for congi_idx, (idx, elem_num, one_elem) in enumerate(
+        design.generate_stent_part_elements(sub_model_info.stent_design.stent_params)
+    ):
+        if (
+            idx in sub_model_info.stent_design.active_elements
+            and sub_model_info.elem_in_submodel(elem_num)
+        ):
+            elem_row = [congi_idx, QUAD4, MAT0] + [
+                node_mapping[iNodeFull] for iNodeFull in one_elem.connection
+            ]
             elems.append(elem_row)
 
     return numpy.array(elems)
@@ -69,7 +78,9 @@ def _produce_nodes_with_gaps_in_numbers(sub_model_info: patch_manager.SubModelIn
     # Nodes are in the format [iNode, x, y x_fixed, y_fixed]
     stent_params = sub_model_info.stent_design.stent_params
     for iNodeFull, node_idx, xyz in design.generate_nodes(stent_params):
-        is_within_design_domain = node_idx in sub_model_info.all_node_polar_index_admissible
+        is_within_design_domain = (
+            node_idx in sub_model_info.all_node_polar_index_admissible
+        )
         is_in_this_patch = iNodeFull in sub_model_info.node_nums
         if is_within_design_domain and is_in_this_patch:
             x_rest, y_rest = FREE, FREE
@@ -79,12 +90,12 @@ def _produce_nodes_with_gaps_in_numbers(sub_model_info: patch_manager.SubModelIn
 
             # Restrained if ordained by the global model
             for global_node_set in construct_model.get_boundary_node_set_2d(
-                    treat_spring_boundary_as_fixed=True,
-                    submodel_boundary_nodes=sub_model_info.boundary_node_nums,
-                    stent_params=sub_model_info.stent_design.stent_params,
-                    reference_stent_design=sub_model_info.stent_design,
-                    iNodeModel=iNodeFull,
-                    node_idx=node_idx,
+                treat_spring_boundary_as_fixed=True,
+                submodel_boundary_nodes=sub_model_info.boundary_node_nums,
+                stent_params=sub_model_info.stent_design.stent_params,
+                reference_stent_design=sub_model_info.stent_design,
+                iNodeModel=iNodeFull,
+                node_idx=node_idx,
             ):
                 if global_node_set.planar_x_is_constrained:
                     x_rest = FIXED
@@ -97,7 +108,10 @@ def _produce_nodes_with_gaps_in_numbers(sub_model_info: patch_manager.SubModelIn
 
 def _make_node_mapping(sub_model_info: patch_manager.SubModelInfo):
     return {
-        iNodeFull: idx for idx, (iNodeFull, _) in enumerate(sorted(_produce_nodes_with_gaps_in_numbers(sub_model_info)))
+        iNodeFull: idx
+        for idx, (iNodeFull, _) in enumerate(
+            sorted(_produce_nodes_with_gaps_in_numbers(sub_model_info))
+        )
     }
 
 
@@ -109,4 +123,3 @@ def _build_nodes_array(sub_model_info: patch_manager.SubModelInfo, node_mapping)
         nodes.append(node_row)
 
     return numpy.array(nodes, dtype=float)
-

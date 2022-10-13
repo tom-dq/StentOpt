@@ -65,7 +65,9 @@ class StepDynamicExplicit(StepBase):
         yield "*Dynamic, Explicit"
         yield ", " + base.abaqus_float(self.step_time)
         yield "*Bulk Viscosity"
-        yield base.abaqus_float(self.bulk_visc_b1) + ", " + base.abaqus_float(self.bulk_visc_b2)
+        yield base.abaqus_float(self.bulk_visc_b1) + ", " + base.abaqus_float(
+            self.bulk_visc_b2
+        )
 
 
 def is_explicit(step: typing.Union[StepBase, typing.Type[StepBase]]) -> bool:
@@ -92,6 +94,7 @@ def analysis_is_explicit(steps: typing.List[StepBase]) -> bool:
         raise ValueError("Ambiguous steps")
 
     return opts.pop()
+
 
 def make_test_step(n: int) -> StepDynamicExplicit:
     one_step = StepDynamicExplicit(

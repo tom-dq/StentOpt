@@ -1,4 +1,3 @@
-
 import typing
 import os
 import itertools
@@ -18,10 +17,10 @@ class Computer(typing.NamedTuple):
     @property
     def should_use_temp_dir(self) -> bool:
         drive_letter = self.base_working_dir.lower()[0]
-        if drive_letter == 'c':
+        if drive_letter == "c":
             return False
 
-        elif drive_letter in ('d', 'e'):
+        elif drive_letter in ("d", "e"):
             return True
 
         else:
@@ -54,7 +53,7 @@ elif psutil.cpu_count(logical=False) == 8:
     n_cpus = 8
     base_working_dir = r"E:\Simulations\StentOpt"
     # fig_size = (1600, 800)  #  (2000, 1350)
-    fig_size = (1200, 600) # (1800, 900)  #  (2000, 1350)
+    fig_size = (1200, 600)  # (1800, 900)  #  (2000, 1350)
     n_abaqus_parallel_solves = 4
 
 elif psutil.cpu_count(logical=False) == 6:
@@ -79,4 +78,3 @@ this_computer = Computer(
     # ssd_working_dir=r"E:\Simulations\StentOpt\AA-134",
     fig_size=fig_size,
 )
-

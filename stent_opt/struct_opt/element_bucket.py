@@ -6,6 +6,7 @@ import typing
 
 import networkx
 
+
 class Element(typing.NamedTuple):
     num: int
     conn: typing.Tuple[int, ...]
@@ -32,7 +33,9 @@ class Bucket:
         if should_check_nodes:
             shared_nodes = self._all_nodes & other._all_nodes
             if not shared_nodes:
-                raise ValueError("Both buckets have elements in them but no nodes are shared.")
+                raise ValueError(
+                    "Both buckets have elements in them but no nodes are shared."
+                )
 
         # A bit hacky...
         working_bucket = Bucket()
@@ -52,15 +55,20 @@ class GraphEdgeEntity(enum.Enum):
 
 #                         [node,  fe_element_edge     ]
 T_GraphEdge = typing.Union[int, typing.Tuple[int, int]]
-def _generate_fe_elem_to_graph_edge(graph_edge_entity: GraphEdgeEntity, elems: typing.Iterable[Element]) -> typing.Iterable[
-    typing.Tuple[Element, typing.List[T_GraphEdge]]]:
+
+
+def _generate_fe_elem_to_graph_edge(
+    graph_edge_entity: GraphEdgeEntity, elems: typing.Iterable[Element]
+) -> typing.Iterable[typing.Tuple[Element, typing.List[T_GraphEdge]]]:
 
     if graph_edge_entity == GraphEdgeEntity.node:
+
         def edge_producer(elem: Element):
             for fe_node_num in elem.conn:
                 yield fe_node_num
 
     elif graph_edge_entity == GraphEdgeEntity.fe_elem_edge:
+
         def edge_producer(elem: Element):
             node1 = elem.conn
             node2 = elem.conn[1:] + elem.conn[0:1]
@@ -74,8 +82,9 @@ def _generate_fe_elem_to_graph_edge(graph_edge_entity: GraphEdgeEntity, elems: t
         yield elem, list(edge_producer(elem))
 
 
-
-def build_graph(graph_edge_entity: GraphEdgeEntity, elems: typing.Iterable[Element]) -> networkx.Graph:
+def build_graph(
+    graph_edge_entity: GraphEdgeEntity, elems: typing.Iterable[Element]
+) -> networkx.Graph:
 
     """Confusingly, the "Nodes" in the graph are the elements in the FE mesh. And "graph_edges" is an interface between
     the finite elements. Could be a shared node or a shared edge."""
@@ -115,14 +124,15 @@ def build_graph(graph_edge_entity: GraphEdgeEntity, elems: typing.Iterable[Eleme
     return G
 
 
-
-def get_fe_nodes_on_boundary_interface(g: networkx.Graph, k_cutoff: int, fe_elem_source: Element
-            ) -> typing.Tuple[ typing.FrozenSet[int], typing.FrozenSet[Element] ]:
-
+def get_fe_nodes_on_boundary_interface(
+    g: networkx.Graph, k_cutoff: int, fe_elem_source: Element
+) -> typing.Tuple[typing.FrozenSet[int], typing.FrozenSet[Element]]:
     def get_fe_elems_at_cutoff(k):
         all_elems_within = set()
         elems_on_interface = set()
-        for fe_elem, level in networkx.single_source_shortest_path_length(g, fe_elem_source, k).items():
+        for fe_elem, level in networkx.single_source_shortest_path_length(
+            g, fe_elem_source, k
+        ).items():
             all_elems_within.add(fe_elem)
             if k == level:
                 elems_on_interface.add(fe_elem)
@@ -130,52 +140,150 @@ def get_fe_nodes_on_boundary_interface(g: networkx.Graph, k_cutoff: int, fe_elem
         return elems_on_interface, all_elems_within
 
     inside_interface, inside_all_fe_elems = get_fe_elems_at_cutoff(k_cutoff)
-    outside_interface, _ = get_fe_elems_at_cutoff(k_cutoff+1)
+    outside_interface, _ = get_fe_elems_at_cutoff(k_cutoff + 1)
 
     # Edges between the "inside" and "outside" elements are the interface nodes.
     boundary_nodes = set()
-    for fe_elem_inside, fe_elem_outside, fe_node_num in networkx.edge_boundary(g, inside_interface, outside_interface, data="fe_node_num"):
+    for fe_elem_inside, fe_elem_outside, fe_node_num in networkx.edge_boundary(
+        g, inside_interface, outside_interface, data="fe_node_num"
+    ):
         boundary_nodes.add(fe_node_num)
 
     return frozenset(boundary_nodes), frozenset(inside_all_fe_elems)
 
 
-
 def test_boundary():
     elems = [
-        Element(11, (111,1111,)),
-        Element(22, (111,222,)),
-        Element(33, (222,333,)),
-        Element(44, (333,444,)),
-        Element(55, (444,555,)),
-        Element(66, (555,666,)),
-        Element(77, (666,6666,)),
+        Element(
+            11,
+            (
+                111,
+                1111,
+            ),
+        ),
+        Element(
+            22,
+            (
+                111,
+                222,
+            ),
+        ),
+        Element(
+            33,
+            (
+                222,
+                333,
+            ),
+        ),
+        Element(
+            44,
+            (
+                333,
+                444,
+            ),
+        ),
+        Element(
+            55,
+            (
+                444,
+                555,
+            ),
+        ),
+        Element(
+            66,
+            (
+                555,
+                666,
+            ),
+        ),
+        Element(
+            77,
+            (
+                666,
+                6666,
+            ),
+        ),
     ]
 
     g = build_graph(GraphEdgeEntity.node, elems)
 
     one_hop, _ = get_fe_nodes_on_boundary_interface(g, 1, elems[0])
-    assert one_hop == frozenset({222,})
+    assert one_hop == frozenset(
+        {
+            222,
+        }
+    )
 
 
 def test_bridge_gap():
     elems = [
-        Element(11, (111, 1111,)),
-        Element(22, (111, 222,)),
-        Element(33, (222, 333,)),
-        Element(44, (333, 444,)),
-        Element(55, (444, 555,)),
-        Element(66, (555, 666,)),
-        Element(77, (666, 6666,)),
+        Element(
+            11,
+            (
+                111,
+                1111,
+            ),
+        ),
+        Element(
+            22,
+            (
+                111,
+                222,
+            ),
+        ),
+        Element(
+            33,
+            (
+                222,
+                333,
+            ),
+        ),
+        Element(
+            44,
+            (
+                333,
+                444,
+            ),
+        ),
+        Element(
+            55,
+            (
+                444,
+                555,
+            ),
+        ),
+        Element(
+            66,
+            (
+                555,
+                666,
+            ),
+        ),
+        Element(
+            77,
+            (
+                666,
+                6666,
+            ),
+        ),
     ]
 
     g = build_graph(GraphEdgeEntity.node, elems)
 
-    elem_trial = Element(88, (1111, 6666,))
+    elem_trial = Element(
+        88,
+        (
+            1111,
+            6666,
+        ),
+    )
 
-    boundary_nodes, inside_all_fe_elems = get_fe_nodes_on_boundary_interface(g, 1, elem_trial)
+    boundary_nodes, inside_all_fe_elems = get_fe_nodes_on_boundary_interface(
+        g, 1, elem_trial
+    )
     print(boundary_nodes)
     print(inside_all_fe_elems)
+
 
 def network_traverse_test():
     elems = [
@@ -191,12 +299,15 @@ def network_traverse_test():
     for c in networkx.connected_components(G):
         print(c)
 
-
     print(G)
 
 
 TElem = typing.TypeVar("TElem")
-def get_connected_elements(elem_to_conn: typing.Dict[TElem, typing.Tuple[int]]) -> typing.Iterable[ typing.Set[TElem] ]:
+
+
+def get_connected_elements(
+    elem_to_conn: typing.Dict[TElem, typing.Tuple[int]]
+) -> typing.Iterable[typing.Set[TElem]]:
     G = networkx.Graph()
 
     node_to_elems = collections.defaultdict(set)
@@ -248,6 +359,7 @@ def test_buckets():
     assert e_bridge in b1
 
     print("All OK")
+
 
 if __name__ == "__main__":
     test_bridge_gap()

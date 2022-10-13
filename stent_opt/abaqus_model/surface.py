@@ -3,6 +3,7 @@ import typing
 
 from stent_opt.abaqus_model import base, element
 
+
 class SurfaceFace(enum.Enum):
     S1 = enum.auto()
     S2 = enum.auto()
@@ -16,9 +17,13 @@ class SurfaceFace(enum.Enum):
 
 class Surface:
     name: str
-    sets_and_faces: typing.List[ typing.Tuple[element.ElementSet, SurfaceFace]]
+    sets_and_faces: typing.List[typing.Tuple[element.ElementSet, SurfaceFace]]
 
-    def __init__(self, name: str, sets_and_faces: typing.List[ typing.Tuple[element.ElementSet, SurfaceFace]]):
+    def __init__(
+        self,
+        name: str,
+        sets_and_faces: typing.List[typing.Tuple[element.ElementSet, SurfaceFace]],
+    ):
         self.name = name
         self.sets_and_faces = sets_and_faces
 

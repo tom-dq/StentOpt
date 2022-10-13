@@ -9,14 +9,16 @@ import typing
 import statistics
 import matplotlib.pyplot as plt
 
-from stent_opt.struct_opt.common import RegionReducer, PrimaryRankingComponentFitnessFilter, GlobalStatusType, PatchedElements
+from stent_opt.struct_opt.common import (
+    RegionReducer,
+    PrimaryRankingComponentFitnessFilter,
+    GlobalStatusType,
+    PatchedElements,
+)
 from stent_opt.abaqus_model import element
 from stent_opt.struct_opt import design
 from stent_opt.odb_interface import db_defs
 from stent_opt.struct_opt import optimisation_parameters
-
-
-
 
 
 # TODO - fix up this stuff with enums not comparing equal: https://stackoverflow.com/a/40371520
@@ -40,7 +42,9 @@ _nt_class_types = [
 ]
 
 
-def _aggregate_elemental_values(st_vals: typing.Iterable[StatusCheck]) -> typing.Iterable[typing.Tuple[GlobalStatusType, float]]:
+def _aggregate_elemental_values(
+    st_vals: typing.Iterable[StatusCheck],
+) -> typing.Iterable[typing.Tuple[GlobalStatusType, float]]:
     vals = [stat_check.metric_val for stat_check in st_vals]
 
     for global_status_type in GlobalStatusType.get_elemental_aggregate_values():
@@ -63,6 +67,7 @@ class Snapshot(typing.NamedTuple):
         return self._replace(
             active_elements=active_elements,
         )
+
 
 class StatusCheckStage(enum.Enum):
     filtering = enum.auto()
@@ -104,9 +109,6 @@ class NodePosition(typing.NamedTuple):
     z: float
 
 
-
-
-
 class PlottablePoint(typing.NamedTuple):
     iteration_num: int
     label: str
@@ -123,10 +125,17 @@ class GlobalStatus(typing.NamedTuple):
         return self._replace(global_status_type=self.global_status_type.name)
 
     def from_db(self):
-        return self._replace(global_status_type=GlobalStatusType[self.global_status_type])
+        return self._replace(
+            global_status_type=GlobalStatusType[self.global_status_type]
+        )
 
     def to_plottable_point(self) -> PlottablePoint:
-        return PlottablePoint(iteration_num=self.iteration_num, label=f"{self.global_status_sub_type} {self.global_status_type.name}", value=self.global_status_value)
+        return PlottablePoint(
+            iteration_num=self.iteration_num,
+            label=f"{self.global_status_sub_type} {self.global_status_type.name}",
+            value=self.global_status_value,
+        )
+
 
 _make_snapshot_table = """CREATE TABLE IF NOT EXISTS Snapshot(
 iteration_num INTEGER,
@@ -176,6 +185,7 @@ _make_tables = [
     _make_global_status_table,
 ]
 
+
 class History:
     fn = None
     connection = None
@@ -196,11 +206,12 @@ class History:
         self.connection.commit()
         self.connection.close()
 
-
     def _generate_insert_string_nt_class(self, named_tuple_class):
         question_marks = ["?" for _ in named_tuple_class._fields]
         table_name = named_tuple_class.__name__
-        return "INSERT INTO {0} VALUES ({1})".format(table_name, ", ".join(question_marks))
+        return "INSERT INTO {0} VALUES ({1})".format(
+            table_name, ", ".join(question_marks)
+        )
 
     def add_snapshot(self, snapshot: Snapshot):
         ins_string = self._generate_insert_string_nt_class(Snapshot)
@@ -219,7 +230,9 @@ class History:
         with self.connection:
             self.connection.executemany(ins_string, node_positions)
 
-    def add_many_global_status_checks(self, global_statuses: typing.Iterable[GlobalStatus]):
+    def add_many_global_status_checks(
+        self, global_statuses: typing.Iterable[GlobalStatus]
+    ):
         global_statuses = list(global_statuses)
         with self.connection:
             ins_string = self._generate_insert_string_nt_class(GlobalStatus)
@@ -230,13 +243,20 @@ class History:
 
     def get_snapshots(self) -> typing.Iterable[Snapshot]:
         with self.connection:
-            rows = self.connection.execute("SELECT * FROM Snapshot ORDER BY iteration_num, label")
+            rows = self.connection.execute(
+                "SELECT * FROM Snapshot ORDER BY iteration_num, label"
+            )
             db_forms = (Snapshot(*row) for row in rows)
             yield from (one_db_form.from_db() for one_db_form in db_forms)
 
     def get_one_snapshot(self, iteration_num: int) -> Snapshot:
         with self.connection:
-            rows = list(self.connection.execute("SELECT * FROM Snapshot WHERE iteration_num=? ORDER BY label", (iteration_num,)))
+            rows = list(
+                self.connection.execute(
+                    "SELECT * FROM Snapshot WHERE iteration_num=? ORDER BY label",
+                    (iteration_num,),
+                )
+            )
             if len(rows) != 1:
                 raise ValueError(iteration_num)
 
@@ -249,11 +269,20 @@ class History:
 
         ins_string = self._generate_insert_string_nt_class(GlobalParam)
         with self.connection:
-            self.connection.execute(ins_string, (param_name,param_value,))
+            self.connection.execute(
+                ins_string,
+                (
+                    param_name,
+                    param_value,
+                ),
+            )
 
     def _get_global_param(self, some_param_class):
         with self.connection:
-            rows = self.connection.execute("SELECT param_value FROM GlobalParam WHERE param_name = ?", (some_param_class.__name__,))
+            rows = self.connection.execute(
+                "SELECT param_value FROM GlobalParam WHERE param_name = ?",
+                (some_param_class.__name__,),
+            )
             l_rows = list(rows)
             assert len(l_rows) == 1
             data_json = l_rows[0][0]
@@ -268,14 +297,12 @@ class History:
         """Get the model parameters"""
         return self._get_global_param(design.StentParams)
 
-
     def set_optim_params(self, opt_params: optimisation_parameters.OptimParams):
         """Save the optimisation parameters."""
         data_rows = list(opt_params.to_db_strings())
         ins_string = self._generate_insert_string_nt_class(OptParam)
         with self.connection:
             self.connection.executemany(ins_string, data_rows)
-
 
     def get_opt_params(self) -> "optimisation_parameters.OptimParams":
         """Get the model parameters"""
@@ -285,10 +312,11 @@ class History:
 
         return optimisation_parameters.OptimParams.from_db_strings(l_rows)
 
-
     def max_saved_iteration_num(self) -> int:
         with self.connection:
-            rows = self.connection.execute("SELECT iteration_num FROM Snapshot ORDER BY iteration_num DESC LIMIT 1")
+            rows = self.connection.execute(
+                "SELECT iteration_num FROM Snapshot ORDER BY iteration_num DESC LIMIT 1"
+            )
             l_rows = list(rows)
 
         if len(l_rows) == 0:
@@ -313,7 +341,11 @@ class History:
 
     def get_snapshot(self, i: int) -> Snapshot:
         with self.connection:
-            rows = list(self.connection.execute("SELECT * FROM Snapshot WHERE iteration_num = ?", (i,)))
+            rows = list(
+                self.connection.execute(
+                    "SELECT * FROM Snapshot WHERE iteration_num = ?", (i,)
+                )
+            )
             to_return = self._single_snapshot_row(rows)
 
         if not to_return:
@@ -323,7 +355,11 @@ class History:
 
     def get_most_recent_snapshot(self) -> typing.Optional[Snapshot]:
         with self.connection:
-            rows = list(self.connection.execute("SELECT * FROM Snapshot ORDER BY iteration_num DESC LIMIT 1"))
+            rows = list(
+                self.connection.execute(
+                    "SELECT * FROM Snapshot ORDER BY iteration_num DESC LIMIT 1"
+                )
+            )
             return self._single_snapshot_row(rows)
 
     def get_most_recent_design(self) -> typing.Optional["design.StentDesign"]:
@@ -331,14 +367,23 @@ class History:
         if maybe_snapshot:
             stent_params = self.get_stent_params()
             design_space = stent_params.divs
-            elem_num_to_idx = {iElem: idx for iElem, idx in design.generate_elem_indices(design_space)}
+            elem_num_to_idx = {
+                iElem: idx for iElem, idx in design.generate_elem_indices(design_space)
+            }
             return design.StentDesign(
                 stent_params=stent_params,
-                active_elements=frozenset( (elem_num_to_idx[iElem] for iElem in maybe_snapshot.active_elements)),
+                active_elements=frozenset(
+                    (elem_num_to_idx[iElem] for iElem in maybe_snapshot.active_elements)
+                ),
                 label=maybe_snapshot.label,
             )
 
-    def get_status_checks(self, iter_greater_than_equal: int, iter_less_than_equal: int, limit_to_metrics: typing.Optional[typing.Container[str]]=None) -> typing.Iterable[StatusCheck]:
+    def get_status_checks(
+        self,
+        iter_greater_than_equal: int,
+        iter_less_than_equal: int,
+        limit_to_metrics: typing.Optional[typing.Container[str]] = None,
+    ) -> typing.Iterable[StatusCheck]:
         with self.connection:
             if limit_to_metrics:
                 qms = ["?" for _ in limit_to_metrics]
@@ -350,62 +395,88 @@ class History:
                 extra_filter = ""
                 extra_args = tuple()
 
-            all_args = (iter_greater_than_equal,iter_less_than_equal) + extra_args
-            rows = self.connection.execute(f"SELECT * FROM StatusCheck WHERE iteration_num >= ? AND ? >= iteration_num {extra_filter} ORDER BY iteration_num, metric_name ", all_args)
+            all_args = (iter_greater_than_equal, iter_less_than_equal) + extra_args
+            rows = self.connection.execute(
+                f"SELECT * FROM StatusCheck WHERE iteration_num >= ? AND ? >= iteration_num {extra_filter} ORDER BY iteration_num, metric_name ",
+                all_args,
+            )
 
             yield from (StatusCheck(*row).from_db() for row in rows)
 
     def get_min_max_status_check(self, metric_name: str) -> typing.Tuple[float, float]:
         with self.connection:
-            rows = self.connection.execute(f"SELECT Min(metric_val), Max(metric_val) FROM StatusCheck WHERE metric_name = ?", (metric_name,))
+            rows = self.connection.execute(
+                f"SELECT Min(metric_val), Max(metric_val) FROM StatusCheck WHERE metric_name = ?",
+                (metric_name,),
+            )
             maybe_rows = list(rows)
             if maybe_rows:
                 db_min, db_max = maybe_rows[0]
                 if db_min != 0:
                     if db_max / db_min > 1e6:
-                        db_min = db_max/1e6
+                        db_min = db_max / 1e6
 
                 return db_min, db_max
 
             else:
                 return 0.0, 5.0
 
-    def get_global_status_checks(self, iter_greater_than_equal: int, iter_less_than_equal: int) -> typing.Iterable[GlobalStatus]:
+    def get_global_status_checks(
+        self, iter_greater_than_equal: int, iter_less_than_equal: int
+    ) -> typing.Iterable[GlobalStatus]:
         with self.connection:
-            rows = self.connection.execute(f"SELECT * FROM GlobalStatus WHERE iteration_num >= ? AND ? >= iteration_num ORDER BY iteration_num, global_status_sub_type, global_status_type ", (iter_greater_than_equal, iter_less_than_equal))
+            rows = self.connection.execute(
+                f"SELECT * FROM GlobalStatus WHERE iteration_num >= ? AND ? >= iteration_num ORDER BY iteration_num, global_status_sub_type, global_status_type ",
+                (iter_greater_than_equal, iter_less_than_equal),
+            )
             yield from (GlobalStatus(*row).from_db() for row in rows)
 
     def get_metric_names(self) -> typing.List[str]:
         with self.connection:
-            rows = self.connection.execute("SELECT DISTINCT metric_name FROM StatusCheck")
+            rows = self.connection.execute(
+                "SELECT DISTINCT metric_name FROM StatusCheck"
+            )
             return list(row[0] for row in rows)
 
-    def get_node_positions(self, iteration_num: typing.Optional[int] = None) -> typing.Iterable[NodePosition]:
+    def get_node_positions(
+        self, iteration_num: typing.Optional[int] = None
+    ) -> typing.Iterable[NodePosition]:
         with self.connection:
             if iteration_num is None:
-                rows = self.connection.execute("SELECT * FROM NodePosition ORDER BY iteration_num")
+                rows = self.connection.execute(
+                    "SELECT * FROM NodePosition ORDER BY iteration_num"
+                )
 
             else:
-                rows = self.connection.execute("SELECT * FROM NodePosition WHERE iteration_num = ?", (iteration_num,))
+                rows = self.connection.execute(
+                    "SELECT * FROM NodePosition WHERE iteration_num = ?",
+                    (iteration_num,),
+                )
 
             yield from (NodePosition(*row) for row in rows)
-
 
     def update_global_with_elemental(self, iteration_num: int):
         """Goes through the elemental results and gets the statistical values."""
 
-        self.add_many_global_status_checks(self._make_global_status_rows_from_elemental(iteration_num))
+        self.add_many_global_status_checks(
+            self._make_global_status_rows_from_elemental(iteration_num)
+        )
 
-
-    def _make_global_status_rows_from_elemental(self, iteration_num: int) -> typing.Iterable[GlobalStatus]:
+    def _make_global_status_rows_from_elemental(
+        self, iteration_num: int
+    ) -> typing.Iterable[GlobalStatus]:
         def stat_type(stat_check: StatusCheck):
             return stat_check.metric_name
 
-        all_stat_checks = sorted(self.get_status_checks(iteration_num, iteration_num), key=stat_type)
+        all_stat_checks = sorted(
+            self.get_status_checks(iteration_num, iteration_num), key=stat_type
+        )
         for metric_name, sub_list in itertools.groupby(all_stat_checks, stat_type):
             # Work out the statistics on sub_list
 
-            for global_status_type, global_status_value in _aggregate_elemental_values(sub_list):
+            for global_status_type, global_status_value in _aggregate_elemental_values(
+                sub_list
+            ):
                 yield GlobalStatus(
                     iteration_num=iteration_num,
                     global_status_type=global_status_type,
@@ -415,7 +486,9 @@ class History:
 
     def get_unique_global_status_keys(self) -> typing.Iterable[GlobalStatus]:
         with self.connection:
-            rows = self.connection.execute("SELECT DISTINCT global_status_type, global_status_sub_type FROM GlobalStatus")
+            rows = self.connection.execute(
+                "SELECT DISTINCT global_status_type, global_status_sub_type FROM GlobalStatus"
+            )
             for global_status_type, global_status_sub_type in rows:
                 yield GlobalStatus(
                     iteration_num=None,
@@ -424,10 +497,10 @@ class History:
                     global_status_value=None,
                 )
 
+
 def plot_history(hist_fn):
     with History(hist_fn) as hist:
         all_status_lines = list(hist.get_status_checks())
-
 
     def metric_name_first(st):
         return st.metric_name
@@ -438,22 +511,31 @@ def plot_history(hist_fn):
     all_status_lines.sort(key=metric_name_first)
 
     # Hacky colour cycle
-    all_colours = list(plt.get_cmap('tab10').colors)
+    all_colours = list(plt.get_cmap("tab10").colors)
 
-    for metric_name, iter_of_metrics in itertools.groupby(all_status_lines, metric_name_first):
-        one_metric_statuses_by_iter_num = sorted(iter_of_metrics, key=iteration_num_first)
+    for metric_name, iter_of_metrics in itertools.groupby(
+        all_status_lines, metric_name_first
+    ):
+        one_metric_statuses_by_iter_num = sorted(
+            iter_of_metrics, key=iteration_num_first
+        )
         max_val = max(st.metric_val for st in one_metric_statuses_by_iter_num)
 
         x_axis = []
         y_max = []
         y_mean = []
         if max_val:
-            normed_metrics = [st._replace(metric_val=st.metric_val/max_val) for st in one_metric_statuses_by_iter_num]
+            normed_metrics = [
+                st._replace(metric_val=st.metric_val / max_val)
+                for st in one_metric_statuses_by_iter_num
+            ]
 
         else:
             normed_metrics = one_metric_statuses_by_iter_num
 
-        for iter_num, it_of_metrics_by_elem in itertools.groupby(normed_metrics, iteration_num_first):
+        for iter_num, it_of_metrics_by_elem in itertools.groupby(
+            normed_metrics, iteration_num_first
+        ):
             all_vals = [st.metric_val for st in it_of_metrics_by_elem]
 
             x_axis.append(iter_num)
@@ -462,24 +544,28 @@ def plot_history(hist_fn):
 
         this_col = all_colours.pop(0)
 
-
-        plt.plot(x_axis, y_max, color=this_col, linestyle='--', label=f"{metric_name} Max")
+        plt.plot(
+            x_axis, y_max, color=this_col, linestyle="--", label=f"{metric_name} Max"
+        )
         plt.plot(x_axis, y_mean, color=this_col, label=f"{metric_name} Mean")
 
     plt.gcf().set_size_inches(12, 9)
-    plt.gca().set_yscale('log')
+    plt.gca().set_yscale("log")
 
     plt.legend()
     plt.show()
 
 
-def make_fn_alone_stem(iter_num: int, suffix: str='') -> str:
+def make_fn_alone_stem(iter_num: int, suffix: str = "") -> str:
     return f'It-{str(iter_num).rjust(6, "0")}{suffix}'
 
-def make_fn_in_dir(working_dir: pathlib.Path, ext: str, iter_num: int, suffix: str='') -> pathlib.Path:
+
+def make_fn_in_dir(
+    working_dir: pathlib.Path, ext: str, iter_num: int, suffix: str = ""
+) -> pathlib.Path:
     """e.g., iter_num=123 and ext=".inp" """
     fn_alone = make_fn_alone_stem(iter_num, suffix)
-    intermediary = working_dir / f'{fn_alone}.XXX'
+    intermediary = working_dir / f"{fn_alone}.XXX"
     return intermediary.with_suffix(ext)
 
 
@@ -535,7 +621,9 @@ def is_nt_instance(maybe_nt) -> bool:
         return False
 
 
-def _item_to_db_strings(key, val, this_item_type) -> typing.Iterable[typing.Tuple[str, typing.Optional[str]]]:
+def _item_to_db_strings(
+    key, val, this_item_type
+) -> typing.Iterable[typing.Tuple[str, typing.Optional[str]]]:
     matched_enum_types = [et for et in _enum_types if isinstance(val, et)]
     matched_nt_class_types = [nt for nt in _nt_class_types if nt is val]
 
@@ -567,7 +655,9 @@ def _item_to_db_strings(key, val, this_item_type) -> typing.Iterable[typing.Tupl
         list_sub_type = this_item_type.__args__[0]
         for idx, one_item in enumerate(val):
             # Use the ellipsis to signal we don't know anything about the type of the element in the list - leave it up to the recursive call to deal with it.
-            sub_key, sub_val = next(_item_to_db_strings(f"{key}.[{idx}]", one_item, list_sub_type))
+            sub_key, sub_val = next(
+                _item_to_db_strings(f"{key}.[{idx}]", one_item, list_sub_type)
+            )
             yield sub_key, sub_val
 
     elif len(matched_nt_class_types) == 1:
@@ -575,10 +665,14 @@ def _item_to_db_strings(key, val, this_item_type) -> typing.Iterable[typing.Tupl
         yield key, val.__name__
 
     else:
-        raise TypeError(f"Don't known what to make of {key}: {val} type {this_item_type}.")
+        raise TypeError(
+            f"Don't known what to make of {key}: {val} type {this_item_type}."
+        )
 
 
-def nt_to_db_strings(nt_instance) -> typing.Iterable[typing.Tuple[str, typing.Optional[str]]]:
+def nt_to_db_strings(
+    nt_instance,
+) -> typing.Iterable[typing.Tuple[str, typing.Optional[str]]]:
     """(key, value) pairs which can go into a database"""
     for key, val in nt_instance._asdict().items():
         this_item_type = _get_type_ignoring_nones(nt_instance.__annotations__[key])
@@ -589,7 +683,9 @@ def single_item_from_string(s, maybe_target_type):
     """Strings which may be named tuples classes, or functions"""
 
     matches_nt_class = [nt for nt in _nt_class_types if nt.__name__ == s]
-    matches_funcs = [f for f in optimisation_parameters._for_db_funcs if f.__name__ == s]
+    matches_funcs = [
+        f for f in optimisation_parameters._for_db_funcs if f.__name__ == s
+    ]
 
     is_an_enum = False
     try:
@@ -619,7 +715,7 @@ def _prepopulate_with_empty_lists(nt_class) -> dict:
     working_dict = {}
 
     for field_name, annotation in nt_class.__annotations__.items():
-        maybe_origin = getattr(annotation, '__origin__', None)
+        maybe_origin = getattr(annotation, "__origin__", None)
         if maybe_origin in EMPTY_ITERABLE_TYPES:
             working_dict[field_name] = maybe_origin()
 
@@ -627,7 +723,6 @@ def _prepopulate_with_empty_lists(nt_class) -> dict:
 
 
 def nt_from_db_strings(nt_class, data):
-
     def get_prefix(one_string_and_data: str):
         one_string, _ = one_string_and_data
         if "." in one_string:
@@ -675,11 +770,14 @@ def nt_from_db_strings(nt_class, data):
 
             # Is a sub-branch namedtuple or list of items.
             def is_an_item(k):
-                return k.startswith('[') and k.endswith(']')
+                return k.startswith("[") and k.endswith("]")
 
-            text_is_a_list = all(is_an_item(k) for k,v in without_prefix_data)
+            text_is_a_list = all(is_an_item(k) for k, v in without_prefix_data)
             if text_is_a_list:
-                working_data[prefix] = [single_item_from_string(nt_s, single_type.__args__[0]) for k, nt_s in without_prefix_data]
+                working_data[prefix] = [
+                    single_item_from_string(nt_s, single_type.__args__[0])
+                    for k, nt_s in without_prefix_data
+                ]
 
             else:
                 working_data[prefix] = single_type.from_db_strings(without_prefix_data)
@@ -704,9 +802,13 @@ def nt_from_db_strings(nt_class, data):
                     base_class = get_class_or_none(base_type)
                     # Could be any one of the subclasses...
 
-                    match_subclasses = [sc for sc in base_class.__subclasses__() if sc.__name__ == value]
+                    match_subclasses = [
+                        sc for sc in base_class.__subclasses__() if sc.__name__ == value
+                    ]
                     if not match_subclasses:
-                        raise ValueError(f"Did not find anything called {value} among the subclasses of {base_class}.")
+                        raise ValueError(
+                            f"Did not find anything called {value} among the subclasses of {base_class}."
+                        )
 
                     elif len(match_subclasses) == 1:
                         working_data[name] = match_subclasses[0]
@@ -741,6 +843,7 @@ def _get_type_ignoring_nones(some_type):
 
     return non_none_args[0]
 
+
 def _is_nullable(some_type) -> bool:
     if getattr(some_type, "__origin__", None) is typing.Union:
         none_args = [t for t in some_type.__args__ if t == type(None)]
@@ -749,13 +852,14 @@ def _is_nullable(some_type) -> bool:
 
     return False
 
+
 if __name__ == "__main__":
     history_write_read_test()
 
     for x in GlobalStatusType.get_elemental_aggregate_values():
         print(x)
 
-    #history_write_read_test()
+    # history_write_read_test()
 
 if False:
     plot_history(r"E:\Simulations\StentOpt\aba-70\History.db")

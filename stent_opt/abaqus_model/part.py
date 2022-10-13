@@ -13,7 +13,12 @@ class Part:
     transform_to_cyl: bool
     _EVERYTHING_NAME = "Everything"
 
-    def __init__(self, name: str, common_section: typing.Optional[section.SectionBase], transform_to_cyl: bool):
+    def __init__(
+        self,
+        name: str,
+        common_section: typing.Optional[section.SectionBase],
+        transform_to_cyl: bool,
+    ):
         self.name = name
         self.common_section = common_section
         self.transform_to_cyl = transform_to_cyl
@@ -41,17 +46,25 @@ class Part:
 
         already_existing = node_elem_offset_nodes.keys() & self.nodes.keys()
         if already_existing:
-            raise ValueError(f"Already had these nodes in the model: {already_existing}")
+            raise ValueError(
+                f"Already had these nodes in the model: {already_existing}"
+            )
 
         self.nodes.update(node_elem_offset_nodes)
 
-
-    def add_element_validate(self, iElem: int, in_element: element.Element, node_elem_offset: int = 0):
+    def add_element_validate(
+        self, iElem: int, in_element: element.Element, node_elem_offset: int = 0
+    ):
         """Adds an element and makes sure all the nodes it references exist."""
 
         # Transform the element if needs be
         iElem_offset = iElem + node_elem_offset
-        element_offset = element.Element(name=in_element.name, connection=tuple(iNode+node_elem_offset for iNode in in_element.connection))
+        element_offset = element.Element(
+            name=in_element.name,
+            connection=tuple(
+                iNode + node_elem_offset for iNode in in_element.connection
+            ),
+        )
 
         if not all(x in self.nodes for x in element_offset.connection):
             raise ValueError(f"unconnected nodes on {element_offset}")
@@ -83,7 +96,6 @@ class Part:
 
         self.add_element_set(everything_set_elements)
 
-
     def add_node_set(self, node_set: "node.NodeSet"):
         self.node_sets[node_set.name_component] = node_set
 
@@ -101,7 +113,6 @@ class Part:
 
         else:
             raise ValueError(set_type)
-
 
     def _produce_elset_nset_section(self) -> typing.Iterable[str]:
         set_context = base.SetContext.part
@@ -161,34 +172,14 @@ def make_part_test() -> Part:
     part.add_element_validate(1, e1)
     part.add_element_validate(2, e2)
 
-    elem_set = element.ElementSet(part, "OneElem", element.Elements( {1: e1} ))
+    elem_set = element.ElementSet(part, "OneElem", element.Elements({1: e1}))
     part.add_element_set(elem_set)
 
     return part
+
 
 if __name__ == "__main__":
     part = make_part_test()
 
     for l in part.produce_inp_lines():
         print(l)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

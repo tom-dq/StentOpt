@@ -4,7 +4,7 @@ import typing
 from stent_opt.abaqus_model import base, part
 
 
-#from .base import XYZ, abaqus_float
+# from .base import XYZ, abaqus_float
 
 
 class Nodes(dict):
@@ -26,7 +26,6 @@ class NodeCouple(typing.NamedTuple):
     negated: bool
 
 
-
 @dataclasses.dataclass(frozen=True)
 class NodeSet(base.SetBase):
     nodes: typing.FrozenSet[int]
@@ -41,4 +40,3 @@ class NodeSet(base.SetBase):
 
 if __name__ == "__main__":
     pass
-

@@ -1,4 +1,3 @@
-
 import dataclasses
 
 from stent_opt.abaqus_model import instance
@@ -11,4 +10,3 @@ class SpringA:
     n1: int
     n2: int
     k: float
-

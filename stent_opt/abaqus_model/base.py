@@ -11,6 +11,7 @@ import operator
 
 T = typing.Type["T"]
 
+
 def _operator_dot(op: typing.Callable, one: T, two: T):
     """Maps an operator to the components of the class.
     e.g., A(a=3, b=5) + A(a=56, b=67)  => A(3+56, b=5+67)"""
@@ -22,19 +23,16 @@ def _operator_dot(op: typing.Callable, one: T, two: T):
     if one.__class__ != two.__class__:
         raise TypeError(f"Can't apply {op} to {one} and {two}.")
 
-    field_dict = {
-        f: op(getattr(one, f), getattr(two, f)) for f in one._fields
-    }
+    field_dict = {f: op(getattr(one, f), getattr(two, f)) for f in one._fields}
 
     return type(one)(**field_dict)
+
 
 def _operator_splat_const_first(op: typing.Callable, a, one: T):
     """Splats an operator across the components of the class.
     e.g., 2 * A(a=3, b=5)  => A(2 * 3, b=2 * 5)"""
 
-    field_dict = {
-        f: op(a, getattr(one, f)) for f in one._fields
-    }
+    field_dict = {f: op(a, getattr(one, f)) for f in one._fields}
 
     return type(one)(**field_dict)
 
@@ -43,9 +41,7 @@ def _operator_splat_const_last(op: typing.Callable, one: T, a):
     """Splats an operator across the components of the class.
     e.g., A(a=3, b=5) / 3.4  => A(3 / 3.4, b=5 / 3.4)"""
 
-    field_dict = {
-        f: op(getattr(one, f), a) for f in one._fields
-    }
+    field_dict = {f: op(getattr(one, f), a) for f in one._fields}
 
     return type(one)(**field_dict)
 
@@ -77,7 +73,7 @@ class XYZ(typing.NamedTuple):
         return self
 
     def to_r_th_z(self) -> "RThZ":
-        r = math.sqrt( self.x**2 + self.z**2 )
+        r = math.sqrt(self.x**2 + self.z**2)
         th_rad = math.atan2(self.x, self.z)
         return RThZ(
             r=r,
@@ -96,7 +92,7 @@ class XYZ(typing.NamedTuple):
 
     def plus_xyz(self, other: "XYZ"):
         """Special method for hot path"""
-        return XYZ(x=self.x+other.x, y=self.y+other.y, z=self.z+other.z)
+        return XYZ(x=self.x + other.x, y=self.y + other.y, z=self.z + other.z)
 
     def __add__(self, other):
         return _operator_dot(operator.add, self, other)
@@ -115,6 +111,7 @@ class XYZ(typing.NamedTuple):
 
     def __abs__(self):
         return math.sqrt(self.x**2 + self.y**2 + self.z**2)
+
 
 DOFs = (1, 2, 3)
 
@@ -176,7 +173,6 @@ class SetType(enum.Enum):
             raise ValueError(self)
 
 
-
 @dataclasses.dataclass(frozen=True)
 class SetBase:
     part: "part.Part"
@@ -221,9 +217,12 @@ class SetBase:
             # Don't make an empty set - what are we going to use it for???
             return
 
-        fully_populated_sequence = frozenset(range(min(ent_nums), max(ent_nums)+1))
+        fully_populated_sequence = frozenset(range(min(ent_nums), max(ent_nums) + 1))
 
-        is_sequential = self._entity_numbers() == fully_populated_sequence and len(fully_populated_sequence) > 2
+        is_sequential = (
+            self._entity_numbers() == fully_populated_sequence
+            and len(fully_populated_sequence) > 2
+        )
         if is_sequential:
 
             yield f"*{key.title()}, {key.lower()}={self.get_name(set_context)}, generate"
@@ -262,7 +261,6 @@ class Action(enum.Enum):
 
 @dataclasses.dataclass(frozen=True)
 class SortableDataclass:
-
     def sortable(self):
         type_name = self.__class__.__name__
         return (type_name, self)
@@ -276,7 +274,6 @@ class LoadBoundaryBase(SortableDataclass):
     def produce_inp_lines(self, action: Action) -> typing.Iterable[str]:
         raise NotImplementedError()
 
-
     def _amplitude_suffix(self) -> str:
         if self.with_amplitude:
             return f", amplitude={self.with_amplitude.name}"
@@ -285,16 +282,15 @@ class LoadBoundaryBase(SortableDataclass):
             return ""
 
 
-
 def abaqus_float(x) -> str:
     """Returns a float Abaqus can parse (i.e., with a dot in it)"""
 
     maybe_float = str(x)
     if "e" in maybe_float.lower():
         if "." not in maybe_float:
-            pre, post = maybe_float.split('e')
+            pre, post = maybe_float.split("e")
             pre_dot = pre + ".0"
-            return pre_dot + 'e' + post
+            return pre_dot + "e" + post
 
     else:
         if "." not in maybe_float:
@@ -309,7 +305,9 @@ def inp_heading(text: str) -> typing.Iterable[str]:
     yield "**"
 
 
-def deterministic_key(class_instance, text, context: typing.Optional[SetContext] = None) -> str:
+def deterministic_key(
+    class_instance, text, context: typing.Optional[SetContext] = None
+) -> str:
     context_text = context.name if context else ""
     raw_text = f"{class_instance}_{text}_{context_text}"
     return "Z_" + hashlib.md5(raw_text.encode()).hexdigest()[0:8]
@@ -319,12 +317,11 @@ def quoted_if_necessary(s: str) -> str:
     if '"' in s:
         raise ValueError(f"String can't contain quotes: {s}")
 
-    if ' ' in s:
+    if " " in s:
         return '"' + s + '"'
 
     else:
         return s
-
 
 
 if __name__ == "__main__":
@@ -336,7 +333,7 @@ if __name__ == "__main__":
     print(a1.to_xyz().to_r_th_z())
 
     print(a1)
-    print(a1+a2)
+    print(a1 + a2)
 
     print(-1 * a1)
     print(a1 / 4.5)
@@ -349,5 +346,3 @@ if __name__ == "__main__":
             print(x)
 
         print()
-
-

@@ -9,10 +9,15 @@ from stent_opt.struct_opt import chains
 from stent_opt.struct_opt import element_bucket
 
 
-def make_sorted_chains(stent_params: design.StentParams, elem_idxs: typing.Iterable[design.PolarIndex]) -> typing.Dict[design.PolarIndex, float]:
+def make_sorted_chains(
+    stent_params: design.StentParams, elem_idxs: typing.Iterable[design.PolarIndex]
+) -> typing.Dict[design.PolarIndex, float]:
     """given a bunch of elements, put them in "chains" and order them from 0 to 1."""
 
-    cand_conns = {elem_idx: design.get_single_element_connection(stent_params, elem_idx) for elem_idx in elem_idxs}
+    cand_conns = {
+        elem_idx: design.get_single_element_connection(stent_params, elem_idx)
+        for elem_idx in elem_idxs
+    }
 
     all_connected_elems_list = list(element_bucket.get_connected_elements(cand_conns))
 
@@ -43,12 +48,12 @@ def make_sorted_chains(stent_params: design.StentParams, elem_idxs: typing.Itera
 
 
 def compel_new_generation(
-        forced_changes: chains.Chains,
-        working_dir: pathlib.Path,
-        design_prev: design.StentDesign,
-        ranking_result: generation.RankingResults,
-        iter_this: int,
-        label: str
+    forced_changes: chains.Chains,
+    working_dir: pathlib.Path,
+    design_prev: design.StentDesign,
+    ranking_result: generation.RankingResults,
+    iter_this: int,
+    label: str,
 ) -> design.StentDesign:
 
     inp_fn = history.make_fn_in_dir(working_dir, ".inp", iter_this)
@@ -70,21 +75,36 @@ def compel_new_generation(
     for action, cand_idxs in candidates.items():
 
         elem_to_x = make_sorted_chains(stent_params, cand_idxs)
-        on_chain = {elem_idx for elem_idx, x in elem_to_x.items() if forced_changes.contains(action, x)}
+        on_chain = {
+            elem_idx
+            for elem_idx, x in elem_to_x.items()
+            if forced_changes.contains(action, x)
+        }
         action_to_changes[action] = on_chain
 
-    new_active_elems = (design_prev.active_elements | action_to_changes[chains.Action.add]) - action_to_changes[chains.Action.remove]
+    new_active_elems = (
+        design_prev.active_elements | action_to_changes[chains.Action.add]
+    ) - action_to_changes[chains.Action.remove]
 
-    elem_indices_to_num = {idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)}
+    elem_indices_to_num = {
+        idx: iElem for iElem, idx in design.generate_elem_indices(stent_params.divs)
+    }
 
-    new_active_elem_nums = frozenset(elem_indices_to_num[idx] for idx in new_active_elems)
+    new_active_elem_nums = frozenset(
+        elem_indices_to_num[idx] for idx in new_active_elems
+    )
     with history.History(history_db) as hist:
         snapshot = history.Snapshot(
             iteration_num=iter_this,
             label=label,
             filename=str(inp_fn),
-            active_elements=new_active_elem_nums)
+            active_elements=new_active_elem_nums,
+        )
 
         hist.add_snapshot(snapshot)
 
-    return design.StentDesign(stent_params=design_prev.stent_params, active_elements=frozenset(new_active_elems), label=snapshot.label)
+    return design.StentDesign(
+        stent_params=design_prev.stent_params,
+        active_elements=frozenset(new_active_elems),
+        label=snapshot.label,
+    )

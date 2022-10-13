@@ -25,7 +25,9 @@ class ElementOutputs(enum.Enum):
 
 class EnergyOutputs(enum.Enum):
     ALLSE = "Recoverable strain energy."
-    ALLPD = "Energy dissipated by rate-independent and ratedependent plastic deformation."
+    ALLPD = (
+        "Energy dissipated by rate-independent and ratedependent plastic deformation."
+    )
     ALLKE = "Kinetic energy."
     ALLWK = "External work."
 
@@ -33,7 +35,9 @@ class EnergyOutputs(enum.Enum):
 # Sanity check
 for energy_output in EnergyOutputs:
     if energy_output.name not in expected_history_results:
-        raise ValueError(f"{energy_output.name} is in stent_opt.abaqus_model.output_requests.EnergyOutputs but not in stent_opt.odb_interface.db_defs.expected_history_results... the output script will go looking for {energy_output.name} to extract but it won't be there.")
+        raise ValueError(
+            f"{energy_output.name} is in stent_opt.abaqus_model.output_requests.EnergyOutputs but not in stent_opt.odb_interface.db_defs.expected_history_results... the output script will go looking for {energy_output.name} to extract but it won't be there."
+        )
 
 T_OutputRequest = typing.Union[NodeOutputs, ElementOutputs]
 T_HistoryRequest = typing.Union[EnergyOutputs]
@@ -41,11 +45,13 @@ T_HistoryRequest = typing.Union[EnergyOutputs]
 general_components = list(NodeOutputs) + list(ElementOutputs)
 history_components = list(EnergyOutputs)
 
+
 def produce_inp_lines(
-        abaqus_output_time_interval: float,
-        output_components: typing.Iterable[T_OutputRequest],
-        abaqus_history_time_interval: float,
-        output_history: typing.Iterable[T_HistoryRequest]) -> typing.Iterable[str]:
+    abaqus_output_time_interval: float,
+    output_components: typing.Iterable[T_OutputRequest],
+    abaqus_history_time_interval: float,
+    output_history: typing.Iterable[T_HistoryRequest],
+) -> typing.Iterable[str]:
 
     # Output requests
     yield from base.inp_heading("OUTPUT REQUESTS")
@@ -73,7 +79,9 @@ def produce_inp_lines(
         yield f"*Output, history, time interval={base.abaqus_float(abaqus_history_time_interval)}"
 
         energy_output = [h for h in out_hist if isinstance(h, EnergyOutputs)]
-        output_not_dealt_with = [h for h in out_hist if not isinstance(h, EnergyOutputs)]
+        output_not_dealt_with = [
+            h for h in out_hist if not isinstance(h, EnergyOutputs)
+        ]
 
         if output_not_dealt_with:
             raise ValueError("Write this code!")

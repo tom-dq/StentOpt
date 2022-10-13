@@ -62,5 +62,9 @@ class SurfaceSection(SectionBase):
     def produce_inp_lines(self, elset: element.ElementSet) -> typing.Iterable[str]:
         yield f"** Section: {self.name}"
 
-        maybe_density = f", DENSITY={base.abaqus_float(self.surf_density)}" if self.surf_density is not None else ""
+        maybe_density = (
+            f", DENSITY={base.abaqus_float(self.surf_density)}"
+            if self.surf_density is not None
+            else ""
+        )
         yield f"*Surface Section, elset={elset.get_name(base.SetContext.part)}{maybe_density}"

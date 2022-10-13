@@ -34,17 +34,19 @@ from stent_opt.abaqus_model import base, element
 from stent_opt.struct_opt import history, design
 from stent_opt.struct_opt.computer import this_computer
 
-holoviews.extension('bokeh', 'matplotlib')
+holoviews.extension("bokeh", "matplotlib")
 
 
 def _get_most_recent_working_dir() -> pathlib.Path:
 
-    subdirs = (p for p in pathlib.Path(this_computer.base_working_dir).iterdir() if p.is_dir())
+    subdirs = (
+        p for p in pathlib.Path(this_computer.base_working_dir).iterdir() if p.is_dir()
+    )
 
     def most_recent(p: pathlib.Path):
         return p.stat().st_ctime
-        #text, num = p.name.split('-')[0:2]
-        #return text, int(num), p.stat().st_ctime
+        # text, num = p.name.split('-')[0:2]
+        # return text, int(num), p.stat().st_ctime
 
     return max(subdirs, key=most_recent)
 
@@ -75,14 +77,21 @@ USE_GLOBAL_LIMITS = False
 history_db = history.make_history_db(WORKING_DIR_TEMP)
 global_hist = history.History(history_db)
 
+
 def _update_global_db_data():
     global _all_global_statuses, _global_status_idx, _all_elemental_metrics, _max_dashboard_increment
-    _all_global_statuses = [gsv.to_plottable_point() for gsv in global_hist.get_unique_global_status_keys()]
+    _all_global_statuses = [
+        gsv.to_plottable_point() for gsv in global_hist.get_unique_global_status_keys()
+    ]
     _global_status_idx = {pp.label: idx for idx, pp in enumerate(_all_global_statuses)}
     _all_elemental_metrics = global_hist.get_metric_names()
-    _max_dashboard_increment = min(STOP_AT_INCREMENT, global_hist.max_saved_iteration_num() - 1)  # Why the minus one? Can't remember!
+    _max_dashboard_increment = min(
+        STOP_AT_INCREMENT, global_hist.max_saved_iteration_num() - 1
+    )  # Why the minus one? Can't remember!
     if _max_dashboard_increment == 0:
-        _max_dashboard_increment = 1  # Special case to make the slider work if there aren't enough results
+        _max_dashboard_increment = (
+            1  # Special case to make the slider work if there aren't enough results
+        )
 
 
 _update_global_db_data()
@@ -101,6 +110,7 @@ class DeformationView(enum.Enum):
     def is_deformed(self) -> bool:
         return self == DeformationView.deformed_active
 
+
 class ContourView(typing.NamedTuple):
     iteration_num: int
     metric_name: str
@@ -109,14 +119,16 @@ class ContourView(typing.NamedTuple):
     max_val: typing.Optional[float]
 
     def make_iteration_view(self) -> ContourIterationView:
-        return ContourIterationView(metric_name=self.metric_name, deformation_view=self.deformation_view)
+        return ContourIterationView(
+            metric_name=self.metric_name, deformation_view=self.deformation_view
+        )
 
     def get_cnorm(self) -> str:
-        return 'linear'
+        return "linear"
         if self.min_val <= 0:
-            return 'linear'
+            return "linear"
         else:
-            return 'log'
+            return "log"
 
 
 class ContourIterationView(typing.NamedTuple):
@@ -191,10 +203,16 @@ class GraphLineCollection(typing.NamedTuple):
         )
 
     @staticmethod
-    def from_many_graphs(graph_lines: typing.Iterable[GraphLine]) -> GraphLineCollection:
-        single_graph_collections = [GraphLineCollection.from_single(gl) for gl in graph_lines]
+    def from_many_graphs(
+        graph_lines: typing.Iterable[GraphLine],
+    ) -> GraphLineCollection:
+        single_graph_collections = [
+            GraphLineCollection.from_single(gl) for gl in graph_lines
+        ]
 
-        return functools.reduce(operator.add, single_graph_collections, GraphLineCollection.get_identity())
+        return functools.reduce(
+            operator.add, single_graph_collections, GraphLineCollection.get_identity()
+        )
 
     @property
     def y_range(self) -> typing.Tuple[float, float]:
@@ -203,14 +221,19 @@ class GraphLineCollection(typing.NamedTuple):
 
         return self.y_min, self.y_max
 
+
 def get_status_checks() -> typing.List["history.StatusCheck"]:
-    return list(global_hist.get_status_checks(iter_greater_than_equal=0, iter_less_than_equal=UNLIMITED))
+    return list(
+        global_hist.get_status_checks(
+            iter_greater_than_equal=0, iter_less_than_equal=UNLIMITED
+        )
+    )
 
 
 def _build_contour_view_data(
-        hist: history.History,
-        single_iteration: typing.Optional[int] = None,
-        metric_name: typing.Optional[str] = None,
+    hist: history.History,
+    single_iteration: typing.Optional[int] = None,
+    metric_name: typing.Optional[str] = None,
 ) -> typing.Iterable[typing.Tuple[ContourView, typing.Dict[int, float]]]:
     """Make the view info for a contour."""
 
@@ -239,53 +262,66 @@ def _build_contour_view_data(
         inc_gt = single_iteration
         inc_lte = single_iteration
 
-    for contour_view, sub_iter in itertools.groupby(hist.get_status_checks(inc_gt, inc_lte, good_metric_names), make_contour_view):
-        min_all_frames, max_all_frames = hist.get_min_max_status_check(contour_view.metric_name)
+    for contour_view, sub_iter in itertools.groupby(
+        hist.get_status_checks(inc_gt, inc_lte, good_metric_names), make_contour_view
+    ):
+        min_all_frames, max_all_frames = hist.get_min_max_status_check(
+            contour_view.metric_name
+        )
         if USE_GLOBAL_LIMITS:
-            contour_view_with_limits = contour_view._replace(min_val=min_all_frames, max_val=max_all_frames)
+            contour_view_with_limits = contour_view._replace(
+                min_val=min_all_frames, max_val=max_all_frames
+            )
 
         else:
             contour_view_with_limits = contour_view
 
-        elem_vals = {status_check.elem_num: status_check.metric_val for status_check in sub_iter}
+        elem_vals = {
+            status_check.elem_num: status_check.metric_val for status_check in sub_iter
+        }
         yield contour_view_with_limits, elem_vals
 
 
 def make_quadmesh(
-        stent_params: design.StentParams,
-        active_elements: typing.FrozenSet[design.PolarIndex],
-        node_idx_pos: typing.Dict[design.PolarIndex, base.XYZ],
-        contour_view: ContourView,
-        elem_idx_to_value: typing.Dict[design.PolarIndex, float],
-        title: str,
+    stent_params: design.StentParams,
+    active_elements: typing.FrozenSet[design.PolarIndex],
+    node_idx_pos: typing.Dict[design.PolarIndex, base.XYZ],
+    contour_view: ContourView,
+    elem_idx_to_value: typing.Dict[design.PolarIndex, float],
+    title: str,
 ) -> holoviews.Overlay:
     """Make a single Quadmesh representation"""
 
     # Make the undeformed meshgrid.
-    x_vals = design.gen_ordinates(stent_params.divs.Th, 0.0, stent_params.theta_arc_initial)
+    x_vals = design.gen_ordinates(
+        stent_params.divs.Th, 0.0, stent_params.theta_arc_initial
+    )
     y_vals = design.gen_ordinates(stent_params.divs.Z, 0.0, stent_params.length)
 
     # Get the bounds which are non-NaN
     idx_z = [idx.Z for idx in elem_idx_to_value.keys()]
     idx_Th = [idx.Th for idx in elem_idx_to_value.keys()]
 
-    z_low, z_high = min(idx_z), max(idx_z)+1  # This plus one is for element to upper node index
-    th_low, th_high = min(idx_Th), max(idx_Th)+1
+    z_low, z_high = (
+        min(idx_z),
+        max(idx_z) + 1,
+    )  # This plus one is for element to upper node index
+    th_low, th_high = min(idx_Th), max(idx_Th) + 1
 
-    x_vals_trim = x_vals[th_low: th_high+1]  # This plus one is for Python indexing.
-    y_vals_trim = y_vals[z_low: z_high+1]
+    x_vals_trim = x_vals[th_low : th_high + 1]  # This plus one is for Python indexing.
+    y_vals_trim = y_vals[z_low : z_high + 1]
 
     # X and Y are boundary points.
     X, Y = numpy.meshgrid(x_vals_trim, y_vals_trim)
 
     # The values are element centred.
-    elem_shape = (X.shape[0]-1, X.shape[1]-1)
+    elem_shape = (X.shape[0] - 1, X.shape[1] - 1)
     Z = numpy.full(shape=elem_shape, fill_value=numpy.nan)
     Z_ghost = Z.copy()
 
     for idx, val in elem_idx_to_value.items():
         if idx in active_elements:
-            Z[idx.Z-z_low, idx.Th-th_low] = val
+            Z[idx.Z - z_low, idx.Th - th_low] = val
 
         elif contour_view.deformation_view.should_show_ghosts:
             Z_ghost[idx.Z - z_low, idx.Th - th_low] = val
@@ -293,38 +329,43 @@ def make_quadmesh(
     all_ghosts_nan = numpy.isnan(Z_ghost).all()
 
     # Overwrite with the nodes...
-    th_range = range(th_low, th_high+1)
-    z_range = range(z_low, z_high+1)
+    th_range = range(th_low, th_high + 1)
+    z_range = range(z_low, z_high + 1)
     for node_idx, pos in node_idx_pos.items():
         if node_idx.Th in th_range and node_idx.Z in z_range:
-            X[node_idx.Z-z_low, node_idx.Th-th_low] = pos.x
-            Y[node_idx.Z-z_low, node_idx.Th-th_low] = pos.y
+            X[node_idx.Z - z_low, node_idx.Th - th_low] = pos.x
+            Y[node_idx.Z - z_low, node_idx.Th - th_low] = pos.y
 
     # Populate with the real values.
 
-    qmesh_real = holoviews.QuadMesh((X, Y, Z), vdims='level', group=contour_view.metric_name).redim.range(level=(contour_view.min_val, contour_view.max_val))
-    qmesh_real.options(cmap='viridis')
+    qmesh_real = holoviews.QuadMesh(
+        (X, Y, Z), vdims="level", group=contour_view.metric_name
+    ).redim.range(level=(contour_view.min_val, contour_view.max_val))
+    qmesh_real.options(cmap="viridis")
 
     qmesh_list = [qmesh_real]
     if contour_view.deformation_view.should_show_ghosts and not all_ghosts_nan:
-        qmesh_ghost = holoviews.QuadMesh((X, Y, Z_ghost), vdims='level', group=contour_view.metric_name)
-        qmesh_ghost.options(cmap='inferno')
+        qmesh_ghost = holoviews.QuadMesh(
+            (X, Y, Z_ghost), vdims="level", group=contour_view.metric_name
+        )
+        qmesh_ghost.options(cmap="inferno")
         qmesh_list.append(qmesh_ghost)
 
     for qmesh in qmesh_list:
         qmesh.opts(
-            aspect='equal',
+            aspect="equal",
             line_width=0.1,
             padding=0.1,
             width=this_computer.fig_size[0],
             height=this_computer.fig_size[1],
             colorbar=True,
-            bgcolor='lightgray',
+            bgcolor="lightgray",
             title=title,
             cnorm=contour_view.get_cnorm(),
         )
 
     return holoviews.Overlay(qmesh_list)
+
 
 # Controls out here since iteration_selector is shared
 iteration_selector = panel.widgets.IntSlider(
@@ -345,7 +386,7 @@ elemental_metric_selector = panel.widgets.Select(
 deformation_view_selector = panel.widgets.RadioButtonGroup(
     name="Deformation View",
     options=[dv.value for dv in DeformationView],
-    value=list(DeformationView)[0].value
+    value=list(DeformationView)[0].value,
 )
 
 history_plot_vars_selector = panel.widgets.MultiSelect(
@@ -356,9 +397,11 @@ history_plot_vars_selector = panel.widgets.MultiSelect(
     width=500,
 )
 
+
 def _update_controls():
     _update_global_db_data()
     iteration_selector.end = _max_dashboard_increment
+
 
 @panel.depends(iteration_selector, elemental_metric_selector, deformation_view_selector)
 def _make_single_contour(*args, **kwargs) -> holoviews.Overlay:
@@ -373,9 +416,12 @@ def _make_single_contour(*args, **kwargs) -> holoviews.Overlay:
 
     deformation_view = DeformationView(deformation_view_value)
 
-    one_contour = _contour_build_from_db(stent_params, iteration_num, deformation_view, metric_name)
+    one_contour = _contour_build_from_db(
+        stent_params, iteration_num, deformation_view, metric_name
+    )
     print(iteration_num, deformation_view, metric_name)
     return one_contour
+
 
 def _make_animation():
     stent_params = global_hist.get_stent_params()
@@ -389,14 +435,30 @@ def _make_animation():
 
     for iteration_num in range(_max_dashboard_increment):
         print(iteration_num)
-        one_contour = _contour_build_from_db(stent_params, iteration_num, deformation_view, metric_name)
+        one_contour = _contour_build_from_db(
+            stent_params, iteration_num, deformation_view, metric_name
+        )
         iter_str = str(iteration_num).rjust(3, "0")
-        holoviews.save(one_contour, fr"C:\Temp\aaaholo\{WORKING_DIR_TEMP.parts[-1]}-{metric_name}-{deformation_view.name}-{iter_str}.png")
+        holoviews.save(
+            one_contour,
+            rf"C:\Temp\aaaholo\{WORKING_DIR_TEMP.parts[-1]}-{metric_name}-{deformation_view.name}-{iter_str}.png",
+        )
+
 
 @functools.lru_cache(1024)
-def _contour_build_from_db(stent_params: design.StentParams, iteration_num: int, deformation_view: DeformationView, metric_name: str) -> holoviews.Overlay:
-    node_num_to_idx = {iNode: idx for iNode, idx, pos in design.generate_nodes(stent_params)}
-    elem_num_to_idx = {iElem: idx for idx, iElem, elem in design.generate_stent_part_elements(stent_params)}
+def _contour_build_from_db(
+    stent_params: design.StentParams,
+    iteration_num: int,
+    deformation_view: DeformationView,
+    metric_name: str,
+) -> holoviews.Overlay:
+    node_num_to_idx = {
+        iNode: idx for iNode, idx, pos in design.generate_nodes(stent_params)
+    }
+    elem_num_to_idx = {
+        iElem: idx
+        for idx, iElem, elem in design.generate_stent_part_elements(stent_params)
+    }
 
     snapshot = global_hist.get_one_snapshot(iteration_num)
 
@@ -408,17 +470,25 @@ def _contour_build_from_db(stent_params: design.StentParams, iteration_num: int,
         }
 
     else:
-        node_pos = {iNode: pos.to_xyz() for iNode, idx, pos in design.generate_nodes(stent_params)}
-
+        node_pos = {
+            iNode: pos.to_xyz()
+            for iNode, idx, pos in design.generate_nodes(stent_params)
+        }
 
     if deformation_view.should_show_ghosts:
         active_elements = frozenset(elem_num_to_idx.values())
 
     else:
-        active_elements = frozenset(elem_num_to_idx[iElem] for iElem in snapshot.active_elements)
+        active_elements = frozenset(
+            elem_num_to_idx[iElem] for iElem in snapshot.active_elements
+        )
 
     # Should just be one contour here
-    one_contour_view = list(_build_contour_view_data(global_hist, single_iteration=iteration_num, metric_name=metric_name))
+    one_contour_view = list(
+        _build_contour_view_data(
+            global_hist, single_iteration=iteration_num, metric_name=metric_name
+        )
+    )
     if len(one_contour_view) != 1:
         raise ValueError(f"Expected one here.")
 
@@ -426,10 +496,21 @@ def _contour_build_from_db(stent_params: design.StentParams, iteration_num: int,
     contour_view = contour_view._replace(deformation_view=deformation_view)
 
     # iElem in elem_num_to_idx is for the smoothed results with sym planes, etc.
-    elem_idx_to_value = {elem_num_to_idx[iElem]: val for iElem, val in elem_data.items() if iElem in elem_num_to_idx and elem_num_to_idx[iElem] in active_elements}
+    elem_idx_to_value = {
+        elem_num_to_idx[iElem]: val
+        for iElem, val in elem_data.items()
+        if iElem in elem_num_to_idx and elem_num_to_idx[iElem] in active_elements
+    }
 
     node_idx_pos = {node_num_to_idx[iNode]: pos for iNode, pos in node_pos.items()}
-    qmesh = make_quadmesh(stent_params, active_elements, node_idx_pos, contour_view, elem_idx_to_value, snapshot.label)
+    qmesh = make_quadmesh(
+        stent_params,
+        active_elements,
+        node_idx_pos,
+        contour_view,
+        elem_idx_to_value,
+        snapshot.label,
+    )
 
     return qmesh
 
@@ -442,28 +523,35 @@ def _create_history_curve(*args, **kwargs) -> holoviews.NdOverlay:
     graph_line_collection = _create_graph_line_collection()
 
     iteration_num = iteration_selector.value
-    iteration_num_line = holoviews.VLine(iteration_num).opts(color='grey', line_dash='dashed')
+    iteration_num_line = holoviews.VLine(iteration_num).opts(
+        color="grey", line_dash="dashed"
+    )
 
     curves = {}
     print(f"{len(graph_line_collection.graph_lines)} lines on graph:")
     for graph_line in graph_line_collection.graph_lines:
-        print("   ", graph_line.label, f"{graph_line.y_range}", graph_line.xy_points[0:4])
-        curves[graph_line.label] = holoviews.Curve(graph_line.xy_points, 'iteration_num', graph_line.label, label=graph_line.label)
+        print(
+            "   ", graph_line.label, f"{graph_line.y_range}", graph_line.xy_points[0:4]
+        )
+        curves[graph_line.label] = holoviews.Curve(
+            graph_line.xy_points,
+            "iteration_num",
+            graph_line.label,
+            label=graph_line.label,
+        )
 
     # nd_overlay = holoviews.NdOverlay(curves, kdims=['metric'])
     # For some reason NDOverlap is flaky here - do it another way...
     overlay = functools.reduce(operator.mul, curves.values())
 
-    with_opts = (
-        overlay
-            .opts(opts.Curve(framewise=True))  # Makes the curves re-adjust themselves with each update.
-            .opts(
-                # legend_position='right',
-                width=this_computer.fig_size[0],
-                height=int(0.5 * this_computer.fig_size[1]),
-                padding=0.1,
-                framewise=True,
-            )
+    with_opts = overlay.opts(
+        opts.Curve(framewise=True)
+    ).opts(  # Makes the curves re-adjust themselves with each update.
+        # legend_position='right',
+        width=this_computer.fig_size[0],
+        height=int(0.5 * this_computer.fig_size[1]),
+        padding=0.1,
+        framewise=True,
     )
 
     print(with_opts)
@@ -493,7 +581,7 @@ def _create_graph_line_collection() -> GraphLineCollection:
     for points in graph_points.values():
         if len(points) == 1:
             pp_single = points[0]
-            pp0 = pp_single._replace(iteration_num=pp_single.iteration_num-1)
+            pp0 = pp_single._replace(iteration_num=pp_single.iteration_num - 1)
             points.insert(0, pp0)
 
     graph_lines = [GraphLine(points) for points in graph_points.values()]
@@ -503,9 +591,12 @@ def _create_graph_line_collection() -> GraphLineCollection:
 
 def _plot_view_func(graph_lines: typing.List[GraphLine], iteration_num: int):
 
-    fig_dpi = rcParams['figure.dpi']
+    fig_dpi = rcParams["figure.dpi"]
 
-    fig_inches = this_computer.fig_size[0]/fig_dpi, 0.4*this_computer.fig_size[1]/fig_dpi
+    fig_inches = (
+        this_computer.fig_size[0] / fig_dpi,
+        0.4 * this_computer.fig_size[1] / fig_dpi,
+    )
 
     fig = Figure(figsize=fig_inches, dpi=fig_dpi)
     ax = fig.add_subplot()
@@ -514,10 +605,9 @@ def _plot_view_func(graph_lines: typing.List[GraphLine], iteration_num: int):
         x_vals = graph_line.x_vals
         y_vals = graph_line.y_vals
         ax.plot(x_vals, y_vals, label=graph_line.label)
-        ax.plot([x_vals[iteration_num]], [y_vals[iteration_num]], 'o')
+        ax.plot([x_vals[iteration_num]], [y_vals[iteration_num]], "o")
 
     return fig
-
 
 
 def make_dashboard(working_dir: pathlib.Path):
@@ -546,8 +636,6 @@ def make_dashboard(working_dir: pathlib.Path):
     panel.panel(graph_row).show()
 
 
-
-
 def do_test():
     numpy.random.seed(13)
     xs, ys = numpy.meshgrid(numpy.linspace(-20, 20, 10), numpy.linspace(0, 30, 8))
@@ -555,38 +643,36 @@ def do_test():
     ys += ys / 10 + numpy.random.rand(*ys.shape) * 4
 
     zs = numpy.arange(80).reshape(8, 10).astype(float)
-    zs[3,4] = numpy.nan
+    zs[3, 4] = numpy.nan
     qmesh = holoviews.QuadMesh((xs, ys, zs))
 
     qmesh.opts(colorbar=True, width=380)
-
 
     panel.panel(qmesh).show()
 
 
 def do_test_poly():
     def make_poly(i):
-        x= i
-        y = 10+i
+        x = i
+        y = 10 + i
         return {
-            ('x', 'y'): [(x, y), (x+0.4, y), (x+0.4, y+0.7), (x, y+0.8)],
-            'level': i}
+            ("x", "y"): [(x, y), (x + 0.4, y), (x + 0.4, y + 0.7), (x, y + 0.8)],
+            "level": i,
+        }
 
     poly_data = [make_poly(i) for i in range(5)]
-    polys = holoviews.Polygons(poly_data, vdims='level')
-    polys.opts(color='level', line_width=1, padding=0.1)
+    polys = holoviews.Polygons(poly_data, vdims="level")
+    polys.opts(color="level", line_width=1, padding=0.1)
     panel.panel(polys).show()
 
 
 def main():
     status_checks = get_status_checks()
-    scatter_data = [
-        (st.iteration_num, st.metric_val) for st in status_checks
-    ]
+    scatter_data = [(st.iteration_num, st.metric_val) for st in status_checks]
     scatter = holoviews.Scatter(scatter_data)
-    scatter.options(cmap='viridis')
+    scatter.options(cmap="viridis")
     panel.panel(scatter).show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     make_dashboard(WORKING_DIR_TEMP)

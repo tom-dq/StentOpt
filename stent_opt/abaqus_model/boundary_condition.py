@@ -24,7 +24,6 @@ class BoundarySymEncastre(BoundaryBase):
     boundary_type: BoundaryType
     node_set: node.NodeSet
 
-
     def produce_inp_lines(self, action: base.Action) -> typing.Iterable[str]:
         yield f"** Name: {self.name} Type: Symmetry/Antisymmetry/Encastre"
         yield f"*Boundary{action.load_new_text()}"
@@ -44,7 +43,6 @@ class BoundaryDispRot(BoundaryBase):
     name: str
     with_amplitude: typing.Optional[amplitude.AmplitudeBase]
     components: typing.Tuple[DispRotBoundComponent, ...]
-
 
     def produce_inp_lines(self, action: base.Action) -> typing.Iterable[str]:
         yield f"** Name: {self.name} Type: Displacement/Rotation"

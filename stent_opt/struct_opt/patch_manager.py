@@ -14,8 +14,10 @@ X, Y = 1, 2
 
 T_DataList = typing.List[typing.Tuple[float, float]]
 
+
 class PatchManager:
     """Handles the patch boundary conditions, etc"""
+
     node_dof_to_list: typing.Dict[typing.Tuple[int, int], T_DataList] = None
     nodes_we_have_results_for: typing.Set[int] = None
     node_num_to_pos: dict
@@ -31,10 +33,16 @@ class PatchManager:
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    def ingest_node_pos(self, all_frames: typing.Iterable[db_defs.Frame], node_pos_rows: typing.Iterable[db_defs.NodePos]):
+    def ingest_node_pos(
+        self,
+        all_frames: typing.Iterable[db_defs.Frame],
+        node_pos_rows: typing.Iterable[db_defs.NodePos],
+    ):
 
         # Look up the total simulation time from the frame
-        frame_rowid_to_total_time = {frame.rowid: frame.simulation_time for frame in all_frames}
+        frame_rowid_to_total_time = {
+            frame.rowid: frame.simulation_time for frame in all_frames
+        }
         node_pos_rows = list(node_pos_rows)  # For debugging
         for node_pos in node_pos_rows:
             self.nodes_we_have_results_for.add(node_pos.node_num)
@@ -44,7 +52,10 @@ class PatchManager:
             is_real_node = node_pos.node_num in self.node_num_to_pos
             if is_real_node:
                 node_initial_pos = self.node_num_to_pos[node_pos.node_num]
-                for dof, val in ( (X, node_pos.X - node_initial_pos.x), (Y, node_pos.Y - node_initial_pos.y) ):
+                for dof, val in (
+                    (X, node_pos.X - node_initial_pos.x),
+                    (Y, node_pos.Y - node_initial_pos.y),
+                ):
                     key = (node_pos.node_num, dof)
                     pair = (simulation_time, val)
                     self.node_dof_to_list[key].append(pair)
@@ -61,8 +72,12 @@ class PatchManager:
 
         # Squeeze out dupes, which can happen it seems.
         EPS = 1e-8
+
         def gen_points():
-            prev_point = (-1234, -2345)  # I know I know but as if that's ever going to be in there...
+            prev_point = (
+                -1234,
+                -2345,
+            )  # I know I know but as if that's ever going to be in there...
             for point in working_list:
                 time_decent_step = abs(point[0] - prev_point[0]) > EPS
                 if time_decent_step:
@@ -78,20 +93,27 @@ class PatchManager:
                     else:
                         print(prev_point)
                         print(point)
-                        raise ValueError(f"Got two points with close time but not close displacements... {prev_point} vs {point}.")
+                        raise ValueError(
+                            f"Got two points with close time but not close displacements... {prev_point} vs {point}."
+                        )
 
         return list(gen_points())
 
     def produce_amplitude_for(self, node_num: int, dof: int) -> amplitude.Amplitude:
         dof_name = {X: "U1", Y: "U2"}.get(dof)
-        xy_data = tuple(amplitude.XY(x=pair[0], y=pair[1]) for pair in self._ordered_without_dupes(node_num, dof))
+        xy_data = tuple(
+            amplitude.XY(x=pair[0], y=pair[1])
+            for pair in self._ordered_without_dupes(node_num, dof)
+        )
         return amplitude.Amplitude(
             name=f"N{node_num}-{dof_name}",
             data=xy_data,
             time_ref=amplitude.TimeReference.total_time,
         )
 
+
 T_nodenum_dof_amp = typing.Tuple[int, typing.Dict[int, amplitude.Amplitude]]
+
 
 @dataclasses.dataclass(unsafe_hash=True)
 class SubModelInfoBase:
@@ -117,11 +139,16 @@ class SubModelInfoBase:
     def is_full_model(self) -> bool:
         return not self.is_sub_model
 
-    def boundary_node_enforced_displacements(self) -> typing.Iterable[T_nodenum_dof_amp]:
+    def boundary_node_enforced_displacements(
+        self,
+    ) -> typing.Iterable[T_nodenum_dof_amp]:
         # This will only ever do anything for the real submodel
         for node_num in self.boundary_node_nums:
             if node_num in self.patch_manager.nodes_we_have_results_for:
-                this_node_dict = {dof: self.patch_manager.produce_amplitude_for(node_num, dof) for dof in (X, Y)}
+                this_node_dict = {
+                    dof: self.patch_manager.produce_amplitude_for(node_num, dof)
+                    for dof in (X, Y)
+                }
                 yield node_num, this_node_dict
 
     @abc.abstractmethod
@@ -149,11 +176,15 @@ class SubModelInfoBase:
         return self.node_in_submodel(real_node_id)
 
     @abc.abstractmethod
-    def all_patch_elem_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+    def all_patch_elem_ids_in_this_model(
+        self,
+    ) -> typing.Optional[typing.FrozenSet[int]]:
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def all_patch_node_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+    def all_patch_node_ids_in_this_model(
+        self,
+    ) -> typing.Optional[typing.FrozenSet[int]]:
         raise NotImplementedError()
 
 
@@ -186,11 +217,15 @@ class FullModelInfo(SubModelInfoBase):
     def model_to_real_elem(self, elem_num_submodel: int) -> int:
         return elem_num_submodel
 
-    def all_patch_elem_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+    def all_patch_elem_ids_in_this_model(
+        self,
+    ) -> typing.Optional[typing.FrozenSet[int]]:
         # Don't need to filter (just use all the elements in the model)
         return None
 
-    def all_patch_node_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+    def all_patch_node_ids_in_this_model(
+        self,
+    ) -> typing.Optional[typing.FrozenSet[int]]:
         # Don't need to filter (just use all the elements in the model)
         return None
 
@@ -208,7 +243,9 @@ class SubModelInfo(SubModelInfoBase):
     initial_active_state: bool
     this_trial_active_state: bool
     node_elem_offset: int
-    all_node_polar_index_admissible: typing.FrozenSet["design.PolarIndex"]  # This is just so it's cached for performance.
+    all_node_polar_index_admissible: typing.FrozenSet[
+        "design.PolarIndex"
+    ]  # This is just so it's cached for performance.
 
     def __str__(self) -> str:
         return f"SubModelInfo(reference_elem_num={self.reference_elem_num}, node_elem_offset={self.node_elem_offset}, elem_nums={sorted(self.elem_nums)}"
@@ -242,12 +279,23 @@ class SubModelInfo(SubModelInfoBase):
     def model_to_real_elem(self, elem_num_submodel: int) -> int:
         return elem_num_submodel - self.node_elem_offset
 
-    def all_patch_elem_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+    def all_patch_elem_ids_in_this_model(
+        self,
+    ) -> typing.Optional[typing.FrozenSet[int]]:
         # Do need to filter.
-        working_elem_nums = {self.real_to_model_elem(elem_num_full_model) for elem_num_full_model in self.elem_nums if self.elem_in_submodel(elem_num_full_model)}
+        working_elem_nums = {
+            self.real_to_model_elem(elem_num_full_model)
+            for elem_num_full_model in self.elem_nums
+            if self.elem_in_submodel(elem_num_full_model)
+        }
         return frozenset(working_elem_nums)
 
-    def all_patch_node_ids_in_this_model(self) -> typing.Optional[typing.FrozenSet[int]]:
+    def all_patch_node_ids_in_this_model(
+        self,
+    ) -> typing.Optional[typing.FrozenSet[int]]:
         # Do need to filter.
-        working_elem_nums = {self.real_to_model_node(node_num_full_model) for node_num_full_model in self.node_nums}
+        working_elem_nums = {
+            self.real_to_model_node(node_num_full_model)
+            for node_num_full_model in self.node_nums
+        }
         return frozenset(working_elem_nums)
