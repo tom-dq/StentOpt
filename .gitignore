@@ -12,4 +12,5 @@ py-310/
 py-311/
 .vscode/settings.json
 *.prof  # cProfile outputs
-
+examples
+.DS_Store
